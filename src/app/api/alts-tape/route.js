@@ -43,12 +43,13 @@ export async function GET() {
       }
     }
 
-    // Helper to format distance text and detect close pivots
+    // Distance formatter: positive formatted with yellow, negative in white
     function formatDist(spot, pivotLevel, label) {
       if (!pivotLevel || !spot) {
-        return { dist: 0, text: '--', isClose: false, level: 0, label };
+        return { dist: 0, text: '--', isPos: true, isClose: false, level: 0, label };
       }
       const d = ((spot - pivotLevel) / pivotLevel) * 100;
+      const isPos = d >= 0;
       const absD = Math.abs(d);
       const isClose = absD <= 1.2;
 
@@ -65,6 +66,7 @@ export async function GET() {
       return {
         dist: Number(d.toFixed(2)),
         text,
+        isPos,
         isClose,
         level: Number(pivotLevel.toFixed(4)),
         label,
@@ -84,83 +86,88 @@ export async function GET() {
 
       const shortSymbol = item.symbol.replace('1000', '').replace('USDT', '');
 
-      // ─── Bullish State: Value Area Low (VAL) distances ───
-      const pY_val = formatDist(spot, p.py.val, 'Prior Year VAL');
-      const Y_val = formatDist(spot, p.y.val, 'Current Year VAL');
-      const pQ_val = formatDist(spot, p.pq.val, 'Prior Quarter VAL');
-      const Q_val = formatDist(spot, p.q.val, 'Current Quarter VAL');
-      const pM_val = formatDist(spot, p.pm.val, 'Prior Month VAL');
-      const M_val = formatDist(spot, p.m.val, 'Current Month VAL');
-      const pW_val = formatDist(spot, p.pw.val, 'Prior Week VAL');
-      const W_val = formatDist(spot, p.w.val, 'Current Week VAL');
+      // ─── 1. Bullish State Calculation ───
+      // Rule: Must be ABOVE all VALs (small dip wick >= -1.5% is allowed, e.g. -0.1%, but NOT -33%).
+      // And must be currently testing at least one VAL as support (between -1.5% and +3.0%).
+      const pY_val = formatDist(spot, p.py.val, 'pY VAL');
+      const Y_val = formatDist(spot, p.y.val, 'Y VAL');
+      const pQ_val = formatDist(spot, p.pq.val, 'pQ VAL');
+      const Q_val = formatDist(spot, p.q.val, 'Q VAL');
+      const pM_val = formatDist(spot, p.pm.val, 'pM VAL');
+      const M_val = formatDist(spot, p.m.val, 'M VAL');
+      const pW_val = formatDist(spot, p.pw.val, 'pW VAL');
+      const W_val = formatDist(spot, p.w.val, 'W VAL');
 
       const valArr = [pY_val, Y_val, pQ_val, Q_val, pM_val, M_val, pW_val, W_val];
-      const minAbsValDist = Math.min(...valArr.map((x) => Math.abs(x.dist)));
-      const hasValHighlight = valArr.some((x) => x.isClose);
-      const closestVal = valArr.reduce((prev, curr) => (Math.abs(curr.dist) < Math.abs(prev.dist) ? curr : prev), valArr[0]);
+      const allAboveVAL = valArr.every((x) => x.dist >= -1.5);
+      const isTestingValSupport = valArr.some((x) => x.dist >= -1.5 && x.dist <= 3.5);
 
-      bullishList.push({
-        symbol: shortSymbol,
-        fullSymbol: item.displaySymbol,
-        name: item.name,
-        spot: spot,
-        pY: pY_val,
-        Y: Y_val,
-        pQ: pQ_val,
-        Q: Q_val,
-        pM: pM_val,
-        M: M_val,
-        pW: pW_val,
-        W: W_val,
-        state: 'BULL',
-        minAbsDist: Number(minAbsValDist.toFixed(2)),
-        hasHighlight: hasValHighlight,
-        closest: closestVal,
-      });
+      if (allAboveVAL && isTestingValSupport) {
+        const closestVal = valArr.reduce((prev, curr) => (Math.abs(curr.dist) < Math.abs(prev.dist) ? curr : prev), valArr[0]);
+        bullishList.push({
+          symbol: shortSymbol,
+          fullSymbol: item.displaySymbol,
+          name: item.name,
+          spot: spot,
+          pY: pY_val,
+          Y: Y_val,
+          pQ: pQ_val,
+          Q: Q_val,
+          pM: pM_val,
+          M: M_val,
+          pW: pW_val,
+          W: W_val,
+          state: 'BULL',
+          minAbsDist: Math.abs(closestVal.dist),
+          closest: closestVal,
+        });
+      }
 
-      // ─── Bearish State: Value Area High (VAH) distances ───
-      const pY_vah = formatDist(spot, p.py.vah, 'Prior Year VAH');
-      const Y_vah = formatDist(spot, p.y.vah, 'Current Year VAH');
-      const pQ_vah = formatDist(spot, p.pq.vah, 'Prior Quarter VAH');
-      const Q_vah = formatDist(spot, p.q.vah, 'Current Quarter VAH');
-      const pM_vah = formatDist(spot, p.pm.vah, 'Prior Month VAH');
-      const M_vah = formatDist(spot, p.m.vah, 'Current Month VAH');
-      const pW_vah = formatDist(spot, p.pw.vah, 'Prior Week VAH');
-      const W_vah = formatDist(spot, p.w.vah, 'Current Week VAH');
+      // ─── 2. Bearish State Calculation ───
+      // Rule: Must be BELOW all VAHs (small wick <= +1.5% allowed).
+      // And must be currently testing at least one VAH as resistance (between -3.5% and +1.5%).
+      const pY_vah = formatDist(spot, p.py.vah, 'pY VAH');
+      const Y_vah = formatDist(spot, p.y.vah, 'Y VAH');
+      const pQ_vah = formatDist(spot, p.pq.vah, 'pQ VAH');
+      const Q_vah = formatDist(spot, p.q.vah, 'Q VAH');
+      const pM_vah = formatDist(spot, p.pm.vah, 'pM VAH');
+      const M_vah = formatDist(spot, p.m.vah, 'M VAH');
+      const pW_vah = formatDist(spot, p.pw.vah, 'pW VAH');
+      const W_vah = formatDist(spot, p.w.vah, 'W VAH');
 
       const vahArr = [pY_vah, Y_vah, pQ_vah, Q_vah, pM_vah, M_vah, pW_vah, W_vah];
-      const minAbsVahDist = Math.min(...vahArr.map((x) => Math.abs(x.dist)));
-      const hasVahHighlight = vahArr.some((x) => x.isClose);
-      const closestVah = vahArr.reduce((prev, curr) => (Math.abs(curr.dist) < Math.abs(prev.dist) ? curr : prev), vahArr[0]);
+      const allBelowVAH = vahArr.every((x) => x.dist <= 1.5);
+      const isTestingVahResistance = vahArr.some((x) => x.dist >= -3.5 && x.dist <= 1.5);
 
-      bearishList.push({
-        symbol: shortSymbol,
-        fullSymbol: item.displaySymbol,
-        name: item.name,
-        spot: spot,
-        pY: pY_vah,
-        Y: Y_vah,
-        pQ: pQ_vah,
-        Q: Q_vah,
-        pM: pM_vah,
-        M: M_vah,
-        pW: pW_vah,
-        W: W_vah,
-        state: 'BEAR',
-        minAbsDist: Number(minAbsVahDist.toFixed(2)),
-        hasHighlight: hasVahHighlight,
-        closest: closestVah,
-      });
+      if (allBelowVAH && isTestingVahResistance) {
+        const closestVah = vahArr.reduce((prev, curr) => (Math.abs(curr.dist) < Math.abs(prev.dist) ? curr : prev), vahArr[0]);
+        bearishList.push({
+          symbol: shortSymbol,
+          fullSymbol: item.displaySymbol,
+          name: item.name,
+          spot: spot,
+          pY: pY_vah,
+          Y: Y_vah,
+          pQ: pQ_vah,
+          Q: Q_vah,
+          pM: pM_vah,
+          M: M_vah,
+          pW: pW_vah,
+          W: W_vah,
+          state: 'BEAR',
+          minAbsDist: Math.abs(closestVah.dist),
+          closest: closestVah,
+        });
+      }
     });
 
-    // Sort by proximity to nearest pivot (coins closest to VAL / VAH at top)
+    // Sort by proximity to nearest pivot (coins testing support / resistance closest at top)
     bullishList.sort((a, b) => a.minAbsDist - b.minAbsDist);
     bearishList.sort((a, b) => a.minAbsDist - b.minAbsDist);
 
     return NextResponse.json({
       success: true,
       timestamp: Date.now(),
-      total: ALTS_WHITELIST.length,
       bullishStates: bullishList,
       bearishStates: bearishList,
     });

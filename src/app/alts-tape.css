@@ -1,11 +1,12 @@
-/* ─── Wolf Tape Reader: Value Area Lows & Highs (Bullish & Bearish States) ─── */
-/* Two-color institutional dark minimalist theme matching vyaps.xyz screenshot */
+/* ─── Wolf Tape Reader: Value Area Terminal (Pitch Black + 2-Color Matte Minimalist) ─── */
+/* Two colors only: Yellow (#facc15) for positive values, White (#ffffff) for negative & text */
+/* Zero glowing/shining text, 100% pitch black background */
 
 .va-terminal-wrapper {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  animation: fadeInUp 0.3s ease;
+  background: #000000;
 }
 
 /* ── Top Sub-Tabs ── */
@@ -15,87 +16,84 @@
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
-  padding: 0.4rem 0.6rem;
-  background: #0f1117;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  padding: 0.5rem 0.75rem;
+  background: #000000;
+  border: 1px solid #1a1a1a;
+  border-radius: 8px;
 }
 
 .va-tab-group {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
 .va-tab-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.55rem 1.1rem;
-  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   background: transparent;
-  color: #8b9299;
+  color: #888888;
   border: 1px solid transparent;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .va-tab-btn:hover {
-  color: #eeefed;
-  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  background: #111111;
 }
 
 .va-tab-btn.active {
-  background: #181c24;
+  background: #111111;
   color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  border-color: #333333;
 }
 
 .va-tab-btn.active.tab-bull {
-  color: #2dd4bf;
-  border-color: rgba(45, 212, 191, 0.35);
-  background: rgba(45, 212, 191, 0.08);
+  color: #facc15;
+  border-color: #facc15;
 }
 
 .va-tab-btn.active.tab-bear {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.35);
-  background: rgba(248, 113, 113, 0.08);
+  color: #ffffff;
+  border-color: #666666;
 }
 
 .va-tab-count {
   font-size: 0.72rem;
   padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: #1a1a1a;
   color: inherit;
+  font-weight: 700;
 }
 
 .va-search-input {
-  background: #090a0d;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background: #000000;
+  border: 1px solid #222222;
+  border-radius: 6px;
   padding: 0.45rem 0.85rem;
-  color: #eeefed;
+  color: #ffffff;
   font-size: 0.82rem;
   outline: none;
-  min-width: 200px;
+  min-width: 180px;
 }
 
 .va-search-input:focus {
-  border-color: #2dd4bf;
+  border-color: #facc15;
 }
 
-/* ── vyaps.xyz Exact Terminal Card ── */
+/* ── Wolf Tape Reader Pitch Black Card ── */
 .vyaps-card {
-  background: #0e1014;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 1.5rem 1.75rem;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  background: #000000;
+  border: 1px solid #1a1a1a;
+  border-radius: 12px;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -105,15 +103,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #161616;
 }
 
 .vyaps-brand {
   font-family: var(--font-mono, monospace);
   font-size: 1.15rem;
-  font-weight: 500;
-  color: #eeefed;
+  font-weight: 700;
+  color: #facc15;
   letter-spacing: -0.02em;
 }
 
@@ -127,7 +125,7 @@
 
 .vyaps-meta {
   font-size: 0.75rem;
-  color: #636b73;
+  color: #777777;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -137,22 +135,25 @@
 .vyaps-table-wrapper {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  background: #000000;
 }
 
 .vyaps-table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0 4px;
+  border-collapse: collapse;
   text-align: center;
+  background: #000000;
 }
 
 .vyaps-table th {
-  padding: 0.65rem 0.75rem;
+  padding: 0.75rem 0.85rem;
   font-size: 0.82rem;
-  font-weight: 500;
-  color: #6b737b;
-  border: none;
-  background: transparent;
+  font-weight: 600;
+  color: #666666;
+  border-bottom: 1px solid #1a1a1a;
+  background: #000000;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .vyaps-table th:first-child {
@@ -166,20 +167,21 @@
 }
 
 .vyaps-row {
-  transition: background 0.15s ease;
+  border-bottom: 1px solid #111111;
+  transition: background 0.12s ease;
   cursor: pointer;
 }
 
 .vyaps-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: #080808;
 }
 
 .vyaps-table td {
-  padding: 0.85rem 0.75rem;
+  padding: 0.95rem 0.85rem;
   font-size: 0.95rem;
   font-family: var(--font-mono, monospace);
   font-weight: 500;
-  color: #d1d5db;
+  color: #ffffff;
   border: none;
   vertical-align: middle;
 }
@@ -187,15 +189,11 @@
 .vyaps-table td:first-child {
   text-align: left;
   padding-left: 0.5rem;
-  border-top-left-radius: 8px;
-  border-bottom-left-radius: 8px;
 }
 
 .vyaps-table td:last-child {
   text-align: right;
   padding-right: 0.5rem;
-  border-top-right-radius: 8px;
-  border-bottom-right-radius: 8px;
 }
 
 .vyaps-symbol-cell {
@@ -208,14 +206,14 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #1c212a;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #111111;
+  border: 1px solid #282828;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.65rem;
-  font-weight: 800;
-  color: #2dd4bf;
+  font-weight: 700;
+  color: #ffffff;
   flex-shrink: 0;
 }
 
@@ -225,51 +223,65 @@
   color: #ffffff;
 }
 
-/* ── Proximity Pill Highlight (Matching Screenshot) ── */
+/* ── Flat Two-Color Styling (NO glowing / NO shining) ── */
+/* Positive = Yellow (#facc15), Negative = White (#ffffff) */
+
+.val-pos {
+  color: #facc15 !important;
+  font-weight: 600;
+}
+
+.val-neg {
+  color: #ffffff !important;
+  font-weight: 500;
+}
+
+/* In-Strike-Zone Box (Testing Support / Resistance) */
 .pivot-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.35rem 0.65rem;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
   font-size: 0.92rem;
-  font-weight: 600;
+  background: transparent;
 }
 
 .pivot-pill.is-close {
-  background: rgba(45, 212, 191, 0.18);
-  color: #2dd4bf;
+  background: rgba(250, 204, 21, 0.14);
+  color: #facc15 !important;
+  border: 1px solid #facc15;
   font-weight: 700;
-  box-shadow: 0 0 12px rgba(45, 212, 191, 0.25);
 }
 
 .pivot-pill.is-close-bear {
-  background: rgba(248, 113, 113, 0.18);
-  color: #f87171;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff !important;
+  border: 1px solid #ffffff;
   font-weight: 700;
-  box-shadow: 0 0 12px rgba(248, 113, 113, 0.25);
 }
 
 .vyaps-state-badge {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  color: #9aa1a5;
+  letter-spacing: 0.06em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
 }
 
 .vyaps-state-badge.bull {
-  color: #2dd4bf;
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.4);
 }
 
 .vyaps-state-badge.bear {
-  color: #f87171;
+  color: #ffffff;
+  border: 1px solid #444444;
 }
 
-/* Modal and Tooltip helpers */
 .vyaps-footer-note {
-  font-size: 0.78rem;
-  color: #555e66;
+  font-size: 0.75rem;
+  color: #666666;
   text-align: center;
   margin-top: 0.5rem;
 }
