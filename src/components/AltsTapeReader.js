@@ -44,12 +44,21 @@ export default function AltsTapeReader() {
   const [alertConditionType, setAlertConditionType] = useState('price_above'); // 'price_above' | 'price_below' | 'touches_yo' | 'rock_holder'
   const [alertNote, setAlertNote] = useState('');
   const [toasts, setToasts] = useState([]);
+  const [notifPermission, setNotifPermission] = useState('default');
+  const [discordWebhook, setDiscordWebhook] = useState('');
+  const [showWebhookSettings, setShowWebhookSettings] = useState(false);
 
-  // Load sound preference & saved alerts on mount
+  // Load sound, webhook & saved alerts on mount
   useEffect(() => {
     try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        setNotifPermission(Notification.permission);
+      }
       const savedMuted = localStorage.getItem(STORAGE_KEY_SOUND);
       if (savedMuted !== null) setSoundMuted(savedMuted === 'true');
+
+      const savedWebhook = localStorage.getItem('wolf_tape_discord_webhook');
+      if (savedWebhook) setDiscordWebhook(savedWebhook);
 
       const savedAlerts = localStorage.getItem(STORAGE_KEY_ALERTS);
       if (savedAlerts) {
@@ -59,6 +68,27 @@ export default function AltsTapeReader() {
       console.warn('LocalStorage error:', e);
     }
   }, []);
+
+  const requestDesktopPermission = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const res = await Notification.requestPermission();
+      setNotifPermission(res);
+      if (res === 'granted') {
+        new Notification('🐺 Wolf Tape Reader', {
+          body: 'Desktop Alerts Enabled! You will be notified even with the tab minimized.',
+          icon: '/icon.svg',
+        });
+        playAlertChime();
+      }
+    }
+  };
+
+  const saveWebhook = (url) => {
+    setDiscordWebhook(url);
+    try {
+      localStorage.setItem('wolf_tape_discord_webhook', url);
+    } catch (e) {}
+  };
 
   // Save alerts to localStorage
   const saveAlerts = useCallback((newAlerts) => {
@@ -109,6 +139,27 @@ export default function AltsTapeReader() {
     return () => clearInterval(interval);
   }, [fetchTapeData]);
 
+  const flashTabTitle = (msg) => {
+    if (typeof window === 'undefined') return;
+    const original = 'Wolf Tape Reader';
+    let count = 0;
+    const timer = setInterval(() => {
+      document.title = count % 2 === 0 ? msg : original;
+      count++;
+      if (count > 16) {
+        clearInterval(timer);
+        document.title = original;
+      }
+    }, 750);
+
+    const resetOnFocus = () => {
+      clearInterval(timer);
+      document.title = original;
+      window.removeEventListener('focus', resetOnFocus);
+    };
+    window.addEventListener('focus', resetOnFocus);
+  };
+
   // Alert Evaluation Engine
   const checkAlerts = (altsList, btc) => {
     if (!altsList || !alerts.length) return;
@@ -139,12 +190,41 @@ export default function AltsTapeReader() {
 
       if (isTriggered) {
         triggeredAny = true;
+        // 1. In-app toast banner
         addToast({
           id: Date.now() + Math.random(),
           title: `ALERT TRIGGERED: ${alt.displaySymbol}`,
           message: triggerMsg,
           note: a.note,
         });
+
+        // 2. Native Desktop Notification (Windows popup even if tab minimized)
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification(`🚨 WOLF ALERT: ${alt.displaySymbol}`, {
+              body: `${triggerMsg}${a.note ? `\nNote: ${a.note}` : ''}`,
+              icon: '/icon.svg',
+              requireInteraction: true,
+            });
+          } catch (err) {}
+        }
+
+        // 3. Flashing browser tab title
+        flashTabTitle(`🚨 [TRIGGERED] ${alt.displaySymbol}!`);
+
+        // 4. Discord / Telegram Webhook dispatch
+        if (discordWebhook && discordWebhook.startsWith('http')) {
+          try {
+            fetch(discordWebhook, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                content: `🐺 **Wolf Tape Reader Alert Triggered!**\n**Asset**: \`${alt.displaySymbol}\`\n**Condition**: ${triggerMsg}\n**Current Spot**: \`${alt.priceFormatted}\` | **Yearly Open**: \`${alt.yoFormatted}\`${a.note ? `\n**Note**: _${a.note}_` : ''}`,
+              }),
+            }).catch(() => {});
+          } catch (err) {}
+        }
+
         return { ...a, triggered: true, triggeredAt: new Date().toLocaleTimeString() };
       }
       return a;
@@ -312,10 +392,45 @@ export default function AltsTapeReader() {
               <IconBell size={15} />
               <span>+ Add Alert</span>
             </button>
+
+            {notifPermission !== 'granted' ? (
+              <button
+                className="alts-btn alts-btn-yellow"
+                onClick={requestDesktopPermission}
+                title="Enable Native Browser Desktop Notifications"
+              >
+                <IconBell size={15} />
+                <span>Enable Desktop Alerts</span>
+              </button>
+            ) : (
+              <button
+                className="alts-btn alts-btn-ghost"
+                style={{ color: 'var(--bullish)', borderColor: 'rgba(34, 197, 94, 0.35)' }}
+                onClick={() => {
+                  new Notification('🐺 Wolf Tape Reader', { body: 'Desktop alerts are active!' });
+                  playAlertChime();
+                }}
+                title="Desktop Alerts Active (Click to test chime)"
+              >
+                <IconCheck size={14} color="var(--bullish)" />
+                <span>Desktop Alerts Active</span>
+              </button>
+            )}
+
+            <button
+              className="alts-btn alts-btn-ghost"
+              onClick={() => setShowWebhookSettings(true)}
+              title="Configure Discord Webhook for Mobile Alerts"
+            >
+              <IconZap size={14} color={discordWebhook ? 'var(--wolf-yellow-bright)' : 'var(--text-muted)'} />
+              <span>{discordWebhook ? 'Webhook Linked' : 'Webhook'}</span>
+            </button>
+
             <button className="alts-btn alts-btn-ghost" onClick={toggleSound} title="Mute/Unmute audio alert chime">
               {soundMuted ? <IconVolumeMute size={15} color="var(--bearish)" /> : <IconVolume size={15} color="var(--wolf-yellow-bright)" />}
               <span>{soundMuted ? 'Muted' : 'Sound On'}</span>
             </button>
+
             <button className="alts-btn alts-btn-ghost" onClick={fetchTapeData} title="Instant Refresh">
               <IconRefresh size={14} />
               <span>Sync</span>
@@ -882,6 +997,68 @@ export default function AltsTapeReader() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Discord / Telegram Webhook Modal ── */}
+      {showWebhookSettings && (
+        <div className="alts-modal-overlay" onClick={() => setShowWebhookSettings(false)}>
+          <div className="alts-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">
+                <IconZap size={18} color="var(--wolf-yellow-bright)" />
+                Mobile Alerts Webhook (Discord / Telegram)
+              </span>
+              <button className="modal-close-btn" onClick={() => setShowWebhookSettings(false)}>
+                <IconX size={16} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              Want your phone to buzz when an alert triggers while you are away from the computer? Paste a Discord channel webhook URL.
+              Wolf Tape Reader will dispatch an instant embed directly to your Discord/Telegram channel!
+            </p>
+
+            <div className="modal-form-group">
+              <label className="modal-form-label">Discord Webhook URL</label>
+              <input
+                type="url"
+                className="modal-input"
+                placeholder="https://discord.com/api/webhooks/..."
+                value={discordWebhook}
+                onChange={(e) => saveWebhook(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem' }}>
+              <button
+                className="alts-btn alts-btn-yellow"
+                style={{ flex: 1, justifyContent: 'center' }}
+                onClick={() => {
+                  if (discordWebhook && discordWebhook.startsWith('http')) {
+                    fetch(discordWebhook, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        content: '🐺 **Wolf Tape Reader Test Notification**: Your mobile alerts are active and ready!',
+                      }),
+                    }).then(() => {
+                      addToast({ id: Date.now(), title: 'Webhook Test Sent', message: 'Check your Discord/Telegram channel!' });
+                    }).catch(() => {
+                      alert('Could not dispatch to webhook URL. Please check the URL.');
+                    });
+                  }
+                  setShowWebhookSettings(false);
+                }}
+              >
+                <IconCheck size={16} />
+                <span>Save &amp; Test Webhook</span>
+              </button>
+              <button className="alts-btn alts-btn-ghost" onClick={() => setShowWebhookSettings(false)}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
