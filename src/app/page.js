@@ -6,6 +6,7 @@ import { buildWeeklyProfiles, findSimilarWeeks } from '@/lib/weekPatternEngine';
 import { calculateWolfKeyLevels } from '@/lib/wolfLevelsEngine';
 import WolfKeyLevels from '@/components/WolfKeyLevels';
 import AltsTapeReader from '@/components/AltsTapeReader';
+import MacroWhalesEtf from '@/components/MacroWhalesEtf';
 import {
   IconBitcoin,
   IconTrendUp,
@@ -605,6 +606,10 @@ export default function Home() {
               <span style={{ color: activeTab === 'alts' ? 'var(--wolf-yellow-bright)' : undefined }}>Alts Value Area (VAL/VAH)</span>
               <span style={{ background: '#2dd4bf', color: '#0b0e14', fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>55</span>
             </button>
+            <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => setActiveTab('macro')}>
+              <IconBarChart size={15} color={activeTab === 'macro' ? 'var(--wolf-yellow-bright)' : undefined} />
+              <span style={{ color: activeTab === 'macro' ? 'var(--wolf-yellow-bright)' : undefined }}>Whales • MVRV • ETFs</span>
+            </button>
             <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => setActiveTab('pattern')}>
               <IconRadar size={15} />
               <span>Week Pattern Match</span>
@@ -631,6 +636,11 @@ export default function Home() {
           {/* ── ALTS TAPE READER VIEW ── */}
           {activeTab === 'alts' && (
             <AltsTapeReader />
+          )}
+
+          {/* ── MACRO WHALES & ETF VIEW ── */}
+          {activeTab === 'macro' && (
+            <MacroWhalesEtf />
           )}
 
           {/* ── WEEK PATTERN MATCHING VIEW ── */}
