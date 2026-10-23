@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./week-pattern.css";
+import "./wolf-levels.css";
 
 
 const geistSans = Geist({

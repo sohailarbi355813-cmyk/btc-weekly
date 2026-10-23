@@ -214,3 +214,27 @@ export function IconFilter({ size = 15, className = '', color = 'currentColor' }
     </svg>
   );
 }
+
+export function IconWolf({ size = 16, className = '', color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polygon points="12 2 4 8 7 15 12 22 17 15 20 8 12 2" />
+      <polygon points="12 12 8 8 12 2 16 8 12 12" />
+      <line x1="8" y1="12" x2="12" y2="15" />
+      <line x1="16" y1="12" x2="12" y2="15" />
+    </svg>
+  );
+}
+
+export function IconLevels({ size = 16, className = '', color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="3" y1="5" x2="21" y2="5" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <line x1="3" y1="15" x2="16" y2="15" />
+      <line x1="3" y1="20" x2="21" y2="20" />
+      <polyline points="19 12 22 15 19 18" />
+    </svg>
+  );
+}
+

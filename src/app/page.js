@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getTodayBias } from '@/lib/biasEngine';
 import { buildWeeklyProfiles, findSimilarWeeks } from '@/lib/weekPatternEngine';
+import { calculateWolfKeyLevels } from '@/lib/wolfLevelsEngine';
+import WolfKeyLevels from '@/components/WolfKeyLevels';
 import {
   IconBitcoin,
   IconTrendUp,
@@ -25,6 +27,8 @@ import {
   IconShield,
   IconCheck,
   IconDatabase,
+  IconWolf,
+  IconLevels,
 } from '@/components/Icons';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -252,10 +256,11 @@ export default function Home() {
   const [data, setData] = useState(null);
   const [bias, setBias] = useState(null);
   const [weekPattern, setWeekPattern] = useState(null);
+  const [wolfLevels, setWolfLevels] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [loadStep, setLoadStep] = useState(1);
-  const [activeTab, setActiveTab] = useState('pattern');
+  const [activeTab, setActiveTab] = useState('levels'); // Default to Wolf Key Levels
   const [lastUpdated, setLastUpdated] = useState(null);
   const [clientDate, setClientDate] = useState(null);
 
@@ -294,9 +299,13 @@ export default function Home() {
       const weeklyProfiles = buildWeeklyProfiles(json.candles);
       const patternResult = findSimilarWeeks(weeklyProfiles, 25, now);
 
+      // 5. Wolf Key Levels calculation
+      const wolfLevelsResult = calculateWolfKeyLevels(json.candles, currentPrice);
+
       setData({ candles: json.candles, count: json.count, currentPrice });
       setBias(biasResult);
       setWeekPattern(patternResult);
+      setWolfLevels(wolfLevelsResult);
       setLastUpdated(now);
     } catch (err) {
       setError(err.message);
@@ -586,6 +595,10 @@ export default function Home() {
 
           {/* ── TABS ── */}
           <div className="tab-bar">
+            <button id="tab-levels" className={`tab-btn ${activeTab === 'levels' ? 'active' : ''}`} onClick={() => setActiveTab('levels')}>
+              <IconWolf size={15} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-yellow)'} />
+              <span style={{ color: activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : undefined }}>Wolf Key Levels</span>
+            </button>
             <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => setActiveTab('pattern')}>
               <IconRadar size={15} />
               <span>Week Pattern Match</span>
@@ -603,6 +616,11 @@ export default function Home() {
               <span>Distribution</span>
             </button>
           </div>
+
+          {/* ── WOLF KEY LEVELS VIEW ── */}
+          {activeTab === 'levels' && (
+            <WolfKeyLevels levelsData={wolfLevels} />
+          )}
 
           {/* ── WEEK PATTERN MATCHING VIEW ── */}
           {activeTab === 'pattern' && (

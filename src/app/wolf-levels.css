@@ -1,0 +1,417 @@
+/* ═══════════════════════════════════════════
+   WOLF KEY LEVELS — YELLOW THEME
+   Inspired by Institutional Orderflow & Tape Trading
+═══════════════════════════════════════════ */
+
+:root {
+  --wolf-yellow: #facc15;
+  --wolf-yellow-bright: #fde047;
+  --wolf-yellow-dim: rgba(250, 204, 21, 0.12);
+  --wolf-yellow-glow: rgba(250, 204, 21, 0.35);
+  --wolf-yellow-border: rgba(250, 204, 21, 0.25);
+  --wolf-bg: #090a0f;
+  --wolf-card-bg: #0d1018;
+  --wolf-row-hover: rgba(250, 204, 21, 0.05);
+  --wolf-support: #f87171;
+  --wolf-resistance: #4ade80;
+}
+
+/* Container */
+.wolf-container {
+  background: var(--wolf-card-bg);
+  border: 1px solid var(--wolf-yellow-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 40px rgba(250, 204, 21, 0.05);
+  overflow: hidden;
+  margin-bottom: 32px;
+  position: relative;
+}
+
+.wolf-glow-bar {
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent 0%, var(--wolf-yellow) 50%, transparent 100%);
+}
+
+/* Two-column layout */
+.wolf-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 32px;
+  padding: 32px;
+}
+
+/* Left Column: Brand & Big Price */
+.wolf-left-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.wolf-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.wolf-brand-title {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #fff;
+  display: flex;
+  align-items: center;
+}
+
+.wolf-cursor {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  background: var(--wolf-yellow);
+  margin-left: 4px;
+  animation: wolfBlink 1.2s infinite;
+}
+
+@keyframes wolfBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.wolf-tag-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--wolf-yellow);
+  background: var(--wolf-yellow-dim);
+  border: 1px solid var(--wolf-yellow-border);
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.wolf-main-heading {
+  font-family: var(--font-mono);
+  font-size: 2.75rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.03em;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+
+.wolf-big-price {
+  font-family: var(--font-mono);
+  font-size: 3.5rem;
+  font-weight: 800;
+  color: var(--wolf-yellow);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  text-shadow: 0 0 25px rgba(250, 204, 21, 0.25);
+  margin-bottom: 4px;
+}
+
+.wolf-price-sub {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+/* Level targets summary cards */
+.wolf-targets-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.wolf-target-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  transition: var(--transition);
+}
+
+.wolf-target-card.res:hover {
+  border-color: rgba(250, 204, 21, 0.4);
+  background: var(--wolf-yellow-dim);
+}
+
+.wolf-target-card.sup:hover {
+  border-color: rgba(250, 204, 21, 0.4);
+  background: var(--wolf-yellow-dim);
+}
+
+.wolf-target-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wolf-target-val {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.wolf-target-diff {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.wolf-target-diff.pos { color: var(--wolf-yellow-bright); }
+.wolf-target-diff.neg { color: var(--wolf-yellow); }
+
+/* Filter Tabs */
+.wolf-filter-row {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.wolf-filter-btn {
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.wolf-filter-btn:hover {
+  color: var(--wolf-yellow);
+  border-color: var(--wolf-yellow-border);
+}
+
+.wolf-filter-btn.active {
+  background: var(--wolf-yellow-dim);
+  border-color: var(--wolf-yellow);
+  color: var(--wolf-yellow-bright);
+}
+
+/* Right Column: Ordered Ladder */
+.wolf-right-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.wolf-ladder-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.wolf-ladder-title {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.wolf-utc-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--wolf-yellow);
+  background: rgba(250, 204, 21, 0.08);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(250, 204, 21, 0.15);
+}
+
+/* Ladder Rows */
+.wolf-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.wolf-ladder::-webkit-scrollbar {
+  width: 4px;
+}
+
+.wolf-ladder::-webkit-scrollbar-thumb {
+  background: rgba(250, 204, 21, 0.2);
+  border-radius: 4px;
+}
+
+.wolf-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 90px;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid transparent;
+  transition: var(--transition);
+  font-family: var(--font-mono);
+  cursor: default;
+}
+
+.wolf-row:hover:not(.is-last) {
+  background: var(--wolf-row-hover);
+  border-color: rgba(250, 204, 21, 0.2);
+}
+
+.wolf-row-code {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--wolf-yellow-bright);
+  letter-spacing: 0.02em;
+}
+
+.wolf-row-name-sub {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  display: block;
+  font-family: var(--font-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wolf-row-price {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  text-align: right;
+  letter-spacing: 0.01em;
+}
+
+.wolf-row-pct {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: right;
+  letter-spacing: 0.01em;
+}
+
+.wolf-row-pct.pos {
+  color: #6ee7b7;
+}
+
+.wolf-row-pct.neg {
+  color: #fca5a5;
+}
+
+/* 🌟 HIGHLIGHTED LAST ROW — THE YELLOW BAR */
+.wolf-row.is-last {
+  background: linear-gradient(90deg, #facc15 0%, #eab308 100%);
+  color: #000000;
+  border: 1px solid #fde047;
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.4), 0 2px 8px rgba(0, 0, 0, 0.4);
+  padding: 9px 12px;
+  margin: 4px 0;
+  position: relative;
+  z-index: 2;
+}
+
+.wolf-row.is-last .wolf-row-code {
+  color: #000000;
+  font-weight: 800;
+  font-size: 0.88rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wolf-row.is-last .wolf-row-code::before {
+  content: '◀';
+  font-size: 0.75rem;
+}
+
+.wolf-row.is-last .wolf-row-price {
+  color: #000000;
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
+.wolf-row.is-last .wolf-row-pct {
+  color: #000000;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+/* Bottom Signature Banner */
+.wolf-footer-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f5f3e8;
+  color: #1a1a1a;
+  padding: 12px 24px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.wolf-motto {
+  color: #1a1a1a;
+}
+
+.wolf-disclaimer-tag {
+  color: #71717a;
+  font-size: 0.72rem;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .wolf-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 20px;
+  }
+  .wolf-big-price {
+    font-size: 2.75rem;
+  }
+  .wolf-main-heading {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .wolf-layout {
+    padding: 16px 12px;
+  }
+  .wolf-big-price {
+    font-size: 2.2rem;
+  }
+  .wolf-targets-grid {
+    grid-template-columns: 1fr;
+  }
+  .wolf-row {
+    grid-template-columns: 65px 1fr 75px;
+    padding: 6px 8px;
+    font-size: 0.8rem;
+  }
+  .wolf-footer-banner {
+    flex-direction: column;
+    gap: 4px;
+    text-align: center;
+    padding: 10px 16px;
+    font-size: 0.72rem;
+  }
+}
