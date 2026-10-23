@@ -15,6 +15,7 @@ import {
   IconBlackFlag,
 } from './Icons';
 import { playAlertChime } from '@/lib/alertSound';
+import TwinPatternScanner from './TwinPatternScanner';
 
 const STORAGE_KEY_ALERTS = 'wolf_tape_reader_alerts_v1';
 const STORAGE_KEY_SOUND = 'wolf_tape_reader_sound_muted';
@@ -320,6 +321,25 @@ export default function AltsTapeReader() {
     saveAlerts(alerts.filter((a) => a.id !== id));
   };
 
+  const handleQuickSetAlert = (alertData) => {
+    const newAlert = {
+      id: Date.now().toString(),
+      symbol: alertData.symbol,
+      fullSymbol: alertData.fullSymbol || (alertData.symbol + 'USDT.P'),
+      targetPrice: alertData.targetPrice,
+      type: alertData.condition || 'price_above',
+      note: alertData.note || 'Twin Pattern Match',
+      triggered: false,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [newAlert, ...alerts];
+    setAlerts(updated);
+    try {
+      localStorage.setItem(STORAGE_KEY_ALERTS, JSON.stringify(updated));
+    } catch (e) {}
+    showToast(`Alert set for ${alertData.symbol} at ${alertData.targetPrice}`);
+  };
+
   const handleClearTriggered = () => {
     saveAlerts(alerts.filter((a) => !a.triggered));
   };
@@ -365,6 +385,28 @@ export default function AltsTapeReader() {
             <span>Bearish States</span>
             <span className="va-tab-count" style={{ color: activeTab === 'bear' ? '#ef4444' : '#888888' }}>
               {data?.bearishStates?.length || 0}
+            </span>
+          </button>
+
+          <button
+            className={`va-tab-btn ${activeTab === 'twin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('twin')}
+            style={{
+              borderColor: activeTab === 'twin' ? '#38bdf8' : undefined,
+              color: activeTab === 'twin' ? '#38bdf8' : undefined,
+            }}
+          >
+            <IconZap size={14} color={activeTab === 'twin' ? '#38bdf8' : undefined} />
+            <span>Twin Scanner</span>
+            <span style={{
+              background: '#38bdf8',
+              color: '#000000',
+              fontSize: '0.62rem',
+              fontWeight: 800,
+              padding: '1px 5px',
+              borderRadius: 3,
+            }}>
+              AI
             </span>
           </button>
 
@@ -463,8 +505,10 @@ export default function AltsTapeReader() {
         </div>
       </div>
 
-      {/* ── ALERTS MANAGER VIEW ── */}
-      {activeTab === 'alerts' ? (
+      {/* ── TWIN PATTERN SCANNER VIEW ── */}
+      {activeTab === 'twin' ? (
+        <TwinPatternScanner onSetAlert={handleQuickSetAlert} />
+      ) : activeTab === 'alerts' ? (
         <div className="vyaps-card" style={{ background: '#000000', borderColor: '#1a1a1a' }}>
           <div className="vyaps-card-header" style={{ borderColor: '#161616' }}>
             <span className="vyaps-brand" style={{ color: '#38bdf8' }}>
