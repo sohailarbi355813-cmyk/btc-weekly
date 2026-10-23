@@ -2,41 +2,32 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getTodayBias } from '@/lib/biasEngine';
-import { buildWeeklyProfiles, findSimilarWeeks } from '@/lib/weekPatternEngine';
 import { calculateWolfKeyLevels } from '@/lib/wolfLevelsEngine';
 import WolfKeyLevels from '@/components/WolfKeyLevels';
 import AltsTapeReader from '@/components/AltsTapeReader';
 import MacroWhalesEtf from '@/components/MacroWhalesEtf';
+import BootIntroSequence from '@/components/BootIntroSequence';
 import {
   IconBitcoin,
   IconTrendUp,
   IconTrendDown,
   IconScale,
-  IconCalendar,
   IconRadar,
   IconBarChart,
-  IconGrid,
-  IconSparkles,
-  IconTarget,
-  IconTrophy,
   IconRefresh,
-  IconLayers,
-  IconZap,
-  IconClock,
   IconPin,
-  IconCandle,
   IconAlertTriangle,
   IconShield,
   IconCheck,
   IconDatabase,
   IconWolf,
-  IconLevels,
+  IconBlackFlag,
+  IconMenu,
+  IconX,
 } from '@/components/Icons';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon through Sun
 
 // ─── Format Helpers ─────────────────────────────────────────────────────────
 
@@ -94,180 +85,25 @@ function ConfidenceRing({ confidence, bias }) {
   );
 }
 
-// ─── Return Distribution Chart ────────────────────────────────────────────────
-
-function DistributionChart({ returns }) {
-  if (!returns || returns.length === 0) return null;
-
-  const bins = [];
-  const step = 0.5;
-  for (let start = -6; start < 6; start += step) {
-    const end = start + step;
-    const count = returns.filter(r => r >= start && r < end).length;
-    bins.push({ start, end, count, label: start === 0 ? '0' : start % 2 === 0 ? `${start}%` : '' });
-  }
-
-  const maxCount = Math.max(...bins.map(b => b.count), 1);
-
-  return (
-    <div>
-      <div className="distribution-chart">
-        {bins.map((bin, i) => (
-          <div key={i} className="dist-bar-col">
-            <div
-              className={`dist-bar ${bin.start >= 0 ? 'positive' : 'negative'}`}
-              style={{ height: `${(bin.count / maxCount) * 100}%` }}
-              title={`${bin.start >= 0 ? '+' : ''}${bin.start}% to ${bin.end >= 0 ? '+' : ''}${bin.end}%: ${bin.count} days`}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="dist-axis">
-        <span className="dist-axis-label">-6%</span>
-        <span className="dist-axis-label">-3%</span>
-        <span className="dist-axis-label">0</span>
-        <span className="dist-axis-label">+3%</span>
-        <span className="dist-axis-label">+6%</span>
-      </div>
-    </div>
-  );
-}
-
-// ─── Recent Same-Day Candles ──────────────────────────────────────────────────
-
-function RecentCandles({ candles, dayName }) {
-  if (!candles || candles.length === 0) {
-    return <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>No data available</p>;
-  }
-
-  const maxAbs = Math.max(...candles.map(c => Math.abs(((c.close - c.open) / c.open) * 100)), 1);
-
-  return (
-    <div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <IconClock size={13} />
-        Last {candles.length} {dayName}s &mdash; chronological order
-      </div>
-      <div className="recent-candles">
-        {candles.map((c, i) => {
-          const ret = ((c.close - c.open) / c.open) * 100;
-          const bull = ret > 0;
-          const heightPct = Math.max((Math.abs(ret) / maxAbs) * 80, 20);
-          const dateObj = new Date(c.date + 'T12:00:00Z');
-          const dateStr = `${dateObj.getUTCDate()} ${MONTHS[dateObj.getUTCMonth()]}`;
-          return (
-            <div key={i} className="candle-bar-wrap tooltip-wrap">
-              <div
-                className={`candle-bar ${bull ? 'candle-bull' : 'candle-bear'}`}
-                style={{ height: `${heightPct}px` }}
-              >
-                {Math.abs(ret) > 1.5 ? `${ret > 0 ? '+' : ''}${ret.toFixed(1)}%` : ''}
-              </div>
-              <div className="candle-date">{dateStr}</div>
-              <div className="tooltip-box">
-                <div className="tooltip-row">
-                  <span className="tooltip-key">Date</span>
-                  <span className="tooltip-val">{c.date}</span>
-                </div>
-                <div className="tooltip-row">
-                  <span className="tooltip-key">Open</span>
-                  <span className="tooltip-val">{formatPrice(c.open)}</span>
-                </div>
-                <div className="tooltip-row">
-                  <span className="tooltip-key">Close</span>
-                  <span className="tooltip-val">{formatPrice(c.close)}</span>
-                </div>
-                <div className="tooltip-row">
-                  <span className="tooltip-key">Return</span>
-                  <span className="tooltip-val" style={{ color: bull ? 'var(--bullish)' : 'var(--bearish)' }}>
-                    {formatPct(ret)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── Day-of-Week Card ─────────────────────────────────────────────────────────
-
-function DowCard({ stats, isToday }) {
-  const color = biasColor(stats.bias);
-  const barWidth = `${Math.min(stats.bullishRate, 100)}%`;
-
-  return (
-    <div className={`dow-card ${isToday ? 'today' : ''} tooltip-wrap`}>
-      <div className="dow-card-day">{stats.dayName.slice(0, 3)}</div>
-      <div className={`dow-bias-badge badge-${color}`}>
-        {stats.bias === 'bullish' ? <IconTrendUp size={11} /> : stats.bias === 'bearish' ? <IconTrendDown size={11} /> : <IconScale size={11} />}
-        <span>{stats.bias}</span>
-      </div>
-      <div className={`dow-win-rate value-${color}`}>
-        {stats.bullishRate.toFixed(0)}%
-      </div>
-      <div className="dow-avg-return" style={{ color: stats.avgReturn > 0 ? 'var(--bullish)' : 'var(--bearish)' }}>
-        {formatPct(stats.avgReturn)}
-      </div>
-      <div className="dow-bar-container">
-        <div className={`dow-bar-fill bar-${color}`} style={{ width: barWidth }} />
-      </div>
-      <div className="dow-sample">{stats.total} days</div>
-
-      {/* Tooltip */}
-      <div className="tooltip-box">
-        <div className="tooltip-row"><span className="tooltip-key">Day</span><span className="tooltip-val">{stats.dayName}</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Win Rate</span><span className="tooltip-val">{stats.bullishRate.toFixed(1)}%</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Avg Return</span><span className="tooltip-val">{formatPct(stats.avgReturn)}</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Median</span><span className="tooltip-val">{formatPct(stats.medianReturn)}</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Best Day</span><span className="tooltip-val" style={{ color: 'var(--bullish)' }}>{formatPct(stats.maxGain)}</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Worst Day</span><span className="tooltip-val" style={{ color: 'var(--bearish)' }}>{formatPct(stats.maxLoss)}</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Streak</span><span className="tooltip-val">{stats.streaks.currentBullStreak > 0 ? `${stats.streaks.currentBullStreak} Bull` : `${stats.streaks.currentBearStreak} Bear`}</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Samples</span><span className="tooltip-val">{stats.total}</span></div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Month Cell ────────────────────────────────────────────────────────────────
-
-function MonthCell({ stats, isCurrent }) {
-  const color = biasColor(stats.bias);
-  return (
-    <div className={`month-cell month-${color} tooltip-wrap`} style={isCurrent ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : {}}>
-      <div className="month-name">{stats.monthName}</div>
-      <div className={`month-rate value-${color}`}>{stats.total > 0 ? `${stats.bullishRate.toFixed(0)}%` : '—'}</div>
-      <div className="month-avg" style={{ color: stats.avgReturn > 0 ? 'var(--bullish)' : 'var(--bearish)' }}>
-        {stats.total > 0 ? formatPct(stats.avgReturn) : ''}
-      </div>
-      <div className="tooltip-box">
-        <div className="tooltip-row"><span className="tooltip-key">Month</span><span className="tooltip-val">{stats.monthName}</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Bull Rate</span><span className="tooltip-val">{stats.total > 0 ? `${stats.bullishRate.toFixed(1)}%` : '—'}</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Avg Return</span><span className="tooltip-val">{stats.total > 0 ? formatPct(stats.avgReturn) : '—'}</span></div>
-        <div className="tooltip-row"><span className="tooltip-key">Samples</span><span className="tooltip-val">{stats.total} years</span></div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Page Component ───────────────────────────────────────────────────────
 
 export default function Home() {
   const [data, setData] = useState(null);
   const [bias, setBias] = useState(null);
-  const [weekPattern, setWeekPattern] = useState(null);
   const [wolfLevels, setWolfLevels] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [loadStep, setLoadStep] = useState(1);
-  const [activeTab, setActiveTab] = useState('levels'); // Default to Wolf Key Levels
+  const [activeTab, setActiveTab] = useState('levels'); // 'levels' | 'alts' | 'macro'
   const [lastUpdated, setLastUpdated] = useState(null);
   const [clientDate, setClientDate] = useState(null);
+  const [bootDone, setBootDone] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    setRefreshing(true);
     setError(null);
     setLoadStep(1);
 
@@ -297,22 +133,18 @@ export default function Home() {
       setClientDate(now);
       const biasResult = getTodayBias(json.candles, currentPrice, now);
 
-      setLoadStep(4); // Week sequence pattern matching
-      const weeklyProfiles = buildWeeklyProfiles(json.candles);
-      const patternResult = findSimilarWeeks(weeklyProfiles, 25, now);
-
-      // 5. Wolf Key Levels calculation
+      setLoadStep(4); // Calculating Wolf Key Levels
       const wolfLevelsResult = calculateWolfKeyLevels(json.candles, currentPrice);
 
       setData({ candles: json.candles, count: json.count, currentPrice });
       setBias(biasResult);
-      setWeekPattern(patternResult);
       setWolfLevels(wolfLevelsResult);
       setLastUpdated(now);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setTimeout(() => setRefreshing(false), 500);
     }
   }, []);
 
@@ -320,35 +152,42 @@ export default function Home() {
     loadData();
   }, [loadData]);
 
-  // Safe date derivation for rendering (avoids non-deterministic prerender evaluations)
+  const handleRefresh = () => {
+    loadData(true);
+  };
+
+  // Safe date derivation for rendering
   const todayDow = bias?.dow ?? (clientDate ? clientDate.getUTCDay() : 5);
   const todayMonth = bias?.month ?? (clientDate ? clientDate.getUTCMonth() : 9);
   const formattedToday = clientDate
     ? clientDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : (bias?.date ? `Date: ${bias.date}` : '');
 
-  // ── Render: Loading ────────────────────────────────────────────────────────
+  // ── Render: Ultra-Cool Boot Intro Animation on Load ──
+  if (!bootDone) {
+    return <BootIntroSequence onComplete={() => setBootDone(true)} />;
+  }
 
-  if (loading) {
+  // ── Render: Loading (if user skipped boot early) ─────────────────────────────
+  if (loading && !data) {
     const steps = [
       { label: 'Connecting to market data feed...', Icon: IconDatabase },
-      { label: 'Ingesting daily BTC candles (2021 → today)...', Icon: IconClock },
+      { label: 'Ingesting daily BTC candles (2021 → today)...', Icon: IconBitcoin },
       { label: 'Computing day-of-week & seasonal distributions...', Icon: IconBarChart },
-      { label: 'Scanning 300+ historical weeks for sequence similarity...', Icon: IconRadar },
-      { label: 'Deriving directional edge & predictive confidence...', Icon: IconTarget },
+      { label: 'Calculating Wolf Key Levels auction price ladder...', Icon: IconWolf },
     ];
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
         <header className="header">
           <div className="container">
             <div className="header-inner">
               <div className="logo">
                 <div className="logo-icon">
-                  <IconWolf size={20} color="var(--wolf-yellow-bright)" />
+                  <IconBlackFlag size={20} />
                 </div>
                 <div className="logo-text">
-                  <h1>Wolf Tape Read</h1>
-                  <span>Trading The Tape, With Precision &middot; Key Levels &amp; Bias</span>
+                  <h1>Wolf Tape Reader</h1>
+                  <span>Trading The Tape, With Precision &middot; Key Levels, Alts &amp; Bias</span>
                 </div>
               </div>
             </div>
@@ -358,7 +197,9 @@ export default function Home() {
           <div className="container">
             <div className="loading-screen">
               <div className="loading-spinner" />
-              <div className="loading-text">Calibrating Market Statistics...</div>
+              <div className="loading-text" style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>
+                CALIBRATING WOLF TAPE TELEMETRY...
+              </div>
               <div className="loading-steps">
                 {steps.map((s, i) => (
                   <div key={i} className={`loading-step ${i < loadStep ? 'done' : i === loadStep ? 'active' : ''}`}>
@@ -381,18 +222,18 @@ export default function Home() {
 
   // ── Render: Error ──────────────────────────────────────────────────────────
 
-  if (error) {
+  if (error && !data) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
         <header className="header">
           <div className="container">
             <div className="header-inner">
               <div className="logo">
                 <div className="logo-icon">
-                  <IconWolf size={20} color="var(--wolf-yellow-bright)" />
+                  <IconBlackFlag size={20} />
                 </div>
                 <div className="logo-text">
-                  <h1>Wolf Tape Read</h1>
+                  <h1>Wolf Tape Reader</h1>
                   <span>Trading The Tape, With Precision</span>
                 </div>
               </div>
@@ -407,13 +248,10 @@ export default function Home() {
               </div>
               <h2>Market Data Sync Error</h2>
               <p>{error}</p>
-              <button id="retry-btn" className="retry-btn" onClick={loadData}>
+              <button id="retry-btn" className="retry-btn" onClick={() => loadData()}>
                 <IconRefresh size={14} />
                 <span>Retry Sync</span>
               </button>
-              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Please verify network connection. Data feeds retry automatically.
-              </p>
             </div>
           </div>
         </main>
@@ -425,7 +263,6 @@ export default function Home() {
 
   const bColor = biasColor(bias.bias);
   const dowStatsArr = Object.values(bias.allDowStats);
-  const monthlyStatsArr = Object.values(bias.allMonthlyStats);
 
   // Quick stats
   const totalCandles = data.count;
@@ -443,14 +280,80 @@ export default function Home() {
     : `${bias.dayName}s show no strong directional edge historically. Mixed signals from day-of-week and weekly open analysis.`;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
+      {/* ── Ultra-Cool Cyber Terminal Boot Sequence Overlay ── */}
+      {!bootDone && (
+        <BootIntroSequence onComplete={() => setBootDone(true)} />
+      )}
+
+      {/* ── Mobile Navigation Drawer ── */}
+      {mobileMenuOpen && (
+        <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
+          <div className="mobile-drawer" onClick={e => e.stopPropagation()}>
+            <div className="mobile-drawer-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="logo-icon">
+                  <IconBlackFlag size={20} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.95rem', fontFamily: 'var(--font-display)' }}>
+                    WOLF TAPE READER
+                  </span>
+                  <span style={{ fontSize: '0.65rem', color: '#888888' }}>Trading The Tape</span>
+                </div>
+              </div>
+              <button className="mobile-drawer-close" onClick={() => setMobileMenuOpen(false)}>
+                <IconX size={18} />
+              </button>
+            </div>
+
+            <div className="mobile-drawer-spot">
+              <span className="spot-label">BTC SPOT</span>
+              <span className="spot-val">{formatPrice(data.currentPrice)}</span>
+            </div>
+
+            <nav className="mobile-nav-list">
+              <button
+                className={`mobile-nav-item ${activeTab === 'levels' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('levels'); setMobileMenuOpen(false); }}
+              >
+                <IconWolf size={18} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : '#888888'} />
+                <span>Wolf Key Levels</span>
+              </button>
+              <button
+                className={`mobile-nav-item ${activeTab === 'alts' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('alts'); setMobileMenuOpen(false); }}
+              >
+                <IconRadar size={18} color={activeTab === 'alts' ? '#38bdf8' : '#888888'} />
+                <span>Alts Value Area (VAL/VAH)</span>
+                <span className="alts-count-chip">55</span>
+              </button>
+              <button
+                className={`mobile-nav-item ${activeTab === 'macro' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('macro'); setMobileMenuOpen(false); }}
+              >
+                <IconBarChart size={18} color={activeTab === 'macro' ? '#38bdf8' : '#888888'} />
+                <span>Whales • MVRV • ETFs</span>
+              </button>
+            </nav>
+
+            <div className="mobile-drawer-actions">
+              <button className="mobile-drawer-refresh" onClick={() => { handleRefresh(); setMobileMenuOpen(false); }}>
+                <IconRefresh size={14} className={refreshing ? 'spin-icon' : ''} />
+                <span>Refresh Live Telemetry</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <header className="header">
         <div className="container">
           <div className="header-inner">
             <div className="logo">
               <div className="logo-icon">
-                <IconWolf size={20} color="var(--wolf-yellow-bright)" />
+                <IconBlackFlag size={20} />
               </div>
               <div className="logo-text">
                 <h1>Wolf Tape Reader</h1>
@@ -458,11 +361,38 @@ export default function Home() {
               </div>
             </div>
             <div className="header-right">
+              {/* Audio Spectrum Equalizer */}
+              <div className="audio-pulse-bars" title="Real-time orderflow telemetry">
+                <span className="audio-bar" />
+                <span className="audio-bar" />
+                <span className="audio-bar" />
+                <span className="audio-bar" />
+                <span className="audio-bar" />
+              </div>
+
+              {/* BTC Price Header */}
               <div className="btc-price-header">{formatPrice(data.currentPrice)}</div>
-              <div className="live-badge">
+
+              {/* Interactive Live Feed Button */}
+              <button
+                className="live-badge-btn"
+                onClick={handleRefresh}
+                title="Click to refresh live feed"
+              >
                 <span className="live-dot" />
                 <span>Live Feed</span>
-              </div>
+                <IconRefresh size={12} className={refreshing ? 'spin-icon' : ''} style={{ opacity: refreshing ? 1 : 0.6 }} />
+              </button>
+
+              {/* Mobile Hamburger Button */}
+              <button
+                className="mobile-menu-btn"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Toggle menu"
+                title="Open menu"
+              >
+                <IconMenu size={20} />
+              </button>
             </div>
           </div>
         </div>
@@ -483,10 +413,10 @@ export default function Home() {
             </div>
             <div className="data-info-right">
               <span>
-                Synced: {lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                Synced: {lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--'}
               </span>
-              <button className="refresh-link-btn" onClick={loadData} title="Refresh live data">
-                <IconRefresh size={13} />
+              <button className="refresh-link-btn" onClick={handleRefresh} title="Refresh live data">
+                <IconRefresh size={13} className={refreshing ? 'spin-icon' : ''} />
                 <span>Refresh</span>
               </button>
             </div>
@@ -595,515 +525,73 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ── TABS ── */}
+          {/* ── 3 PRIMARY INSTITUTIONAL TABS (Unused legacy navigation pruned) ── */}
           <div className="tab-bar">
             <button id="tab-levels" className={`tab-btn ${activeTab === 'levels' ? 'active' : ''}`} onClick={() => setActiveTab('levels')}>
               <IconWolf size={15} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-yellow)'} />
               <span style={{ color: activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : undefined }}>Wolf Key Levels</span>
             </button>
             <button id="tab-alts" className={`tab-btn ${activeTab === 'alts' ? 'active' : ''}`} onClick={() => setActiveTab('alts')}>
-              <IconRadar size={15} color={activeTab === 'alts' ? 'var(--wolf-yellow-bright)' : undefined} />
-              <span style={{ color: activeTab === 'alts' ? 'var(--wolf-yellow-bright)' : undefined }}>Alts Value Area (VAL/VAH)</span>
-              <span style={{ background: '#2dd4bf', color: '#0b0e14', fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>55</span>
+              <IconRadar size={15} color={activeTab === 'alts' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'alts' ? '#38bdf8' : undefined }}>Alts Value Area (VAL/VAH)</span>
+              <span style={{ background: '#2dd4bf', color: '#000000', fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>55</span>
             </button>
             <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => setActiveTab('macro')}>
-              <IconBarChart size={15} color={activeTab === 'macro' ? 'var(--wolf-yellow-bright)' : undefined} />
-              <span style={{ color: activeTab === 'macro' ? 'var(--wolf-yellow-bright)' : undefined }}>Whales • MVRV • ETFs</span>
-            </button>
-            <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => setActiveTab('pattern')}>
-              <IconRadar size={15} />
-              <span>Week Pattern Match</span>
-            </button>
-            <button id="tab-dow" className={`tab-btn ${activeTab === 'dow' ? 'active' : ''}`} onClick={() => setActiveTab('dow')}>
-              <IconCalendar size={15} />
-              <span>Day of Week</span>
-            </button>
-            <button id="tab-monthly" className={`tab-btn ${activeTab === 'monthly' ? 'active' : ''}`} onClick={() => setActiveTab('monthly')}>
-              <IconGrid size={15} />
-              <span>Monthly Seasonal</span>
-            </button>
-            <button id="tab-dist" className={`tab-btn ${activeTab === 'dist' ? 'active' : ''}`} onClick={() => setActiveTab('dist')}>
-              <IconBarChart size={15} />
-              <span>Distribution</span>
+              <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'macro' ? '#38bdf8' : undefined }}>Whales • MVRV • ETFs</span>
             </button>
           </div>
 
-          {/* ── WOLF KEY LEVELS VIEW ── */}
+          {/* ── 1. WOLF KEY LEVELS VIEW ── */}
           {activeTab === 'levels' && (
             <WolfKeyLevels levelsData={wolfLevels} />
           )}
 
-          {/* ── ALTS TAPE READER VIEW ── */}
+          {/* ── 2. ALTS VALUE AREA TAPE READER VIEW ── */}
           {activeTab === 'alts' && (
             <AltsTapeReader />
           )}
 
-          {/* ── MACRO WHALES & ETF VIEW ── */}
+          {/* ── 3. MACRO WHALES & ETF VIEW ── */}
           {activeTab === 'macro' && (
             <MacroWhalesEtf />
           )}
 
-          {/* ── WEEK PATTERN MATCHING VIEW ── */}
-          {activeTab === 'pattern' && (
-            <div style={{ animation: 'fadeInUp 0.35s ease' }}>
-              {!weekPattern ? (
-                <div className="no-data-msg">
-                  <IconRadar size={22} color="var(--text-muted)" />
-                  <span>Calibrating weekly sequence data...</span>
-                </div>
-              ) : (
-                <>
-                  {/* ─ Current Week Timeline ─ */}
-                  <div className="section-header">
-                    <div className="section-title">
-                      <IconLayers size={18} color="var(--accent)" />
-                      <span>This Week&apos;s Running Sequence</span>
-                    </div>
-                    <div className="section-subtitle">
-                      Closed days display realized % returns. Active day is live. Future days show upcoming targets.
-                    </div>
-                  </div>
-
-                  <div className="week-timeline">
-                    {WEEK_ORDER.map(dow => {
-                      const dayData = weekPattern.currentWeek?.days[dow];
-                      const isClosed = weekPattern.closedDows?.includes(dow);
-                      const isToday = dow === weekPattern.todayDow;
-                      const isFuture = weekPattern.futureDows?.includes(dow);
-                      const bull = dayData?.bullish;
-
-                      let cellClass = 'week-day-cell';
-                      if (isToday) cellClass += ' is-today';
-                      else if (isClosed && bull) cellClass += ' completed-bull';
-                      else if (isClosed && !bull) cellClass += ' completed-bear';
-                      else if (isFuture) cellClass += ' future';
-
-                      return (
-                        <div key={dow} className={cellClass}>
-                          <div className="week-day-header">
-                            <span className="week-day-name">{DAY_SHORT[dow]}</span>
-                            <span className="week-day-badge">
-                              {isToday ? 'Live' : isClosed ? 'Closed' : 'Pending'}
-                            </span>
-                          </div>
-                          {dayData ? (
-                            <>
-                              <div className={`week-day-return ${bull ? 'value-bullish' : 'value-bearish'}`}>
-                                {dayData.return > 0 ? '+' : ''}{dayData.return.toFixed(2)}%
-                              </div>
-                              <div className="week-day-prices">
-                                O: {formatPrice(dayData.open)}<br />
-                                C: {formatPrice(dayData.close)}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="week-day-future-label">Upcoming</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* ─ Pattern Description ─ */}
-                  {weekPattern.currentPattern && (
-                    <div className="pattern-desc">
-                      <div className="pattern-desc-icon">
-                        <IconRadar size={18} color="var(--accent)" />
-                      </div>
-                      <div>
-                        <strong>Current Week Trajectory:</strong> {weekPattern.currentPattern}.<br />
-                        Matched against <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{weekPattern.totalMatchesFound}</span> statistically analogous weeks from Jan 2021 to now.
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ─ Match Count Badges ─ */}
-                  <div className="match-count-row">
-                    <div className="match-badge">
-                      <IconCalendar size={13} />
-                      <span><span className="badge-num">{weekPattern.totalMatchesFound}</span> matching weeks found</span>
-                    </div>
-                    <div className="match-badge">
-                      <IconTrophy size={13} />
-                      <span>Top <span className="badge-num">{weekPattern.topMatches.length}</span> highest correlation</span>
-                    </div>
-                    <div className="match-badge">
-                      <IconTarget size={13} />
-                      <span>Similarity threshold: <span className="badge-num">25%+</span></span>
-                    </div>
-                  </div>
-
-                  {/* ─ Current Week Predictions ─ */}
-                  <div className="panel" style={{ marginBottom: 28 }}>
-                    <div className="section-title" style={{ marginBottom: 4 }}>
-                      <IconTarget size={18} color="var(--accent)" />
-                      <span>Historical Sequence Forecast (This Week)</span>
-                    </div>
-                    <div className="section-subtitle" style={{ marginBottom: 20 }}>
-                      Based on what unfolded across the {weekPattern.totalMatchesFound} matched historical weeks.
-                      Completed days reflect realized history; active and upcoming days show probabilistic bias.
-                    </div>
-                    <div className="predictions-grid">
-                      {WEEK_ORDER.map(dow => {
-                        const pred = weekPattern.predictions[dow];
-                        if (!pred) return (
-                          <div key={dow} className="prediction-card">
-                            <div className="pred-day-name">{DAY_SHORT[dow]}</div>
-                            <div className="pred-completed-label">No data</div>
-                          </div>
-                        );
-                        const color = biasColor(pred.bias);
-                        let cardClass = `prediction-card pred-${color}`;
-                        if (pred.isClosed) cardClass += ' is-completed';
-                        if (pred.isToday) cardClass += ' is-today-pred';
-
-                        return (
-                          <div key={dow} className={cardClass + ' tooltip-wrap'}>
-                            <div className="pred-day-name">
-                              <span>{pred.dayName}</span>
-                              {pred.isToday && <span className="today-chip">Today</span>}
-                            </div>
-                            <div className={`pred-bull-rate value-${color}`}>
-                              {pred.weightedBullRate.toFixed(0)}%
-                            </div>
-                            <div className="pred-dir-badge">
-                              {pred.bias === 'bullish' ? (
-                                <span className="badge-bullish-mini"><IconTrendUp size={11} /> Bullish</span>
-                              ) : pred.bias === 'bearish' ? (
-                                <span className="badge-bearish-mini"><IconTrendDown size={11} /> Bearish</span>
-                              ) : (
-                                <span className="badge-neutral-mini"><IconScale size={11} /> Neutral</span>
-                              )}
-                            </div>
-                            <div className={`pred-avg-return ${pred.avgReturn > 0 ? 'value-bullish' : 'value-bearish'}`}>
-                              avg {pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%
-                            </div>
-                            <div className="pred-conf-bar">
-                              <div
-                                className={`pred-conf-fill bar-${color}`}
-                                style={{ width: `${pred.confidence}%` }}
-                              />
-                            </div>
-                            <div className="pred-sample">{pred.sampleSize} matched weeks</div>
-                            {pred.actualData && (
-                              <div className="pred-actual-tag">
-                                Actual: {pred.actualData.return > 0 ? '+' : ''}{pred.actualData.return.toFixed(2)}%
-                              </div>
-                            )}
-
-                            {/* Tooltip */}
-                            <div className="tooltip-box">
-                              <div className="tooltip-row"><span className="tooltip-key">Day</span><span className="tooltip-val">{pred.fullDayName}</span></div>
-                              <div className="tooltip-row"><span className="tooltip-key">Win Rate</span><span className="tooltip-val">{pred.bullishRate.toFixed(1)}%</span></div>
-                              <div className="tooltip-row"><span className="tooltip-key">Weighted Win</span><span className="tooltip-val" style={{ color: `var(--${color})` }}>{pred.weightedBullRate.toFixed(1)}%</span></div>
-                              <div className="tooltip-row"><span className="tooltip-key">Avg Return</span><span className="tooltip-val">{pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%</span></div>
-                              <div className="tooltip-row"><span className="tooltip-key">Best</span><span className="tooltip-val" style={{ color: 'var(--bullish)' }}>+{pred.maxGain.toFixed(2)}%</span></div>
-                              <div className="tooltip-row"><span className="tooltip-key">Worst</span><span className="tooltip-val" style={{ color: 'var(--bearish)' }}>{pred.maxLoss.toFixed(2)}%</span></div>
-                              <div className="tooltip-row"><span className="tooltip-key">Confidence</span><span className="tooltip-val">{pred.confidence}%</span></div>
-                              <div className="tooltip-row"><span className="tooltip-key">Samples</span><span className="tooltip-val">{pred.sampleSize}</span></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* ─ Similar Historical Weeks ─ */}
-                  {weekPattern.topMatches.length > 0 && (
-                    <div style={{ marginBottom: 28 }}>
-                      <div className="section-title" style={{ marginBottom: 12, fontSize: '0.95rem' }}>
-                        <IconTrophy size={16} color="var(--gold)" />
-                        <span>Top Correlated Historical Weeks</span>
-                      </div>
-                      <div className="similar-weeks-grid">
-                        {weekPattern.topMatches.map((m, i) => {
-                          const maxAbs = Math.max(...WEEK_ORDER.map(d => Math.abs(m.week.days[d]?.return ?? 0)), 1);
-                          return (
-                            <div key={i} className="similar-week-card tooltip-wrap">
-                              <div className="sim-week-header">
-                                <span className="sim-week-date">{m.week.weekStart}</span>
-                                <span className="sim-score-badge">{Math.round(m.score)}% match</span>
-                              </div>
-                              <div className="sim-week-bars">
-                                {WEEK_ORDER.map(dow => {
-                                  const d = m.week.days[dow];
-                                  if (!d) return (
-                                    <div key={dow} className="sim-day-bar-wrap">
-                                      <div className="sim-day-bar missing" />
-                                      <div className="sim-day-label">{DAY_LETTERS[dow]}</div>
-                                    </div>
-                                  );
-                                  const h = Math.max((Math.abs(d.return) / maxAbs) * 32, 4);
-                                  return (
-                                    <div key={dow} className="sim-day-bar-wrap">
-                                      <div
-                                        className={`sim-day-bar ${d.bullish ? 'bull' : 'bear'}`}
-                                        style={{ height: `${h}px` }}
-                                        title={`${DAY_SHORT[dow]}: ${d.return > 0 ? '+' : ''}${d.return.toFixed(2)}%`}
-                                      />
-                                      <div className="sim-day-label">{DAY_LETTERS[dow]}</div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              {/* Tooltip */}
-                              <div className="tooltip-box" style={{ minWidth: 210 }}>
-                                <div className="tooltip-row"><span className="tooltip-key">Week of</span><span className="tooltip-val">{m.week.weekStart}</span></div>
-                                <div className="tooltip-row"><span className="tooltip-key">Similarity</span><span className="tooltip-val" style={{ color: 'var(--gold)' }}>{Math.round(m.score)}% match</span></div>
-                                {WEEK_ORDER.map(dow => m.week.days[dow] && (
-                                  <div key={dow} className="tooltip-row">
-                                    <span className="tooltip-key">{DAY_SHORT[dow]}</span>
-                                    <span className="tooltip-val" style={{ color: m.week.days[dow].bullish ? 'var(--bullish)' : 'var(--bearish)' }}>
-                                      {m.week.days[dow].return > 0 ? '+' : ''}{m.week.days[dow].return.toFixed(2)}%
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ─ Next Week Forecast ─ */}
-                  {Object.keys(weekPattern.nextWeekPredictions).length >= 3 && (
-                    <div className="panel" style={{ marginBottom: 32 }}>
-                      <div className="section-title" style={{ marginBottom: 4 }}>
-                        <IconSparkles size={18} color="var(--accent)" />
-                        <span>Subsequent Week Historical Projection</span>
-                      </div>
-                      <div className="section-subtitle" style={{ marginBottom: 20 }}>
-                        What happened during the week immediately following these matched patterns?
-                        Provides forward statistical positioning for the coming week.
-                      </div>
-                      <div className="next-week-grid">
-                        {WEEK_ORDER.map(dow => {
-                          const pred = weekPattern.nextWeekPredictions[dow];
-                          if (!pred) return (
-                            <div key={dow} className="next-week-card">
-                              <div className="nw-day-name">{DAY_SHORT[dow]}</div>
-                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>&mdash;</div>
-                            </div>
-                          );
-                          const color = biasColor(pred.bias);
-                          return (
-                            <div key={dow} className={`next-week-card nw-${color} tooltip-wrap`}>
-                              <div className="nw-day-name">{pred.dayName}</div>
-                              <div className={`nw-bias-badge badge-${color}`}>
-                                {pred.bias === 'bullish' ? <IconTrendUp size={10} /> : pred.bias === 'bearish' ? <IconTrendDown size={10} /> : <IconScale size={10} />}
-                                <span>{pred.bias}</span>
-                              </div>
-                              <div className={`nw-bull-rate value-${color}`}>{pred.weightedBullRate.toFixed(0)}%</div>
-                              <div className={`nw-avg-return ${pred.avgReturn > 0 ? 'value-bullish' : 'value-bearish'}`}>
-                                avg {pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%
-                              </div>
-                              <div className="nw-sample">{pred.sampleSize} weeks</div>
-                              {/* Tooltip */}
-                              <div className="tooltip-box">
-                                <div className="tooltip-row"><span className="tooltip-key">Day</span><span className="tooltip-val">{pred.fullDayName}</span></div>
-                                <div className="tooltip-row"><span className="tooltip-key">Bull Rate</span><span className="tooltip-val">{pred.bullishRate.toFixed(1)}%</span></div>
-                                <div className="tooltip-row"><span className="tooltip-key">Weighted</span><span className="tooltip-val" style={{ color: `var(--${color})` }}>{pred.weightedBullRate.toFixed(1)}%</span></div>
-                                <div className="tooltip-row"><span className="tooltip-key">Avg Return</span><span className="tooltip-val">{pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%</span></div>
-                                <div className="tooltip-row"><span className="tooltip-key">Best</span><span className="tooltip-val" style={{ color: 'var(--bullish)' }}>+{pred.maxGain.toFixed(2)}%</span></div>
-                                <div className="tooltip-row"><span className="tooltip-key">Worst</span><span className="tooltip-val" style={{ color: 'var(--bearish)' }}>{pred.maxLoss.toFixed(2)}%</span></div>
-                                <div className="tooltip-row"><span className="tooltip-key">Samples</span><span className="tooltip-val">{pred.sampleSize}</span></div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ── DAY OF WEEK VIEW ── */}
-          {activeTab === 'dow' && (
-            <div className="dow-section" style={{ animation: 'fadeInUp 0.35s ease' }}>
-              <div className="section-header">
-                <div className="section-title">
-                  <IconCalendar size={18} color="var(--accent)" />
-                  <span>Day-of-Week Historical Edge</span>
-                </div>
-                <div className="section-subtitle">
-                  Historical win rate and average daily return for each weekday since January 2021. Today is highlighted.
-                </div>
-              </div>
-              <div className="dow-grid">
-                {WEEK_ORDER.map(dow => {
-                  const stats = bias.allDowStats[dow];
-                  if (!stats) return null;
-                  return <DowCard key={stats.day} stats={stats} isToday={stats.day === todayDow} />;
-                })}
-              </div>
-
-              {/* Recent same-day candles */}
-              <div className="panel" style={{ marginTop: 24 }}>
-                <div className="section-title" style={{ marginBottom: 16 }}>
-                  <IconCandle size={17} color="var(--accent)" />
-                  <span>Recent {bias.dayName}s Execution History</span>
-                </div>
-                <RecentCandles candles={bias.recentSameDay} dayName={bias.dayName} />
-              </div>
-
-              {/* Weekly open deep dive */}
-              <div className="two-col" style={{ marginTop: 24 }}>
-                <div className="panel">
-                  <div className="section-title" style={{ marginBottom: 16 }}>
-                    <IconPin size={17} color="var(--accent)" />
-                    <span>Weekly Open Anchor Analysis</span>
-                  </div>
-                  <div className="weekly-open-price-row">
-                    <div className="price-block">
-                      <div className="price-label">Monday 00:00 UTC Open</div>
-                      <div className="price-value">{formatPrice(bias.weeklyBias.weeklyOpen)}</div>
-                    </div>
-                    <div className="price-block">
-                      <div className="price-label">Current Spot Price</div>
-                      <div className="price-value">{formatPrice(data.currentPrice)}</div>
-                      <div className={`price-diff ${bias.weeklyBias.pctFromWeeklyOpen >= 0 ? 'diff-bullish' : 'diff-bearish'}`}>
-                        {formatPct(bias.weeklyBias.pctFromWeeklyOpen)} from open
-                      </div>
-                    </div>
-                  </div>
-                  <div className="weekly-bias-row">
-                    <div className="bias-stat-block">
-                      <div className="bias-stat-label">Historically when ABOVE weekly open</div>
-                      <div className={`bias-stat-value ${bias.weeklyBias.aboveOpenBullRate > 55 ? 'value-bullish' : bias.weeklyBias.aboveOpenBullRate < 45 ? 'value-bearish' : 'value-neutral'}`}>
-                        {bias.weeklyBias.aboveOpenBullRate.toFixed(0)}% Bullish
-                      </div>
-                    </div>
-                    <div className="bias-stat-block">
-                      <div className="bias-stat-label">Historically when BELOW weekly open</div>
-                      <div className={`bias-stat-value ${bias.weeklyBias.belowOpenBullRate > 55 ? 'value-bullish' : bias.weeklyBias.belowOpenBullRate < 45 ? 'value-bearish' : 'value-neutral'}`}>
-                        {bias.weeklyBias.belowOpenBullRate.toFixed(0)}% Bullish
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    BTC is trading <strong style={{ color: bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'var(--bullish)' : 'var(--bearish)' }}>
-                      {bias.weeklyBias.priceVsWeeklyOpen}
-                    </strong> the weekly open.
-                    Historically, weeks positioned here closed bullish <strong style={{ color: bias.weeklyBias.currentBullRate > 55 ? 'var(--bullish)' : 'var(--bearish)' }}>
-                      {bias.weeklyBias.currentBullRate.toFixed(0)}%
-                    </strong> of the time.
-                  </div>
-                </div>
-
-                <div className="panel">
-                  <div className="section-title" style={{ marginBottom: 4 }}>
-                    <IconZap size={17} color="var(--gold)" />
-                    <span>{bias.dayName} Statistical Edge</span>
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
-                    Aggregate metrics across all {bias.dayName}s (2021&ndash;present)
-                  </div>
-                  {[
-                    ['Total Samples', `${todayDowStats.total} ${bias.dayName}s`],
-                    ['Bullish Days', `${todayDowStats.bullish} (${todayDowStats.bullishRate.toFixed(1)}%)`],
-                    ['Bearish Days', `${todayDowStats.bearish} (${todayDowStats.bearishRate.toFixed(1)}%)`],
-                    ['Average Return', formatPct(todayDowStats.avgReturn)],
-                    ['Median Return', formatPct(todayDowStats.medianReturn)],
-                    ['Max Single-Day Gain', `${formatPct(todayDowStats.maxGain)}`],
-                    ['Max Single-Day Loss', `${formatPct(todayDowStats.maxLoss)}`],
-                    ['Avg Win Magnitude', `${formatPct(todayDowStats.avgBullishReturn)}`],
-                    ['Avg Loss Magnitude', `${formatPct(todayDowStats.avgBearishReturn)}`],
-                  ].map(([k, v]) => (
-                    <div key={k} style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      padding: '8px 0', borderBottom: '1px solid var(--border)',
-                      fontSize: '0.8rem'
-                    }}>
-                      <span style={{ color: 'var(--text-muted)' }}>{k}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 500 }}>{v}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── MONTHLY VIEW ── */}
-          {activeTab === 'monthly' && (
-            <div className="panel" style={{ marginBottom: 32, animation: 'fadeInUp 0.35s ease' }}>
-              <div className="section-header">
-                <div className="section-title">
-                  <IconGrid size={18} color="var(--accent)" />
-                  <span>Monthly Calendar Seasonality</span>
-                </div>
-                <div className="section-subtitle">
-                  Historical monthly win rate and average return since 2021. Current calendar month highlighted with accent border.
-                </div>
-              </div>
-              <div className="monthly-grid">
-                {monthlyStatsArr.map(stats => (
-                  <MonthCell key={stats.month} stats={stats} isCurrent={stats.month === todayMonth} />
-                ))}
-              </div>
-
-              {/* Current month summary */}
-              <div style={{ marginTop: 24, padding: '20px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <IconCalendar size={14} />
-                  <span>Current Month Seasonal Profile &mdash; {MONTHS[todayMonth]}</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                  {[
-                    ['Historical Win Rate', `${bias.monthlyStats.bullishRate.toFixed(1)}%`, biasColor(bias.monthlyStats.bias)],
-                    ['Average Monthly Return', formatPct(bias.monthlyStats.avgReturn), bias.monthlyStats.avgReturn > 0 ? 'bullish' : 'bearish'],
-                    ['Historical Samples', `${bias.monthlyStats.total} years`, 'primary'],
-                  ].map(([label, value, color]) => (
-                    <div key={label} style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
-                      <div className={`stat-card-value value-${color}`} style={{ fontSize: '1.15rem' }}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── DISTRIBUTION VIEW ── */}
-          {activeTab === 'dist' && (
-            <div className="two-col" style={{ animation: 'fadeInUp 0.35s ease' }}>
-              {WEEK_ORDER.map(dow => {
-                const stats = bias.allDowStats[dow];
-                if (!stats || stats.total === 0) return null;
-                return (
-                  <div key={stats.day} className="panel" style={{ marginBottom: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <div className="section-title" style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <IconBarChart size={14} color="var(--accent)" />
-                        <span>{stats.dayName}</span>
-                        {stats.day === todayDow && <span className="today-chip">Today</span>}
-                      </div>
-                      <div className={`dow-bias-badge badge-${biasColor(stats.bias)}`}>
-                        {stats.bullishRate.toFixed(0)}% Bull
-                      </div>
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 8 }}>
-                      Histogram of returns ({stats.total} samples, -6% to +6%)
-                    </div>
-                    <DistributionChart returns={stats.returns} />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
         </div>
       </main>
+
+      {/* ── Mobile Sticky Bottom Bar ── */}
+      <div className="mobile-bottom-bar">
+        <button
+          className={`mobile-bottom-btn ${activeTab === 'levels' ? 'active' : ''}`}
+          onClick={() => setActiveTab('levels')}
+        >
+          <IconWolf size={18} />
+          <span>Key Levels</span>
+        </button>
+        <button
+          className={`mobile-bottom-btn ${activeTab === 'alts' ? 'active' : ''}`}
+          onClick={() => setActiveTab('alts')}
+        >
+          <IconRadar size={18} />
+          <span>Alts Tape</span>
+        </button>
+        <button
+          className={`mobile-bottom-btn ${activeTab === 'macro' ? 'active' : ''}`}
+          onClick={() => setActiveTab('macro')}
+        >
+          <IconBarChart size={18} />
+          <span>Whales/ETF</span>
+        </button>
+      </div>
 
       {/* ── Footer ── */}
       <footer className="footer">
         <div className="container">
           <div className="footer-content">
             <div className="footer-left">
-              <IconWolf size={18} color="var(--wolf-yellow)" />
-              <span>Wolf Tape Read &middot; Trading The Tape, With Precision &middot; Data from Jan 2021</span>
+              <IconBlackFlag size={18} />
+              <span>Wolf Tape Reader &middot; Trading The Tape, With Precision &middot; Pitch Black Desk</span>
             </div>
             <p className="disclaimer">
               <IconShield size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: -2 }} />

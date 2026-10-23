@@ -23,7 +23,7 @@ export default function WolfKeyLevels({ levelsData }) {
   // Filter ladder rows while always preserving the LAST row
   const filteredLadder = useMemo(() => {
     if (filter === 'all') return ladder;
-    return ladder.filter(row => row.isLast || row.category === filter);
+    return ladder.filter(row => row.isLast || row.category === filter || (filter === 'monthly' && row.category === 'yearly'));
   }, [ladder, filter]);
 
   return (
@@ -79,8 +79,8 @@ export default function WolfKeyLevels({ levelsData }) {
             {/* Previous Week Range (PWH & PWL) */}
             {previousWeekStats && (
               <div style={{
-                background: 'rgba(250, 204, 21, 0.04)',
-                border: '1px solid rgba(250, 204, 21, 0.22)',
+                background: 'rgba(56, 189, 248, 0.05)',
+                border: '1px solid rgba(56, 189, 248, 0.25)',
                 borderRadius: 'var(--radius-md)',
                 padding: '12px 14px',
                 marginBottom: 16,
@@ -112,7 +112,7 @@ export default function WolfKeyLevels({ levelsData }) {
                     top: 0,
                     bottom: 0,
                     width: `${previousWeekStats.positionPct}%`,
-                    background: 'linear-gradient(90deg, #f87171, #facc15)',
+                    background: 'linear-gradient(90deg, #ef4444, #38bdf8)',
                     borderRadius: 99,
                   }} />
                 </div>
@@ -148,7 +148,7 @@ export default function WolfKeyLevels({ levelsData }) {
               { id: 'all', label: 'All Levels' },
               { id: 'daily', label: 'Daily (PDH/L, DO, POC)' },
               { id: 'weekly', label: 'Weekly (WO, PWH/L)' },
-              { id: 'monthly', label: 'Monthly (MO, PMH/L)' },
+              { id: 'monthly', label: 'Monthly & Yearly (MO, YO, PMH/L)' },
             ].map(f => (
               <button
                 key={f.id}
