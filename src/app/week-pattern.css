@@ -1,0 +1,577 @@
+/* ═══════════════════════════════════════════
+   WEEK PATTERN MATCHING
+═══════════════════════════════════════════ */
+
+/* Current Week Timeline */
+.week-timeline {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.week-day-cell {
+  border-radius: var(--radius-md);
+  padding: 14px 10px;
+  text-align: center;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.025);
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.week-day-cell.completed-bull {
+  background: rgba(16, 217, 124, 0.08);
+  border-color: rgba(16, 217, 124, 0.25);
+}
+.week-day-cell.completed-bear {
+  background: rgba(255, 77, 106, 0.08);
+  border-color: rgba(255, 77, 106, 0.25);
+}
+.week-day-cell.is-today {
+  border-color: var(--accent);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+.week-day-cell.is-today::after {
+  content: 'TODAY';
+  position: absolute;
+  top: 4px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.48rem;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+.week-day-cell.future {
+  opacity: 0.45;
+  border-style: dashed;
+}
+.week-day-name {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+  margin-top: 4px;
+}
+.week-day-return {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 3px;
+}
+.week-day-prices {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+}
+.week-day-future-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* Pattern description */
+.pattern-desc {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: var(--radius-md);
+  margin-bottom: 24px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.pattern-desc-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+.pattern-desc strong { color: var(--text-primary); }
+
+/* Match badges row */
+.match-count-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.match-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+}
+.match-badge .badge-num {
+  font-family: var(--font-mono);
+  color: var(--gold);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+/* Similar weeks mini-cards */
+.similar-weeks-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.similar-week-card {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  transition: var(--transition);
+}
+.similar-week-card:hover {
+  border-color: var(--border-bright);
+  background: rgba(255,255,255,0.05);
+  transform: translateY(-2px);
+}
+.sim-week-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.sim-week-date {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.sim-score-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid rgba(99,102,241,0.25);
+}
+.sim-week-bars {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 36px;
+}
+.sim-day-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  justify-content: flex-end;
+}
+.sim-day-bar { width: 100%; border-radius: 2px; min-height: 4px; }
+.sim-day-bar.bull { background: var(--bullish); opacity: 0.85; }
+.sim-day-bar.bear { background: var(--bearish); opacity: 0.85; }
+.sim-day-bar.missing { background: rgba(255,255,255,0.06); opacity: 1; height: 4px; }
+.sim-day-label {
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Current week predictions */
+.predictions-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.prediction-card {
+  border-radius: var(--radius-md);
+  padding: 16px 8px;
+  text-align: center;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  transition: var(--transition);
+  position: relative;
+}
+.prediction-card.pred-bullish { border-color: rgba(16,217,124,0.25); background: rgba(16,217,124,0.05); }
+.prediction-card.pred-bearish { border-color: rgba(255,77,106,0.25); background: rgba(255,77,106,0.05); }
+.prediction-card.pred-neutral { border-color: rgba(245,158,11,0.2); background: rgba(245,158,11,0.04); }
+.prediction-card.is-completed { opacity: 0.5; }
+.prediction-card.is-today-pred { border-color: var(--accent); background: var(--accent-dim); }
+
+.pred-day-name {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.pred-bull-rate {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.pred-avg-return {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  margin-bottom: 6px;
+}
+.pred-conf-bar {
+  height: 3px;
+  border-radius: 99px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.pred-conf-fill { height: 100%; border-radius: 99px; transition: width 1s ease; }
+.pred-sample { font-size: 0.58rem; color: var(--text-muted); margin-top: 5px; }
+.pred-completed-label { font-size: 0.6rem; color: var(--text-muted); margin-top: 4px; font-style: italic; }
+
+/* Next week forecast */
+.next-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+.next-week-card {
+  border-radius: var(--radius-md);
+  padding: 14px 8px;
+  text-align: center;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+.next-week-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+}
+.next-week-card.nw-bullish::after { background: var(--bullish); }
+.next-week-card.nw-bearish::after { background: var(--bearish); }
+.next-week-card.nw-neutral::after { background: var(--neutral); }
+.next-week-card:hover { border-color: var(--border-bright); transform: translateY(-2px); }
+.nw-day-name {
+  font-size: 0.65rem; color: var(--text-muted);
+  font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; margin-bottom: 8px;
+}
+.nw-bull-rate {
+  font-family: var(--font-display);
+  font-size: 1.1rem; font-weight: 800;
+  letter-spacing: -0.02em; line-height: 1; margin-bottom: 3px;
+}
+.nw-avg-return { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); }
+.nw-sample { font-size: 0.57rem; color: var(--text-muted); margin-top: 5px; }
+.nw-bias-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 2px 8px; border-radius: 99px;
+  font-size: 0.58rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;
+}
+
+/* No data placeholder */
+.no-data-msg {
+  text-align: center; padding: 40px 20px;
+  color: var(--text-muted); font-size: 0.85rem;
+}
+.no-data-msg .no-data-icon { font-size: 2.5rem; display: block; margin-bottom: 12px; }
+
+@media (max-width: 900px) {
+  .similar-weeks-grid { grid-template-columns: repeat(2, 1fr); }
+  .predictions-grid { grid-template-columns: repeat(3, 1fr); }
+  .next-week-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .week-timeline {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+    padding-bottom: 8px;
+    scrollbar-width: thin;
+  }
+  .week-day-cell {
+    flex: 0 0 100px;
+    scroll-snap-align: start;
+    padding: 12px 8px;
+  }
+  .predictions-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .next-week-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .similar-weeks-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .pattern-desc {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    font-size: 0.78rem;
+  }
+  .match-count-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .match-badge {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+@media (max-width: 400px) {
+  .predictions-grid {
+    grid-template-columns: 1fr;
+  }
+  .next-week-grid {
+    grid-template-columns: 1fr;
+  }
+  .week-day-cell {
+    flex: 0 0 92px;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   SLEEK MINIMALIST EXTENSIONS
+   ═══════════════════════════════════════════ */
+
+.week-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.week-day-badge {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+.week-day-cell.is-today .week-day-badge {
+  background: var(--accent);
+  color: #fff;
+}
+
+.week-day-cell.completed-bull .week-day-badge {
+  background: rgba(16, 217, 124, 0.15);
+  color: var(--bullish);
+}
+
+.week-day-cell.completed-bear .week-day-badge {
+  background: rgba(255, 77, 106, 0.15);
+  color: var(--bearish);
+}
+
+.today-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 3px;
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-left: 4px;
+}
+
+.pred-day-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pred-dir-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.badge-bullish-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--bullish);
+  background: rgba(16, 217, 124, 0.08);
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid rgba(16, 217, 124, 0.2);
+}
+
+.badge-bearish-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--bearish);
+  background: rgba(255, 77, 106, 0.08);
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid rgba(255, 77, 106, 0.2);
+}
+
+.badge-neutral-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--neutral);
+  background: rgba(245, 158, 11, 0.08);
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.pred-actual-tag {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 6px;
+  display: inline-block;
+  border: 1px solid var(--border);
+}
+
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.step-circle {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-bright);
+}
+
+.step-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-icon {
+  color: var(--text-muted);
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+.error-icon-box {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: rgba(255, 77, 106, 0.1);
+  border: 1px solid rgba(255, 77, 106, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-info-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.refresh-link-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: inherit;
+  transition: var(--transition);
+}
+
+.refresh-link-btn:hover {
+  background: var(--accent-dim);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #fff;
+}
+
+.hero-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hero-bias-icon {
+  flex-shrink: 0;
+}
+
+.footer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  text-align: center;
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.nw-bias-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
