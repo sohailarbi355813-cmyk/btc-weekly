@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getTodayBias } from '@/lib/biasEngine';
 import { calculateWolfKeyLevels } from '@/lib/wolfLevelsEngine';
+import { buildWeeklyProfiles, findSimilarWeeks } from '@/lib/weekPatternEngine';
 import WolfKeyLevels from '@/components/WolfKeyLevels';
 import AltsTapeReader from '@/components/AltsTapeReader';
 import MacroWhalesEtf from '@/components/MacroWhalesEtf';
+import WeeklyForecast from '@/components/WeeklyForecast';
 import BootIntroSequence from '@/components/BootIntroSequence';
 import {
   IconBitcoin,
@@ -24,6 +26,7 @@ import {
   IconBlackFlag,
   IconMenu,
   IconX,
+  IconCalendar,
 } from '@/components/Icons';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -91,11 +94,12 @@ export default function Home() {
   const [data, setData] = useState(null);
   const [bias, setBias] = useState(null);
   const [wolfLevels, setWolfLevels] = useState(null);
+  const [weekPattern, setWeekPattern] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [loadStep, setLoadStep] = useState(1);
-  const [activeTab, setActiveTab] = useState('levels'); // 'levels' | 'alts' | 'macro'
+  const [activeTab, setActiveTab] = useState('levels'); // 'levels' | 'alts' | 'macro' | 'pattern'
   const [lastUpdated, setLastUpdated] = useState(null);
   const [clientDate, setClientDate] = useState(null);
   const [bootDone, setBootDone] = useState(false);
@@ -128,17 +132,22 @@ export default function Home() {
         // Fallback to candle close
       }
 
-      setLoadStep(3); // Calculating statistical bias
+      setLoadStep(3); // Calculating statistical bias & weekly profiles
       const now = new Date();
       setClientDate(now);
       const biasResult = getTodayBias(json.candles, currentPrice, now);
 
-      setLoadStep(4); // Calculating Wolf Key Levels
+      setLoadStep(4); // Week pattern matching and predictive sequence forecasts
+      const weeklyProfiles = buildWeeklyProfiles(json.candles);
+      const patternResult = findSimilarWeeks(weeklyProfiles, 25, now);
+
+      // Calculating Wolf Key Levels
       const wolfLevelsResult = calculateWolfKeyLevels(json.candles, currentPrice);
 
       setData({ candles: json.candles, count: json.count, currentPrice });
       setBias(biasResult);
       setWolfLevels(wolfLevelsResult);
+      setWeekPattern(patternResult);
       setLastUpdated(now);
     } catch (err) {
       setError(err.message);
@@ -163,17 +172,18 @@ export default function Home() {
     ? clientDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : (bias?.date ? `Date: ${bias.date}` : '');
 
-  // ── Render: Ultra-Cool Boot Intro Animation on Load ──
+  // ── Render: Hyper-Animated Boot Intro Animation on Initial Load ──
   if (!bootDone) {
     return <BootIntroSequence onComplete={() => setBootDone(true)} />;
   }
 
-  // ── Render: Loading (if user skipped boot early) ─────────────────────────────
+  // ── Render: Loading (if user bypassed intro before data sync) ─────────────
   if (loading && !data) {
     const steps = [
       { label: 'Connecting to market data feed...', Icon: IconDatabase },
       { label: 'Ingesting daily BTC candles (2021 → today)...', Icon: IconBitcoin },
       { label: 'Computing day-of-week & seasonal distributions...', Icon: IconBarChart },
+      { label: 'Deriving historical sequence & weekly forecasts...', Icon: IconRadar },
       { label: 'Calculating Wolf Key Levels auction price ladder...', Icon: IconWolf },
     ];
     return (
@@ -187,7 +197,7 @@ export default function Home() {
                 </div>
                 <div className="logo-text">
                   <h1>Wolf Tape Reader</h1>
-                  <span>Trading The Tape, With Precision &middot; Key Levels, Alts &amp; Bias</span>
+                  <span>Trading The Tape, With Precision &middot; Key Levels, Alts &amp; Forecasts</span>
                 </div>
               </div>
             </div>
@@ -281,11 +291,6 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
-      {/* ── Ultra-Cool Cyber Terminal Boot Sequence Overlay ── */}
-      {!bootDone && (
-        <BootIntroSequence onComplete={() => setBootDone(true)} />
-      )}
-
       {/* ── Mobile Navigation Drawer ── */}
       {mobileMenuOpen && (
         <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
@@ -335,6 +340,13 @@ export default function Home() {
                 <IconBarChart size={18} color={activeTab === 'macro' ? '#38bdf8' : '#888888'} />
                 <span>Whales • MVRV • ETFs</span>
               </button>
+              <button
+                className={`mobile-nav-item ${activeTab === 'pattern' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('pattern'); setMobileMenuOpen(false); }}
+              >
+                <IconCalendar size={18} color={activeTab === 'pattern' ? '#38bdf8' : '#888888'} />
+                <span>Weekly Forecast</span>
+              </button>
             </nav>
 
             <div className="mobile-drawer-actions">
@@ -357,7 +369,7 @@ export default function Home() {
               </div>
               <div className="logo-text">
                 <h1>Wolf Tape Reader</h1>
-                <span>Trading The Tape, With Precision &middot; Key Levels, Alts &amp; Bias</span>
+                <span>Trading The Tape, With Precision &middot; Key Levels, Alts &amp; Forecasts</span>
               </div>
             </div>
             <div className="header-right">
@@ -525,7 +537,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ── 3 PRIMARY INSTITUTIONAL TABS (Unused legacy navigation pruned) ── */}
+          {/* ── 4 PRIMARY INSTITUTIONAL TABS (Restored Weekly Forecast) ── */}
           <div className="tab-bar">
             <button id="tab-levels" className={`tab-btn ${activeTab === 'levels' ? 'active' : ''}`} onClick={() => setActiveTab('levels')}>
               <IconWolf size={15} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-yellow)'} />
@@ -539,6 +551,10 @@ export default function Home() {
             <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => setActiveTab('macro')}>
               <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'macro' ? '#38bdf8' : undefined }}>Whales • MVRV • ETFs</span>
+            </button>
+            <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => setActiveTab('pattern')}>
+              <IconCalendar size={15} color={activeTab === 'pattern' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'pattern' ? '#38bdf8' : undefined }}>Weekly Forecast</span>
             </button>
           </div>
 
@@ -557,31 +573,43 @@ export default function Home() {
             <MacroWhalesEtf />
           )}
 
+          {/* ── 4. WEEKLY FORECAST VIEW (Restored & Mobile Optimized) ── */}
+          {activeTab === 'pattern' && (
+            <WeeklyForecast weekPattern={weekPattern} formatPrice={formatPrice} />
+          )}
+
         </div>
       </main>
 
-      {/* ── Mobile Sticky Bottom Bar ── */}
+      {/* ── Mobile Sticky Bottom Bar (4 Quick-Switch Tools) ── */}
       <div className="mobile-bottom-bar">
         <button
           className={`mobile-bottom-btn ${activeTab === 'levels' ? 'active' : ''}`}
           onClick={() => setActiveTab('levels')}
         >
           <IconWolf size={18} />
-          <span>Key Levels</span>
+          <span>Levels</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'alts' ? 'active' : ''}`}
           onClick={() => setActiveTab('alts')}
         >
           <IconRadar size={18} />
-          <span>Alts Tape</span>
+          <span>Alts</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'macro' ? 'active' : ''}`}
           onClick={() => setActiveTab('macro')}
         >
           <IconBarChart size={18} />
-          <span>Whales/ETF</span>
+          <span>Whales</span>
+        </button>
+        <button
+          className={`mobile-bottom-btn ${activeTab === 'pattern' ? 'active' : ''}`}
+          onClick={() => setActiveTab('pattern')}
+        >
+          <IconCalendar size={18} />
+          <span>Forecast</span>
         </button>
       </div>
 
