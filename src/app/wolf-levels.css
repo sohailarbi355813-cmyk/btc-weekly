@@ -260,7 +260,7 @@
 
 .wolf-row {
   display: grid;
-  grid-template-columns: 80px 1fr 90px;
+  grid-template-columns: 110px 1fr 90px;
   align-items: center;
   padding: 7px 12px;
   border-radius: 4px;
@@ -269,6 +269,40 @@
   transition: var(--transition);
   font-family: var(--font-mono);
   cursor: default;
+}
+
+.wolf-row.is-va-level {
+  background: rgba(56, 189, 248, 0.04);
+  border-left: 2px solid #38bdf8;
+}
+
+.wolf-row.is-monthly-va {
+  background: rgba(168, 85, 247, 0.04);
+  border-left: 2px solid #a855f7;
+}
+
+.wolf-va-pill {
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: inline-block;
+}
+
+.wolf-va-pill.weekly {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.wolf-va-pill.monthly {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
 }
 
 .wolf-row:hover:not(.is-last) {
@@ -379,6 +413,127 @@
 .wolf-disclaimer-tag {
   color: #52525b;
   font-size: 0.72rem;
+}
+
+/* Value Area Box in Left Panel */
+.wolf-va-card {
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  transition: var(--transition);
+}
+
+.wolf-va-card.weekly-card {
+  border-color: rgba(56, 189, 248, 0.28);
+  background: rgba(56, 189, 248, 0.03);
+}
+
+.wolf-va-card.monthly-card {
+  border-color: rgba(168, 85, 247, 0.28);
+  background: rgba(168, 85, 247, 0.03);
+}
+
+.wolf-va-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.wolf-va-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+
+.wolf-va-title.weekly {
+  color: var(--wolf-yellow-bright);
+}
+
+.wolf-va-title.monthly {
+  color: #c084fc;
+}
+
+.wolf-va-range-badge {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.wolf-va-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wolf-va-box {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.wolf-va-box.poc {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.07);
+}
+
+.wolf-va-box.poc.monthly {
+  border-color: rgba(168, 85, 247, 0.35);
+  background: rgba(168, 85, 247, 0.07);
+}
+
+.wolf-va-box-lbl {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.wolf-va-box-val {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.wolf-va-box-diff {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.wolf-va-box-diff.pos { color: #6ee7b7; }
+.wolf-va-box-diff.neg { color: #fca5a5; }
+
+.wolf-va-extremes {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 4px 2px;
+}
+
+.wolf-va-status-pill {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  letter-spacing: 0.02em;
 }
 
 /* Responsive */

@@ -1080,6 +1080,24 @@ body::after {
   box-shadow: 0 0 14px rgba(56, 189, 248, 0.15);
 }
 
+#tab-twin {
+  border: 1px solid rgba(56, 189, 248, 0.45) !important;
+  background: rgba(56, 189, 248, 0.08) !important;
+  color: #38bdf8 !important;
+}
+
+#tab-twin:hover {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25) !important;
+}
+
+#tab-twin.active {
+  background: #000000 !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.35) !important;
+}
+
+
 /* ═══════════════════════════════════════════
    TOOLTIP (hover info)
 ═══════════════════════════════════════════ */

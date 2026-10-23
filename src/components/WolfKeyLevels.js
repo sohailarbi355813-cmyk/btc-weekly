@@ -18,6 +18,7 @@ export default function WolfKeyLevels({ levelsData }) {
     weeklyStats,
     monthlyStats,
     previousWeekStats,
+    previousMonthStats,
   } = levelsData;
 
   // Filter ladder rows while always preserving the LAST row
@@ -76,36 +77,60 @@ export default function WolfKeyLevels({ levelsData }) {
               </div>
             </div>
 
-            {/* Previous Week Range (PWH & PWL) */}
+            {/* Previous Week Value Area & Range (PW VAL · PW POC · PW VAH · PWH · PWL) */}
             {previousWeekStats && (
-              <div style={{
-                background: 'rgba(56, 189, 248, 0.05)',
-                border: '1px solid rgba(56, 189, 248, 0.25)',
-                borderRadius: 'var(--radius-md)',
-                padding: '12px 14px',
-                marginBottom: 16,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--wolf-yellow-bright)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                    Previous Week Range (PWH &middot; PWL)
-                  </span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                    Range: ${Number(previousWeekStats.range).toLocaleString('en-US', { maximumFractionDigits: 0 })} ({previousWeekStats.rangePct}%)
+              <div className="wolf-va-card weekly-card">
+                <div className="wolf-va-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span className="wolf-va-title weekly">Prev Week Value Area</span>
+                    <span className="wolf-va-status-pill" style={{
+                      background: previousWeekStats.valStatus === 'ABOVE_VAH' ? 'rgba(34, 197, 94, 0.15)' : previousWeekStats.valStatus === 'BELOW_VAL' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                      color: previousWeekStats.valStatus === 'ABOVE_VAH' ? '#4ade80' : previousWeekStats.valStatus === 'BELOW_VAL' ? '#f87171' : '#38bdf8',
+                      border: `1px solid ${previousWeekStats.valStatus === 'ABOVE_VAH' ? 'rgba(34, 197, 94, 0.3)' : previousWeekStats.valStatus === 'BELOW_VAL' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(56, 189, 248, 0.3)'}`,
+                    }}>
+                      {previousWeekStats.valStatus === 'ABOVE_VAH' ? 'Above PW VAH (Expansion)' : previousWeekStats.valStatus === 'BELOW_VAL' ? 'Below PW VAL (Expansion)' : 'Inside PW VA (Rotation)'}
+                    </span>
+                  </div>
+                  <span className="wolf-va-range-badge">
+                    R: ${Number(previousWeekStats.range).toLocaleString('en-US', { maximumFractionDigits: 0 })} ({previousWeekStats.rangePct}%)
                   </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', marginBottom: 8 }}>
-                  <div>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block' }}>PWL (Previous Week Low)</span>
-                    <span style={{ color: 'var(--wolf-support)', fontWeight: 600 }}>${Number(previousWeekStats.PWL).toLocaleString('en-US', { minimumFractionDigits: 1 })}</span>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: 4 }}>({previousWeekStats.pctFromPWL >= 0 ? '+' : ''}{previousWeekStats.pctFromPWL}%)</span>
+
+                {/* 3 Value Area Nodes: PW VAL, PW POC, PW VAH */}
+                <div className="wolf-va-grid">
+                  <div className="wolf-va-box">
+                    <div className="wolf-va-box-lbl">PW VAL (Value Low)</div>
+                    <div className="wolf-va-box-val">${Number(previousWeekStats.PW_VAL).toLocaleString('en-US', { minimumFractionDigits: 1 })}</div>
+                    <div className={`wolf-va-box-diff ${previousWeekStats.pctFromVAL >= 0 ? 'pos' : 'neg'}`}>
+                      {previousWeekStats.pctFromVAL >= 0 ? '+' : ''}{previousWeekStats.pctFromVAL}%
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block' }}>PWH (Previous Week High)</span>
-                    <span style={{ color: 'var(--wolf-yellow-bright)', fontWeight: 600 }}>${Number(previousWeekStats.PWH).toLocaleString('en-US', { minimumFractionDigits: 1 })}</span>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: 4 }}>({previousWeekStats.pctFromPWH >= 0 ? '+' : ''}{previousWeekStats.pctFromPWH}%)</span>
+
+                  <div className="wolf-va-box poc">
+                    <div className="wolf-va-box-lbl" style={{ color: 'var(--wolf-yellow-bright)' }}>PW POC (Control)</div>
+                    <div className="wolf-va-box-val" style={{ color: 'var(--wolf-yellow-bright)' }}>${Number(previousWeekStats.PW_POC).toLocaleString('en-US', { minimumFractionDigits: 1 })}</div>
+                    <div className={`wolf-va-box-diff ${previousWeekStats.pctFromPOC >= 0 ? 'pos' : 'neg'}`}>
+                      {previousWeekStats.pctFromPOC >= 0 ? '+' : ''}{previousWeekStats.pctFromPOC}%
+                    </div>
+                  </div>
+
+                  <div className="wolf-va-box">
+                    <div className="wolf-va-box-lbl">PW VAH (Value High)</div>
+                    <div className="wolf-va-box-val">${Number(previousWeekStats.PW_VAH).toLocaleString('en-US', { minimumFractionDigits: 1 })}</div>
+                    <div className={`wolf-va-box-diff ${previousWeekStats.pctFromVAH >= 0 ? 'pos' : 'neg'}`}>
+                      {previousWeekStats.pctFromVAH >= 0 ? '+' : ''}{previousWeekStats.pctFromVAH}%
+                    </div>
                   </div>
                 </div>
-                <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', position: 'relative' }}>
+
+                {/* Range Extremes: PWL & PWH */}
+                <div className="wolf-va-extremes">
+                  <span>PWL: <strong style={{ color: '#fff' }}>${Number(previousWeekStats.PWL).toLocaleString('en-US', { minimumFractionDigits: 1 })}</strong> ({previousWeekStats.pctFromPWL >= 0 ? '+' : ''}{previousWeekStats.pctFromPWL}%)</span>
+                  <span>PWH: <strong style={{ color: '#fff' }}>${Number(previousWeekStats.PWH).toLocaleString('en-US', { minimumFractionDigits: 1 })}</strong> ({previousWeekStats.pctFromPWH >= 0 ? '+' : ''}{previousWeekStats.pctFromPWH}%)</span>
+                </div>
+
+                {/* Progress Bar within Range */}
+                <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', position: 'relative', marginTop: 6 }}>
                   <div style={{
                     position: 'absolute',
                     left: 0,
@@ -116,16 +141,78 @@ export default function WolfKeyLevels({ levelsData }) {
                     borderRadius: 99,
                   }} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
-                  <span>0% (PWL)</span>
-                  <span style={{ color: 'var(--wolf-yellow-bright)', fontWeight: 600 }}>Current Spot: {previousWeekStats.positionPct}% of Prev Week Range</span>
-                  <span>100% (PWH)</span>
+              </div>
+            )}
+
+            {/* Previous Month Value Area & Range (PM VAL · PM POC · PM VAH · PMH · PML) */}
+            {previousMonthStats && (
+              <div className="wolf-va-card monthly-card">
+                <div className="wolf-va-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span className="wolf-va-title monthly">Prev Month Value Area</span>
+                    <span className="wolf-va-status-pill" style={{
+                      background: previousMonthStats.valStatus === 'ABOVE_VAH' ? 'rgba(34, 197, 94, 0.15)' : previousMonthStats.valStatus === 'BELOW_VAL' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(168, 85, 247, 0.15)',
+                      color: previousMonthStats.valStatus === 'ABOVE_VAH' ? '#4ade80' : previousMonthStats.valStatus === 'BELOW_VAL' ? '#f87171' : '#c084fc',
+                      border: `1px solid ${previousMonthStats.valStatus === 'ABOVE_VAH' ? 'rgba(34, 197, 94, 0.3)' : previousMonthStats.valStatus === 'BELOW_VAL' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(168, 85, 247, 0.3)'}`,
+                    }}>
+                      {previousMonthStats.valStatus === 'ABOVE_VAH' ? 'Above PM VAH (Macro Expansion)' : previousMonthStats.valStatus === 'BELOW_VAL' ? 'Below PM VAL (Macro Expansion)' : 'Inside PM VA (Macro Rotation)'}
+                    </span>
+                  </div>
+                  <span className="wolf-va-range-badge">
+                    R: ${Number(previousMonthStats.range).toLocaleString('en-US', { maximumFractionDigits: 0 })} ({previousMonthStats.rangePct}%)
+                  </span>
+                </div>
+
+                {/* 3 Value Area Nodes: PM VAL, PM POC, PM VAH */}
+                <div className="wolf-va-grid">
+                  <div className="wolf-va-box">
+                    <div className="wolf-va-box-lbl">PM VAL (Value Low)</div>
+                    <div className="wolf-va-box-val">${Number(previousMonthStats.PM_VAL).toLocaleString('en-US', { minimumFractionDigits: 1 })}</div>
+                    <div className={`wolf-va-box-diff ${previousMonthStats.pctFromVAL >= 0 ? 'pos' : 'neg'}`}>
+                      {previousMonthStats.pctFromVAL >= 0 ? '+' : ''}{previousMonthStats.pctFromVAL}%
+                    </div>
+                  </div>
+
+                  <div className="wolf-va-box poc monthly">
+                    <div className="wolf-va-box-lbl" style={{ color: '#c084fc' }}>PM POC (Control)</div>
+                    <div className="wolf-va-box-val" style={{ color: '#c084fc' }}>${Number(previousMonthStats.PM_POC).toLocaleString('en-US', { minimumFractionDigits: 1 })}</div>
+                    <div className={`wolf-va-box-diff ${previousMonthStats.pctFromPOC >= 0 ? 'pos' : 'neg'}`}>
+                      {previousMonthStats.pctFromPOC >= 0 ? '+' : ''}{previousMonthStats.pctFromPOC}%
+                    </div>
+                  </div>
+
+                  <div className="wolf-va-box">
+                    <div className="wolf-va-box-lbl">PM VAH (Value High)</div>
+                    <div className="wolf-va-box-val">${Number(previousMonthStats.PM_VAH).toLocaleString('en-US', { minimumFractionDigits: 1 })}</div>
+                    <div className={`wolf-va-box-diff ${previousMonthStats.pctFromVAH >= 0 ? 'pos' : 'neg'}`}>
+                      {previousMonthStats.pctFromVAH >= 0 ? '+' : ''}{previousMonthStats.pctFromVAH}%
+                    </div>
+                  </div>
+                </div>
+
+                {/* Range Extremes: PML & PMH */}
+                <div className="wolf-va-extremes">
+                  <span>PML: <strong style={{ color: '#fff' }}>${Number(previousMonthStats.PML).toLocaleString('en-US', { minimumFractionDigits: 1 })}</strong> ({previousMonthStats.pctFromPML >= 0 ? '+' : ''}{previousMonthStats.pctFromPML}%)</span>
+                  <span>PMH: <strong style={{ color: '#fff' }}>${Number(previousMonthStats.PMH).toLocaleString('en-US', { minimumFractionDigits: 1 })}</strong> ({previousMonthStats.pctFromPMH >= 0 ? '+' : ''}{previousMonthStats.pctFromPMH}%)</span>
+                </div>
+
+                {/* Progress Bar within Range */}
+                <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', position: 'relative', marginTop: 6 }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: `${previousMonthStats.positionPct}%`,
+                    background: 'linear-gradient(90deg, #ef4444, #a855f7)',
+                    borderRadius: 99,
+                  }} />
                 </div>
               </div>
             )}
 
             {/* Range & Anchor Context */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Weekly Open Anchor</span>
                 <span style={{ fontFamily: 'var(--font-mono)', color: weeklyStats.status === 'ABOVE_WO' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-support)', fontWeight: 600 }}>
@@ -141,14 +228,13 @@ export default function WolfKeyLevels({ levelsData }) {
             </div>
           </div>
 
-
           {/* Filter Bar */}
           <div className="wolf-filter-row">
             {[
               { id: 'all', label: 'All Levels' },
-              { id: 'daily', label: 'Daily (PDH/L, DO, POC)' },
-              { id: 'weekly', label: 'Weekly (WO, PWH/L)' },
-              { id: 'monthly', label: 'Monthly & Yearly (MO, YO, PMH/L)' },
+              { id: 'daily', label: 'Daily (PDH/L, DO, pPOC/VA)' },
+              { id: 'weekly', label: 'Weekly (WO, PW VAL/POC/VAH, PWH/L)' },
+              { id: 'monthly', label: 'Monthly & Yearly (MO, PM VAL/POC/VAH, PMH/L, YO)' },
             ].map(f => (
               <button
                 key={f.id}
@@ -192,10 +278,17 @@ export default function WolfKeyLevels({ levelsData }) {
               }
 
               const isPositive = row.pctDiff > 0;
+              const isWeeklyVA = ['PW VAH', 'PW POC', 'PW VAL'].includes(row.code);
+              const isMonthlyVA = ['PM VAH', 'PM POC', 'PM VAL'].includes(row.code);
+
               return (
-                <div key={row.code + idx} className="wolf-row tooltip-wrap">
+                <div key={row.code + idx} className={`wolf-row tooltip-wrap ${isWeeklyVA ? 'is-va-level' : ''} ${isMonthlyVA ? 'is-monthly-va' : ''}`}>
                   <div>
-                    <div className="wolf-row-code">{row.code}</div>
+                    <div className="wolf-row-code">
+                      {row.code}
+                      {isWeeklyVA && <span className="wolf-va-pill weekly">PW VA</span>}
+                      {isMonthlyVA && <span className="wolf-va-pill monthly">PM VA</span>}
+                    </div>
                     <span className="wolf-row-name-sub">{row.name}</span>
                   </div>
                   <div className="wolf-row-price">
