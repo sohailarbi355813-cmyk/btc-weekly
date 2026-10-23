@@ -342,11 +342,11 @@ export default function Home() {
             <div className="header-inner">
               <div className="logo">
                 <div className="logo-icon">
-                  <IconBitcoin size={18} color="var(--gold)" />
+                  <IconWolf size={20} color="var(--wolf-yellow-bright)" />
                 </div>
                 <div className="logo-text">
-                  <h1>BTC Bias Helper</h1>
-                  <span>Statistical Trading Bias &middot; 2021&ndash;Present</span>
+                  <h1>Wolf Tape Read</h1>
+                  <span>Trading The Tape, With Precision &middot; Key Levels &amp; Bias</span>
                 </div>
               </div>
             </div>
@@ -387,11 +387,11 @@ export default function Home() {
             <div className="header-inner">
               <div className="logo">
                 <div className="logo-icon">
-                  <IconBitcoin size={18} color="var(--gold)" />
+                  <IconWolf size={20} color="var(--wolf-yellow-bright)" />
                 </div>
                 <div className="logo-text">
-                  <h1>BTC Bias Helper</h1>
-                  <span>Statistical Trading Bias</span>
+                  <h1>Wolf Tape Read</h1>
+                  <span>Trading The Tape, With Precision</span>
                 </div>
               </div>
             </div>
@@ -448,11 +448,11 @@ export default function Home() {
           <div className="header-inner">
             <div className="logo">
               <div className="logo-icon">
-                <IconBitcoin size={18} color="var(--gold)" />
+                <IconWolf size={20} color="var(--wolf-yellow-bright)" />
               </div>
               <div className="logo-text">
-                <h1>BTC Bias Helper</h1>
-                <span>Statistical Trading Bias &middot; 2021&ndash;Present</span>
+                <h1>Wolf Tape Read</h1>
+                <span>Trading The Tape, With Precision &middot; Key Levels &amp; Bias</span>
               </div>
             </div>
             <div className="header-right">
@@ -1081,8 +1081,8 @@ export default function Home() {
         <div className="container">
           <div className="footer-content">
             <div className="footer-left">
-              <IconBitcoin size={16} color="var(--gold)" />
-              <span>BTC Bias Helper &middot; Statistical Trading Assistant &middot; Data from Jan 2021</span>
+              <IconWolf size={18} color="var(--wolf-yellow)" />
+              <span>Wolf Tape Read &middot; Trading The Tape, With Precision &middot; Data from Jan 2021</span>
             </div>
             <p className="disclaimer">
               <IconShield size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: -2 }} />

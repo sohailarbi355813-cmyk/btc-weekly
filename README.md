@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🐺 Wolf Tape Read
+
+> **Trading the tape, with precision.**  
+> Institutional Bitcoin key levels, dynamic auction price ladder, and statistical historical patterns (2021–present).
+
+---
+
+## Features
+
+- **Wolf Key Levels (Yellow Terminal Aesthetic):**
+  - **Dynamic Price Ladder:** Ordered auction levels (`PDH`, `PDL`, `PDC`, `DO`, `pPOC`, `pVAH`, `pVAL`, `WO`, `PWH`, `PWL`, `PWC`, `MO`, `PMH`, `PML`, `YO`).
+  - **Highlighted Live Spot Bar:** Instant visual orientation showing spot price slotted cleanly between nearest Resistance and Support with real-time percentage distances.
+  - **Previous Week Range Gauge:** Visual range bar tracking where current price sits between PWL (0%) and PWH (100%).
+  - **Multi-Timeframe Filters:** Easily toggle between All Levels, Daily, Weekly, and Monthly anchors.
+
+- **Week Sequence Pattern Matcher:**
+  - Scans 300+ historical trading weeks (from Jan 2021 to present).
+  - Matches current week's trajectory against past weeks by directional flow, return magnitude, and shape.
+  - Generates day-by-day probabilistic forecasts for current and subsequent weeks.
+
+- **Statistical Trading Bias Engine:**
+  - Day-of-week win rates, average returns, median returns, and streaks.
+  - Monday 00:00 UTC Weekly Open anchor analysis.
+  - 12-month calendar seasonality profile.
+  - Multi-factor composite confidence meter.
+
+- **Sleek & Mobile-First Design:**
+  - Pure SVG icons (no cheap emojis).
+  - High-contrast obsidian & cyber yellow aesthetic.
+  - Horizontal swipeable week timeline with snap alignment for smartphones and tablets.
+  - Custom vector favicon (`/icon.svg`).
+
+---
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# Install dependencies
+npm install
+
+# Start local development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The app is built with Next.js App Router and is fully optimized for one-click deployment on [Vercel](https://vercel.com).
