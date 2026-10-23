@@ -602,8 +602,8 @@ export default function Home() {
             </button>
             <button id="tab-alts" className={`tab-btn ${activeTab === 'alts' ? 'active' : ''}`} onClick={() => setActiveTab('alts')}>
               <IconRadar size={15} color={activeTab === 'alts' ? 'var(--wolf-yellow-bright)' : undefined} />
-              <span style={{ color: activeTab === 'alts' ? 'var(--wolf-yellow-bright)' : undefined }}>Alts Tape Reader</span>
-              <span style={{ background: 'var(--wolf-yellow)', color: '#0b0e14', fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>55</span>
+              <span style={{ color: activeTab === 'alts' ? 'var(--wolf-yellow-bright)' : undefined }}>Alts Value Area (VAL/VAH)</span>
+              <span style={{ background: '#2dd4bf', color: '#0b0e14', fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>55</span>
             </button>
             <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => setActiveTab('pattern')}>
               <IconRadar size={15} />

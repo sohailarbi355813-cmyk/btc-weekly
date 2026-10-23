@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { ALTS_WHITELIST } from '@/lib/altsData';
-
+import pivotsData from '@/lib/pivotsData.json';
 
 export async function GET() {
   try {
-    // 1. Fetch live 24h ticker tape from Bybit Linear (matches user's perps)
+    // 1. Fetch live 24h ticker tape from Bybit Linear
     let bybitMap = new Map();
     try {
       const res = await fetch('https://api.bybit.com/v5/market/tickers?category=linear', {
@@ -18,7 +18,7 @@ export async function GET() {
         }
       }
     } catch (e) {
-      console.warn('Bybit linear tickers fetch failed, will try fallback', e.message);
+      console.warn('Bybit linear tickers fetch failed:', e.message);
     }
 
     // Fallback: If Bybit had an issue, fetch from Binance Futures
@@ -35,176 +35,135 @@ export async function GET() {
               symbol: t.symbol,
               lastPrice: t.lastPrice,
               price24hPcnt: (parseFloat(t.priceChangePercent) / 100).toString(),
-              highPrice24h: t.highPrice,
-              lowPrice24h: t.lowPrice,
-              turnover24h: t.quoteVolume,
             });
           });
         }
       } catch (e) {
-        console.error('Binance fallback failed as well:', e.message);
+        console.error('Binance fallback failed:', e.message);
       }
     }
 
-    // 2. Extract BTC Benchmark
-    const btcTicker = bybitMap.get('BTCUSDT');
-    const btcPrice = btcTicker ? parseFloat(btcTicker.lastPrice) : 81700;
-    const btcChange24h = btcTicker ? parseFloat(btcTicker.price24hPcnt) * 100 : 0.36;
-    const btcHigh24h = btcTicker ? parseFloat(btcTicker.highPrice24h) : btcPrice * 1.01;
-    const btcLow24h = btcTicker ? parseFloat(btcTicker.lowPrice24h) : btcPrice * 0.99;
-    const btcBounceVelocity = btcLow24h > 0 ? ((btcPrice - btcLow24h) / btcLow24h) * 100 : 0;
-
-    const isBtcDipping = btcChange24h < 0;
-    const isBtcPumping = btcChange24h > 1.2;
-
-    // 3. Process every Whitelisted Altcoin
-    let rockHoldersCount = 0;
-    let rocketPullCount = 0;
-    let atYOCount = 0;
-    let pumpLeadersCount = 0;
-    let bleedersCount = 0;
-
-    const processedAlts = ALTS_WHITELIST.map((item) => {
-      const ticker = bybitMap.get(item.symbol);
-      let lastPrice = ticker ? parseFloat(ticker.lastPrice) : item.yo;
-      if (item.scaleFactor) lastPrice = lastPrice * item.scaleFactor;
-
-      const change24h = ticker ? parseFloat(ticker.price24hPcnt) * 100 : 0;
-      let high24h = ticker ? parseFloat(ticker.highPrice24h) : lastPrice;
-      let low24h = ticker ? parseFloat(ticker.lowPrice24h) : lastPrice;
-      if (item.scaleFactor) {
-        high24h = high24h * item.scaleFactor;
-        low24h = low24h * item.scaleFactor;
+    // Helper to format distance text and detect close pivots (within 1.2%)
+    function formatDist(spot, pivotLevel) {
+      if (!pivotLevel || !spot) {
+        return { dist: 0, text: '--', isClose: false, level: 0 };
       }
-      const turnover24h = ticker ? parseFloat(ticker.turnover24h || 0) : 0;
+      const d = ((spot - pivotLevel) / pivotLevel) * 100;
+      const absD = Math.abs(d);
+      const isClose = absD <= 1.2;
 
-      // Distance from Yearly Open (Jan 1, 2026)
-      const pctFromYO = item.yo > 0 ? ((lastPrice - item.yo) / item.yo) * 100 : 0;
-      const absPctFromYO = Math.abs(pctFromYO);
-      const isAtYO = absPctFromYO <= 1.0;
-      const isNearYO = absPctFromYO <= 2.5;
-
-      let yoRegime = 'BELOW_YO';
-      if (isAtYO) yoRegime = 'AT_YO';
-      else if (pctFromYO > 0) yoRegime = 'ABOVE_YO';
-
-      if (isAtYO) atYOCount++;
-
-      // Relative Delta vs BTC
-      const btcDelta = change24h - btcChange24h;
-
-      // Bounce Velocity off 24h Low
-      const bounceVelocity = low24h > 0 ? ((lastPrice - low24h) / low24h) * 100 : 0;
-
-      // Relative Strength Score (-100 to +100)
-      const rsScore = Math.max(-100, Math.min(100, Math.round(btcDelta * 12 + (bounceVelocity - btcBounceVelocity) * 8)));
-
-      // Tape Characterization
-      let tapeCategory = 'neutral';
-      let tapeReason = 'Tracking BTC in line';
-
-      // 1. Rock Holder: When BTC is red/dumping, this alt holds its ground like a rock or stays green!
-      // (Or has massive positive delta vs BTC)
-      if (isBtcDipping) {
-        if (change24h >= 0) {
-          tapeCategory = 'rock_holder';
-          tapeReason = 'Holding green like a rock while BTC is red!';
-          rockHoldersCount++;
-        } else if (btcDelta >= 1.5) {
-          tapeCategory = 'rock_holder';
-          tapeReason = 'Strong bid absorption (dumping far less than BTC)';
-          rockHoldersCount++;
-        } else if (btcDelta <= -2.0) {
-          tapeCategory = 'bleeder';
-          tapeReason = 'Bleeding / dumping harder than BTC';
-          bleedersCount++;
-        }
+      let text;
+      if (absD < 1.0) {
+        text = d.toFixed(1);
+        if (text === '0.0' || text === '-0.0') text = '0.1';
+      } else if (absD < 10) {
+        text = (d >= 0 ? '+' : '') + d.toFixed(1);
       } else {
-        // BTC is green or flat
-        if (btcDelta >= 2.5 && change24h >= 2.0) {
-          tapeCategory = 'pump_leader';
-          tapeReason = 'Leading market upside / pump multiplier';
-          pumpLeadersCount++;
-        } else if (change24h < -0.5 || btcDelta <= -2.5) {
-          tapeCategory = 'bleeder';
-          tapeReason = 'Diverging weak / failing to lift with BTC';
-          bleedersCount++;
-        }
-      }
-
-      // 2. Rocket Pull: Explosive bounce off the lows (pulling upside with strong momentum)
-      if (bounceVelocity >= 3.5 && bounceVelocity > btcBounceVelocity * 1.5) {
-        tapeCategory = 'rocket_pull';
-        tapeReason = `Violent upside recovery (+${bounceVelocity.toFixed(1)}% off 24h low)`;
-        rocketPullCount++;
+        text = (d >= 0 ? '+' : '') + Math.round(d);
       }
 
       return {
-        symbol: item.symbol,
-        displaySymbol: item.displaySymbol,
-        name: item.name,
-        decimals: item.decimals,
-        lastPrice,
-        priceFormatted: formatPrice(lastPrice, item.decimals),
-        change24h: Number(change24h.toFixed(2)),
-        high24h,
-        low24h,
-        turnover24h,
-        yo: item.yo,
-        yoFormatted: formatPrice(item.yo, item.decimals),
-        pctFromYO: Number(pctFromYO.toFixed(2)),
-        absPctFromYO: Number(absPctFromYO.toFixed(2)),
-        isAtYO,
-        isNearYO,
-        yoRegime,
-        btcDelta: Number(btcDelta.toFixed(2)),
-        bounceVelocity: Number(bounceVelocity.toFixed(2)),
-        rsScore,
-        tapeCategory,
-        tapeReason,
+        dist: Number(d.toFixed(2)),
+        text,
+        isClose,
+        level: Number(pivotLevel.toFixed(4)),
       };
+    }
+
+    // 2. Build Bullish States (VAL Lows) and Bearish States (VAH Highs)
+    const bullishList = [];
+    const bearishList = [];
+
+    ALTS_WHITELIST.forEach((item) => {
+      const ticker = bybitMap.get(item.symbol);
+      let spot = ticker ? parseFloat(ticker.lastPrice) : item.yo;
+      if (item.scaleFactor) spot = spot * item.scaleFactor;
+
+      const p = pivotsData[item.symbol];
+      if (!p) return;
+
+      const shortSymbol = item.symbol.replace('1000', '').replace('USDT', '');
+
+      // ─── Bullish State: Value Area Low (VAL) distances ───
+      const pY_val = formatDist(spot, p.py.val);
+      const Y_val = formatDist(spot, p.y.val);
+      const pQ_val = formatDist(spot, p.pq.val);
+      const Q_val = formatDist(spot, p.q.val);
+      const pM_val = formatDist(spot, p.pm.val);
+      const M_val = formatDist(spot, p.m.val);
+      const pW_val = formatDist(spot, p.pw.val);
+      const W_val = formatDist(spot, p.w.val);
+
+      const valArr = [pY_val, Y_val, pQ_val, Q_val, pM_val, M_val, pW_val, W_val];
+      const minAbsValDist = Math.min(...valArr.map((x) => Math.abs(x.dist)));
+      const hasValHighlight = valArr.some((x) => x.isClose);
+
+      bullishList.push({
+        symbol: shortSymbol,
+        fullSymbol: item.displaySymbol,
+        name: item.name,
+        spot: spot,
+        pY: pY_val,
+        Y: Y_val,
+        pQ: pQ_val,
+        Q: Q_val,
+        pM: pM_val,
+        M: M_val,
+        pW: pW_val,
+        W: W_val,
+        state: 'BULL',
+        minAbsDist: minAbsValDist,
+        hasHighlight: hasValHighlight,
+      });
+
+      // ─── Bearish State: Value Area High (VAH) distances ───
+      const pY_vah = formatDist(spot, p.py.vah);
+      const Y_vah = formatDist(spot, p.y.vah);
+      const pQ_vah = formatDist(spot, p.pq.vah);
+      const Q_vah = formatDist(spot, p.q.vah);
+      const pM_vah = formatDist(spot, p.pm.vah);
+      const M_vah = formatDist(spot, p.m.vah);
+      const pW_vah = formatDist(spot, p.pw.vah);
+      const W_vah = formatDist(spot, p.w.vah);
+
+      const vahArr = [pY_vah, Y_vah, pQ_vah, Q_vah, pM_vah, M_vah, pW_vah, W_vah];
+      const minAbsVahDist = Math.min(...vahArr.map((x) => Math.abs(x.dist)));
+      const hasVahHighlight = vahArr.some((x) => x.isClose);
+
+      bearishList.push({
+        symbol: shortSymbol,
+        fullSymbol: item.displaySymbol,
+        name: item.name,
+        spot: spot,
+        pY: pY_vah,
+        Y: Y_vah,
+        pQ: pQ_vah,
+        Q: Q_vah,
+        pM: pM_vah,
+        M: M_vah,
+        pW: pW_vah,
+        W: W_vah,
+        state: 'BEAR',
+        minAbsDist: minAbsVahDist,
+        hasHighlight: hasVahHighlight,
+      });
     });
 
-    // Helper price formatter for display
-    function formatPrice(val, dec = 2) {
-      if (val === undefined || val === null || isNaN(val)) return '--';
-      if (val >= 1000) {
-        return '$' + val.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
-      }
-      return '$' + Number(val).toFixed(dec);
-    }
+    // Sort by proximity to nearest pivot (coins closest to VAL / VAH at top)
+    bullishList.sort((a, b) => a.minAbsDist - b.minAbsDist);
+    bearishList.sort((a, b) => a.minAbsDist - b.minAbsDist);
 
     return NextResponse.json({
       success: true,
       timestamp: Date.now(),
-      btcBenchmark: {
-        price: btcPrice,
-        priceFormatted: '$' + btcPrice.toLocaleString('en-US', { maximumFractionDigits: 1 }),
-        change24h: Number(btcChange24h.toFixed(2)),
-        high24h: btcHigh24h,
-        low24h: btcLow24h,
-        bounceVelocity: Number(btcBounceVelocity.toFixed(2)),
-        isDipping: isBtcDipping,
-        isPumping: isBtcPumping,
-      },
-      macro: {
-        usdtDominance: 6.74, // USDT.D indicator from TradingView watchlist
-        usdtDChange: -0.45,
-      },
-      counts: {
-        total: processedAlts.length,
-        rockHolders: rockHoldersCount,
-        rocketPulls: rocketPullCount,
-        atYearlyOpen: atYOCount,
-        pumpLeaders: pumpLeadersCount,
-        bleeders: bleedersCount,
-      },
-      alts: processedAlts,
+      total: ALTS_WHITELIST.length,
+      bullishStates: bullishList,
+      bearishStates: bearishList,
     });
   } catch (error) {
-    console.error('Alts Tape API error:', error);
+    console.error('Value Area API error:', error);
     return NextResponse.json(
-      { success: false, error: error.message, alts: [] },
+      { success: false, error: error.message, bullishStates: [], bearishStates: [] },
       { status: 500 }
     );
   }

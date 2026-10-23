@@ -3,21 +3,15 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   IconRadar,
-  IconTrendUp,
-  IconTrendDown,
   IconRefresh,
   IconBell,
-  IconRocket,
-  IconRock,
   IconSearch,
   IconTrash,
   IconVolume,
   IconVolumeMute,
   IconX,
   IconCheck,
-  IconTarget,
   IconZap,
-  IconBitcoin,
 } from './Icons';
 import { playAlertChime } from '@/lib/alertSound';
 
@@ -30,10 +24,9 @@ export default function AltsTapeReader() {
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  // Filters & State
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'rock' | 'rocket' | 'yo' | 'pump' | 'bleed' | 'alerts'
+  // Sub-Tabs: 'bull' (Bullish States) | 'bear' (Bearish States) | 'alerts' (Alerts Manager)
+  const [activeTab, setActiveTab] = useState('bull');
   const [searchQuery, setSearchQuery] = useState('');
-  const [marketSimulation, setMarketSimulation] = useState('auto'); // 'auto' | 'dip' | 'pump'
   const [soundMuted, setSoundMuted] = useState(false);
 
   // Alerts Management (Unlimited stored in localStorage)
@@ -41,14 +34,14 @@ export default function AltsTapeReader() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCoinForAlert, setSelectedCoinForAlert] = useState(null);
   const [alertTargetPrice, setAlertTargetPrice] = useState('');
-  const [alertConditionType, setAlertConditionType] = useState('price_above'); // 'price_above' | 'price_below' | 'touches_yo' | 'rock_holder'
+  const [alertConditionType, setAlertConditionType] = useState('price_above');
   const [alertNote, setAlertNote] = useState('');
   const [toasts, setToasts] = useState([]);
   const [notifPermission, setNotifPermission] = useState('default');
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [showWebhookSettings, setShowWebhookSettings] = useState(false);
 
-  // Load sound, webhook & saved alerts on mount
+  // Load sound & saved alerts on mount
   useEffect(() => {
     try {
       if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -90,7 +83,6 @@ export default function AltsTapeReader() {
     } catch (e) {}
   };
 
-  // Save alerts to localStorage
   const saveAlerts = useCallback((newAlerts) => {
     setAlerts(newAlerts);
     try {
@@ -100,14 +92,11 @@ export default function AltsTapeReader() {
     }
   }, []);
 
-  // Toggle Sound Mute
   const toggleSound = () => {
     const next = !soundMuted;
     setSoundMuted(next);
     localStorage.setItem(STORAGE_KEY_SOUND, next ? 'true' : 'false');
-    if (!next) {
-      playAlertChime();
-    }
+    if (!next) playAlertChime();
   };
 
   // Fetch live tape data from server API
@@ -122,8 +111,8 @@ export default function AltsTapeReader() {
       setLastUpdated(new Date());
       setError(null);
 
-      // Check alerts against live data
-      checkAlerts(json.alts, json.btcBenchmark);
+      // Check alerts
+      checkAlerts(json.bullishStates, json.bearishStates);
     } catch (err) {
       console.error('Fetch error:', err);
       setError(err.message);
@@ -132,10 +121,10 @@ export default function AltsTapeReader() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto refresh interval (every 12 seconds)
+  // Auto refresh interval (every 10 seconds)
   useEffect(() => {
     fetchTapeData();
-    const interval = setInterval(fetchTapeData, 12000);
+    const interval = setInterval(fetchTapeData, 10000);
     return () => clearInterval(interval);
   }, [fetchTapeData]);
 
@@ -161,47 +150,43 @@ export default function AltsTapeReader() {
   };
 
   // Alert Evaluation Engine
-  const checkAlerts = (altsList, btc) => {
-    if (!altsList || !alerts.length) return;
+  const checkAlerts = (bullList, bearList) => {
+    if (!alerts.length) return;
+    const combined = [...(bullList || []), ...(bearList || [])];
 
     let triggeredAny = false;
     const updated = alerts.map((a) => {
-      if (a.triggered) return a; // already fired
+      if (a.triggered) return a;
 
-      const alt = altsList.find((x) => x.symbol === a.symbol || x.displaySymbol === a.displaySymbol);
-      if (!alt) return a;
+      const coin = combined.find((x) => x.symbol === a.symbol || x.fullSymbol === a.displaySymbol);
+      if (!coin) return a;
 
       let isTriggered = false;
       let triggerMsg = '';
 
-      if (a.type === 'price_above' && alt.lastPrice >= a.targetPrice) {
+      if (a.type === 'price_above' && coin.spot >= a.targetPrice) {
         isTriggered = true;
-        triggerMsg = `${alt.displaySymbol} crossed ABOVE $${a.targetPrice}`;
-      } else if (a.type === 'price_below' && alt.lastPrice <= a.targetPrice) {
+        triggerMsg = `${coin.symbol} crossed ABOVE $${a.targetPrice}`;
+      } else if (a.type === 'price_below' && coin.spot <= a.targetPrice) {
         isTriggered = true;
-        triggerMsg = `${alt.displaySymbol} dropped BELOW $${a.targetPrice}`;
-      } else if (a.type === 'touches_yo' && alt.absPctFromYO <= 0.6) {
+        triggerMsg = `${coin.symbol} dropped BELOW $${a.targetPrice}`;
+      } else if (a.type === 'at_val' && coin.pY?.isClose) {
         isTriggered = true;
-        triggerMsg = `${alt.displaySymbol} touched YEARLY OPEN at $${alt.yoFormatted} (Dist: ${alt.pctFromYO}%)`;
-      } else if (a.type === 'rock_holder' && (alt.tapeCategory === 'rock_holder' || alt.btcDelta >= 2.5)) {
-        isTriggered = true;
-        triggerMsg = `${alt.displaySymbol} is HOLDING LIKE A ROCK vs BTC (Delta: +${alt.btcDelta}%)`;
+        triggerMsg = `${coin.symbol} reached Prior Year VAL at $${coin.pY?.level}`;
       }
 
       if (isTriggered) {
         triggeredAny = true;
-        // 1. In-app toast banner
         addToast({
           id: Date.now() + Math.random(),
-          title: `ALERT TRIGGERED: ${alt.displaySymbol}`,
+          title: `ALERT: ${coin.symbol}`,
           message: triggerMsg,
           note: a.note,
         });
 
-        // 2. Native Desktop Notification (Windows popup even if tab minimized)
         if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
           try {
-            new Notification(`🚨 WOLF ALERT: ${alt.displaySymbol}`, {
+            new Notification(`🚨 WOLF ALERT: ${coin.symbol}`, {
               body: `${triggerMsg}${a.note ? `\nNote: ${a.note}` : ''}`,
               icon: '/icon.svg',
               requireInteraction: true,
@@ -209,17 +194,15 @@ export default function AltsTapeReader() {
           } catch (err) {}
         }
 
-        // 3. Flashing browser tab title
-        flashTabTitle(`🚨 [TRIGGERED] ${alt.displaySymbol}!`);
+        flashTabTitle(`🚨 [ALERT] ${coin.symbol}!`);
 
-        // 4. Discord / Telegram Webhook dispatch
         if (discordWebhook && discordWebhook.startsWith('http')) {
           try {
             fetch(discordWebhook, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                content: `🐺 **Wolf Tape Reader Alert Triggered!**\n**Asset**: \`${alt.displaySymbol}\`\n**Condition**: ${triggerMsg}\n**Current Spot**: \`${alt.priceFormatted}\` | **Yearly Open**: \`${alt.yoFormatted}\`${a.note ? `\n**Note**: _${a.note}_` : ''}`,
+                content: `🐺 **Wolf Tape Reader Alert!**\n**Symbol**: \`${coin.symbol}\`\n**Condition**: ${triggerMsg}\n**Spot**: \`$${coin.spot}\`${a.note ? `\n**Note**: _${a.note}_` : ''}`,
               }),
             }).catch(() => {});
           } catch (err) {}
@@ -231,9 +214,7 @@ export default function AltsTapeReader() {
     });
 
     if (triggeredAny) {
-      if (!soundMuted) {
-        playAlertChime();
-      }
+      if (!soundMuted) playAlertChime();
       saveAlerts(updated);
     }
   };
@@ -245,13 +226,12 @@ export default function AltsTapeReader() {
     }, 8000);
   };
 
-  // Add a new alert (Unlimited!)
   const handleCreateAlert = (e) => {
     e.preventDefault();
     if (!selectedCoinForAlert) return;
 
     const targetPriceNum = parseFloat(alertTargetPrice);
-    if ((alertConditionType === 'price_above' || alertConditionType === 'price_below') && (!targetPriceNum || isNaN(targetPriceNum))) {
+    if (!targetPriceNum || isNaN(targetPriceNum)) {
       alert('Please enter a valid numeric target price');
       return;
     }
@@ -259,11 +239,10 @@ export default function AltsTapeReader() {
     const newAlert = {
       id: 'alert_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
       symbol: selectedCoinForAlert.symbol,
-      displaySymbol: selectedCoinForAlert.displaySymbol,
+      displaySymbol: selectedCoinForAlert.fullSymbol || selectedCoinForAlert.symbol,
       name: selectedCoinForAlert.name,
       type: alertConditionType,
-      targetPrice: targetPriceNum || selectedCoinForAlert.lastPrice,
-      yo: selectedCoinForAlert.yo,
+      targetPrice: targetPriceNum,
       note: alertNote.trim(),
       createdAt: new Date().toLocaleTimeString(),
       triggered: false,
@@ -277,464 +256,195 @@ export default function AltsTapeReader() {
     addToast({
       id: Date.now(),
       title: 'Alert Created',
-      message: `Watching ${newAlert.displaySymbol} for ${alertConditionType.replace('_', ' ')}`,
+      message: `Watching ${newAlert.symbol} for ${alertConditionType.replace('_', ' ')} $${newAlert.targetPrice}`,
     });
   };
 
   const handleDeleteAlert = (id) => {
-    const updated = alerts.filter((a) => a.id !== id);
-    saveAlerts(updated);
+    saveAlerts(alerts.filter((a) => a.id !== id));
   };
 
   const handleClearTriggered = () => {
-    const updated = alerts.filter((a) => !a.triggered);
-    saveAlerts(updated);
+    saveAlerts(alerts.filter((a) => !a.triggered));
   };
 
-  const openAlertModalFor = (coin, condition = 'price_above') => {
+  const openAlertModalFor = (coin, targetVal) => {
     setSelectedCoinForAlert(coin);
-    setAlertConditionType(condition);
-    if (condition === 'touches_yo') {
-      setAlertTargetPrice(coin.yo.toString());
-    } else {
-      setAlertTargetPrice(coin.lastPrice.toString());
-    }
+    setAlertTargetPrice((targetVal || coin.spot).toString());
+    setAlertConditionType('price_above');
     setShowAddModal(true);
   };
 
-  // Filter and sort the watchlist
-  const filteredAlts = useMemo(() => {
-    if (!data?.alts) return [];
+  // Filter current active list (Bullish or Bearish)
+  const currentList = useMemo(() => {
+    if (!data) return [];
+    let list = activeTab === 'bull' ? [...(data.bullishStates || [])] : [...(data.bearishStates || [])];
 
-    let list = [...data.alts];
-
-    // Market simulation adjustments
-    const isDippingMode = marketSimulation === 'dip' || (marketSimulation === 'auto' && data.btcBenchmark.isDipping);
-    const isPumpingMode = marketSimulation === 'pump' || (marketSimulation === 'auto' && data.btcBenchmark.isPumping);
-
-    // Apply Tab Filter
-    if (activeFilter === 'rock') {
-      // Coins holding strong / absorption
-      list = list.filter((a) => a.tapeCategory === 'rock_holder' || a.btcDelta >= 1.5 || (isDippingMode && a.change24h > 0));
-      list.sort((a, b) => b.btcDelta - a.btcDelta);
-    } else if (activeFilter === 'rocket') {
-      // Coins pulling hardest upside / bounce velocity
-      list = list.filter((a) => a.bounceVelocity >= 2.5 || a.tapeCategory === 'rocket_pull');
-      list.sort((a, b) => b.bounceVelocity - a.bounceVelocity);
-    } else if (activeFilter === 'yo') {
-      // Screener: Coins at/near Yearly Open (closest to YO at the top)
-      list.sort((a, b) => a.absPctFromYO - b.absPctFromYO);
-    } else if (activeFilter === 'pump') {
-      // Pump multipliers
-      list = list.filter((a) => a.btcDelta >= 1.5 && a.change24h > 1.0);
-      list.sort((a, b) => b.btcDelta - a.btcDelta);
-    } else if (activeFilter === 'bleed') {
-      // Bleeders / Weak hands
-      list = list.filter((a) => a.btcDelta <= -1.5 || a.change24h < -1.0);
-      list.sort((a, b) => a.btcDelta - b.btcDelta);
-    } else {
-      // Default: sort by Relative Delta vs BTC
-      list.sort((a, b) => b.btcDelta - a.btcDelta);
-    }
-
-    // Search query filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      list = list.filter((a) => a.displaySymbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q));
+      list = list.filter((item) => item.symbol.toLowerCase().includes(q) || item.name.toLowerCase().includes(q));
     }
-
     return list;
-  }, [data, activeFilter, searchQuery, marketSimulation]);
-
-  // Counts for Badges
-  const counts = useMemo(() => {
-    if (!data?.alts) return { rock: 0, rocket: 0, yo: 0, pump: 0, bleed: 0 };
-    return {
-      rock: data.alts.filter((a) => a.tapeCategory === 'rock_holder' || a.btcDelta >= 1.5).length,
-      rocket: data.alts.filter((a) => a.bounceVelocity >= 2.5 || a.tapeCategory === 'rocket_pull').length,
-      yo: data.alts.filter((a) => a.absPctFromYO <= 2.5).length,
-      pump: data.alts.filter((a) => a.btcDelta >= 1.5 && a.change24h > 1.0).length,
-      bleed: data.alts.filter((a) => a.btcDelta <= -1.5 || a.change24h < -1.0).length,
-    };
-  }, [data]);
+  }, [data, activeTab, searchQuery]);
 
   return (
-    <div className="alts-container">
-      {/* ── Top Hero: Live BTC Benchmark & Relative Tape Controller ── */}
-      <div className="alts-hero">
-        <div className="alts-hero-grid">
-          <div className="alts-hero-left">
-            <div className="alts-hero-title-row">
-              <span className="alts-hero-title">
-                <IconRadar size={22} color="var(--wolf-yellow-bright)" />
-                Alts Relative Tape &amp; Yearly Open Screener
-              </span>
-              <span className="badge-yo-target" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}>
-                Strict Whitelist &bull; 55 Perps
-              </span>
-            </div>
-            <p className="alts-hero-desc">
-              Real-time institutional relative strength scanner. Pinpoints which altcoins hold like a rock during Bitcoin dips,
-              which launch with explosive upside momentum on bounces, and which coins are testing their 2026 Yearly Open line.
-            </p>
-          </div>
+    <div className="va-terminal-wrapper">
+      {/* ── Sub-Navigation: Bullish States vs Bearish States vs Alerts ── */}
+      <div className="va-tabs-bar">
+        <div className="va-tab-group">
+          <button
+            className={`va-tab-btn tab-bull ${activeTab === 'bull' ? 'active' : ''}`}
+            onClick={() => setActiveTab('bull')}
+          >
+            <span>Bullish States</span>
+            <span className="va-tab-count">{data?.bullishStates?.length || 55}</span>
+          </button>
 
-          <div className="alts-hero-actions">
-            <button
-              className="alts-btn alts-btn-yellow"
-              onClick={() => {
-                if (data?.alts?.length) {
-                  openAlertModalFor(data.alts[0]);
-                }
-              }}
-              title="Add Unlimited Custom Alert"
-            >
-              <IconBell size={15} />
-              <span>+ Add Alert</span>
-            </button>
+          <button
+            className={`va-tab-btn tab-bear ${activeTab === 'bear' ? 'active' : ''}`}
+            onClick={() => setActiveTab('bear')}
+          >
+            <span>Bearish States</span>
+            <span className="va-tab-count">{data?.bearishStates?.length || 55}</span>
+          </button>
 
-            {notifPermission !== 'granted' ? (
+          <button
+            className={`va-tab-btn ${activeTab === 'alerts' ? 'active' : ''}`}
+            onClick={() => setActiveTab('alerts')}
+          >
+            <IconBell size={14} />
+            <span>Alerts</span>
+            <span className="va-tab-count">{alerts.length}</span>
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              className="va-search-input"
+              placeholder="Search symbol (e.g. INJ, SUI)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
               <button
-                className="alts-btn alts-btn-yellow"
-                onClick={requestDesktopPermission}
-                title="Enable Native Browser Desktop Notifications"
-              >
-                <IconBell size={15} />
-                <span>Enable Desktop Alerts</span>
-              </button>
-            ) : (
-              <button
-                className="alts-btn alts-btn-ghost"
-                style={{ color: 'var(--bullish)', borderColor: 'rgba(34, 197, 94, 0.35)' }}
-                onClick={() => {
-                  new Notification('🐺 Wolf Tape Reader', { body: 'Desktop alerts are active!' });
-                  playAlertChime();
+                onClick={() => setSearchQuery('')}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: '#8b9299',
+                  cursor: 'pointer',
                 }}
-                title="Desktop Alerts Active (Click to test chime)"
               >
-                <IconCheck size={14} color="var(--bullish)" />
-                <span>Desktop Alerts Active</span>
+                <IconX size={12} />
               </button>
             )}
+          </div>
 
+          {notifPermission !== 'granted' && (
             <button
-              className="alts-btn alts-btn-ghost"
-              onClick={() => setShowWebhookSettings(true)}
-              title="Configure Discord Webhook for Mobile Alerts"
+              className="va-tab-btn"
+              style={{ color: '#2dd4bf', background: 'rgba(45, 212, 191, 0.1)', border: '1px solid rgba(45, 212, 191, 0.25)' }}
+              onClick={requestDesktopPermission}
+              title="Enable Windows Desktop Popups"
             >
-              <IconZap size={14} color={discordWebhook ? 'var(--wolf-yellow-bright)' : 'var(--text-muted)'} />
-              <span>{discordWebhook ? 'Webhook Linked' : 'Webhook'}</span>
-            </button>
-
-            <button className="alts-btn alts-btn-ghost" onClick={toggleSound} title="Mute/Unmute audio alert chime">
-              {soundMuted ? <IconVolumeMute size={15} color="var(--bearish)" /> : <IconVolume size={15} color="var(--wolf-yellow-bright)" />}
-              <span>{soundMuted ? 'Muted' : 'Sound On'}</span>
-            </button>
-
-            <button className="alts-btn alts-btn-ghost" onClick={fetchTapeData} title="Instant Refresh">
-              <IconRefresh size={14} />
-              <span>Sync</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Live Market Benchmark Cards ── */}
-      <div className="alts-benchmark-bar">
-        <div className="benchmark-card" style={{ borderColor: 'rgba(250, 204, 21, 0.3)' }}>
-          <div className="benchmark-label">
-            <IconBitcoin size={14} color="var(--gold)" />
-            <span>BTC Benchmark (Spot)</span>
-          </div>
-          <div className="benchmark-val">{data?.btcBenchmark?.priceFormatted || '--'}</div>
-          <div
-            className="benchmark-sub"
-            style={{ color: (data?.btcBenchmark?.change24h || 0) >= 0 ? 'var(--bullish)' : 'var(--bearish)' }}
-          >
-            {(data?.btcBenchmark?.change24h || 0) >= 0 ? '+' : ''}
-            {data?.btcBenchmark?.change24h}% (24h)
-          </div>
-        </div>
-
-        <div className="benchmark-card">
-          <div className="benchmark-label">
-            <IconRock size={14} color="var(--wolf-yellow-bright)" />
-            <span>Holding Like a Rock</span>
-          </div>
-          <div className="benchmark-val" style={{ color: 'var(--wolf-yellow-bright)' }}>
-            {counts.rock}
-          </div>
-          <div className="benchmark-sub" style={{ color: 'var(--text-muted)' }}>
-            Institutional Bid Absorption
-          </div>
-        </div>
-
-        <div className="benchmark-card">
-          <div className="benchmark-label">
-            <IconRocket size={14} color="#38bdf8" />
-            <span>Rocket Bouncers</span>
-          </div>
-          <div className="benchmark-val" style={{ color: '#38bdf8' }}>
-            {counts.rocket}
-          </div>
-          <div className="benchmark-sub" style={{ color: 'var(--text-muted)' }}>
-            Hardest Pull Upside off Lows
-          </div>
-        </div>
-
-        <div className="benchmark-card">
-          <div className="benchmark-label">
-            <IconTarget size={14} color="#ffe600" />
-            <span>Near Yearly Open</span>
-          </div>
-          <div className="benchmark-val" style={{ color: '#ffe600' }}>
-            {counts.yo}
-          </div>
-          <div className="benchmark-sub" style={{ color: 'var(--text-muted)' }}>
-            Within &plusmn;2.5% of 2026 Open
-          </div>
-        </div>
-
-        <div className="benchmark-card">
-          <div className="benchmark-label">
-            <IconBell size={14} color={alerts.length > 0 ? 'var(--wolf-yellow-bright)' : 'var(--text-muted)'} />
-            <span>Active Alerts</span>
-          </div>
-          <div className="benchmark-val" style={{ color: alerts.length > 0 ? 'var(--wolf-yellow-bright)' : '#fff' }}>
-            {alerts.length}
-          </div>
-          <div className="benchmark-sub" style={{ color: 'var(--text-muted)' }}>
-            Unlimited Stored Alerts
-          </div>
-        </div>
-      </div>
-
-      {/* ── Context Simulation Bar ── */}
-      <div className="alts-context-bar">
-        <div className="context-label">
-          <IconZap size={15} color="var(--wolf-yellow)" />
-          <span>
-            Tape Lens: <strong>{marketSimulation === 'auto' ? 'Auto-Detect Live Tape' : marketSimulation === 'dip' ? 'Simulating BTC Dip' : 'Simulating BTC Pump'}</strong>
-          </span>
-        </div>
-        <div className="context-pills">
-          <button
-            className={`context-pill ${marketSimulation === 'auto' ? 'active' : ''}`}
-            onClick={() => setMarketSimulation('auto')}
-            title="Auto detect based on live market conditions"
-          >
-            Auto Live
-          </button>
-          <button
-            className={`context-pill ${marketSimulation === 'dip' ? 'active' : ''}`}
-            onClick={() => setMarketSimulation('dip')}
-            title="Focus on Rock Holders & absorption during dumps"
-          >
-            BTC Dip Scenario
-          </button>
-          <button
-            className={`context-pill ${marketSimulation === 'pump' ? 'active' : ''}`}
-            onClick={() => setMarketSimulation('pump')}
-            title="Focus on Pump Multipliers & upside leaders"
-          >
-            BTC Pump Scenario
-          </button>
-        </div>
-      </div>
-
-      {/* ── Sub-Tabs & Search Filter Bar ── */}
-      <div className="alts-filters-bar">
-        <div className="alts-filter-tabs">
-          <button
-            className={`alts-filter-btn ${activeFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('all')}
-          >
-            <span>All Watchlist</span>
-            <span className="alts-filter-count">{data?.alts?.length || 55}</span>
-          </button>
-
-          <button
-            className={`alts-filter-btn ${activeFilter === 'rock' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('rock')}
-            title="Coins holding like a rock when BTC dips"
-          >
-            <IconRock size={13} color="var(--wolf-yellow-bright)" />
-            <span>Rock Holders</span>
-            <span className="alts-filter-count">{counts.rock}</span>
-          </button>
-
-          <button
-            className={`alts-filter-btn ${activeFilter === 'rocket' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('rocket')}
-            title="Coins pulling hardest upside"
-          >
-            <IconRocket size={13} color="#38bdf8" />
-            <span>Rocket Bouncers</span>
-            <span className="alts-filter-count">{counts.rocket}</span>
-          </button>
-
-          <button
-            className={`alts-filter-btn ${activeFilter === 'yo' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('yo')}
-            title="Coins at or nearest to their Yearly Open"
-          >
-            <IconTarget size={13} color="#ffe600" />
-            <span>At Yearly Open</span>
-            <span className="alts-filter-count">{counts.yo}</span>
-          </button>
-
-          <button
-            className={`alts-filter-btn ${activeFilter === 'pump' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('pump')}
-            title="Leading upside during pumps"
-          >
-            <IconTrendUp size={13} color="var(--bullish)" />
-            <span>Pump Multipliers</span>
-            <span className="alts-filter-count">{counts.pump}</span>
-          </button>
-
-          <button
-            className={`alts-filter-btn ${activeFilter === 'bleed' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('bleed')}
-            title="Dumping harder or diverging weak"
-          >
-            <IconTrendDown size={13} color="var(--bearish)" />
-            <span>Bleeders</span>
-            <span className="alts-filter-count">{counts.bleed}</span>
-          </button>
-
-          <button
-            className={`alts-filter-btn ${activeFilter === 'alerts' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('alerts')}
-            title="Manage unlimited alerts"
-          >
-            <IconBell size={13} color="var(--wolf-yellow-bright)" />
-            <span>My Alerts</span>
-            <span className="alts-filter-count">{alerts.length}</span>
-          </button>
-        </div>
-
-        <div className="alts-search-box">
-          <IconSearch size={14} color="var(--text-muted)" />
-          <input
-            type="text"
-            className="alts-search-input"
-            placeholder="Search coin (e.g. SOL, HYPE, PENGU)..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-            >
-              <IconX size={12} />
+              <IconBell size={13} />
+              <span>Enable Alerts</span>
             </button>
           )}
+
+          <button
+            className="va-tab-btn"
+            onClick={toggleSound}
+            style={{ padding: '0.55rem 0.75rem' }}
+            title={soundMuted ? 'Unmute Sound' : 'Mute Sound'}
+          >
+            {soundMuted ? <IconVolumeMute size={14} color="#f87171" /> : <IconVolume size={14} color="#2dd4bf" />}
+          </button>
+
+          <button
+            className="va-tab-btn"
+            onClick={fetchTapeData}
+            style={{ padding: '0.55rem 0.75rem' }}
+            title="Refresh Live Data"
+          >
+            <IconRefresh size={14} />
+          </button>
         </div>
       </div>
 
-      {/* ── VIEW: MY ALERTS MANAGER ── */}
-      {activeFilter === 'alerts' ? (
-        <div className="alts-table-wrap" style={{ padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3 style={{ color: 'var(--wolf-yellow-bright)', fontSize: '1.1rem', fontWeight: 800 }}>
-              Unlimited Watchlist Alerts ({alerts.length})
-            </h3>
+      {/* ── ALERTS MANAGER VIEW ── */}
+      {activeTab === 'alerts' ? (
+        <div className="vyaps-card">
+          <div className="vyaps-card-header">
+            <span className="vyaps-brand">vyaps.xyz</span>
+            <span className="vyaps-title">Unlimited Alerts Manager</span>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
-                className="alts-btn alts-btn-yellow"
+                className="va-tab-btn active"
                 onClick={() => {
-                  if (data?.alts?.length) openAlertModalFor(data.alts[0]);
+                  if (data?.bullishStates?.[0]) openAlertModalFor(data.bullishStates[0]);
                 }}
               >
-                <IconBell size={14} />
-                <span>+ Create Alert</span>
+                + New Alert
               </button>
               {alerts.some((a) => a.triggered) && (
-                <button className="alts-btn alts-btn-ghost" onClick={handleClearTriggered}>
-                  <IconTrash size={14} />
-                  <span>Clear Fired Alerts</span>
+                <button className="va-tab-btn" onClick={handleClearTriggered}>
+                  Clear Fired
                 </button>
               )}
             </div>
           </div>
 
           {alerts.length === 0 ? (
-            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <IconBell size={32} color="var(--text-muted)" style={{ marginBottom: '0.5rem' }} />
-              <p>No active alerts set yet.</p>
-              <p style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                Click &ldquo;+ Add Alert&rdquo; or click the bell icon on any coin to set unlimited alerts!
-              </p>
+            <div style={{ padding: '3rem', textAlign: 'center', color: '#636b73' }}>
+              <IconBell size={28} style={{ marginBottom: '0.5rem' }} />
+              <p>No active alerts. Click any coin or pivot to set an alert!</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {alerts.map((alert) => (
                 <div
                   key={alert.id}
                   style={{
-                    background: alert.triggered ? 'rgba(250, 204, 21, 0.08)' : 'rgba(255, 255, 255, 0.03)',
-                    border: `1px solid ${alert.triggered ? 'var(--wolf-yellow)' : 'rgba(255, 255, 255, 0.08)'}`,
-                    borderRadius: '10px',
-                    padding: '0.85rem 1rem',
+                    background: alert.triggered ? 'rgba(45, 212, 191, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                    border: `1px solid ${alert.triggered ? 'rgba(45, 212, 191, 0.3)' : 'rgba(255, 255, 255, 0.06)'}`,
+                    borderRadius: '8px',
+                    padding: '0.75rem 1rem',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                    <div
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '8px',
-                        background: alert.triggered ? 'rgba(250, 204, 21, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <IconBell size={18} color={alert.triggered ? 'var(--wolf-yellow-bright)' : 'var(--text-secondary)'} />
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div className="vyaps-coin-icon">{alert.symbol.slice(0, 3)}</div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{alert.displaySymbol}</strong>
+                        <span style={{ color: '#fff', fontWeight: 700 }}>{alert.symbol}</span>
                         <span
-                          className={`tape-badge ${alert.triggered ? 'badge-yo-target' : 'badge-neutral'}`}
-                          style={{ fontSize: '0.65rem' }}
+                          className={`pivot-pill ${alert.triggered ? 'is-close' : ''}`}
+                          style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem' }}
                         >
                           {alert.triggered ? 'TRIGGERED ' + alert.triggeredAt : 'ACTIVE'}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                        Condition:{' '}
-                        <strong style={{ color: 'var(--wolf-yellow-bright)' }}>
-                          {alert.type === 'price_above'
-                            ? `Price >= $${alert.targetPrice}`
-                            : alert.type === 'price_below'
-                            ? `Price <= $${alert.targetPrice}`
-                            : alert.type === 'touches_yo'
-                            ? `Touches Yearly Open ($${alert.yo})`
-                            : 'Holding Like A Rock vs BTC'}
-                        </strong>
-                        {alert.note && <span> &bull; Note: &ldquo;{alert.note}&rdquo;</span>}
+                      <div style={{ fontSize: '0.8rem', color: '#8b9299', marginTop: '0.15rem' }}>
+                        {alert.type === 'price_above' ? 'Price >= $' : 'Price <= $'}
+                        {alert.targetPrice} {alert.note && <span> &bull; &ldquo;{alert.note}&rdquo;</span>}
                       </div>
                     </div>
                   </div>
 
                   <button
                     onClick={() => handleDeleteAlert(alert.id)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      padding: '0.4rem',
-                    }}
-                    title="Delete Alert"
+                    style={{ background: 'none', border: 'none', color: '#636b73', cursor: 'pointer', padding: '0.4rem' }}
                   >
-                    <IconTrash size={16} />
+                    <IconTrash size={15} />
                   </button>
                 </div>
               ))}
@@ -742,174 +452,175 @@ export default function AltsTapeReader() {
           )}
         </div>
       ) : (
-        /* ── VIEW: MAIN ALTS RADAR TABLE ── */
-        <div className="alts-table-wrap">
+        /* ── EXACT VYAPS.XYZ 8-PIVOT TABLE (BULLISH OR BEARISH) ── */
+        <div className="vyaps-card">
+          <div className="vyaps-card-header">
+            <span className="vyaps-brand">vyaps.xyz</span>
+            <span className="vyaps-title">
+              {activeTab === 'bull' ? 'Bullish States' : 'Bearish States'}
+            </span>
+            <div className="vyaps-meta">
+              <span>{activeTab === 'bull' ? 'Value Area Lows (VAL)' : 'Value Area Highs (VAH)'}</span>
+              <span>&bull;</span>
+              <span>Synced {lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
+            </div>
+          </div>
+
           {loading && !data ? (
-            <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <IconRefresh size={28} className="spin" style={{ marginBottom: '0.5rem' }} />
-              <p>Scanning 55 Bybit Linear Perpetual Tickers &amp; Calculating Yearly Opens...</p>
+            <div style={{ padding: '3.5rem', textAlign: 'center', color: '#636b73' }}>
+              <IconRefresh size={26} className="spin" style={{ marginBottom: '0.5rem' }} />
+              <p>Calibrating Value Area Pivots across pY, Y, pQ, Q, pM, M, pW, W...</p>
             </div>
           ) : (
-            <table className="alts-table">
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Last Price</th>
-                  <th>24h Change</th>
-                  <th>vs BTC Delta</th>
-                  <th>Bounce off Low</th>
-                  <th>2026 Yearly Open</th>
-                  <th>Tape Read</th>
-                  <th style={{ textAlign: 'right' }}>Alert</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAlts.length === 0 ? (
+            <div className="vyaps-table-wrapper">
+              <table className="vyaps-table">
+                <thead>
                   <tr>
-                    <td colSpan="8" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
-                      No matching coins found for this filter.
-                    </td>
+                    <th>Symbol</th>
+                    <th>pY</th>
+                    <th>Y</th>
+                    <th>pQ</th>
+                    <th>Q</th>
+                    <th>pM</th>
+                    <th>M</th>
+                    <th>pW</th>
+                    <th>W</th>
+                    <th>State</th>
                   </tr>
-                ) : (
-                  filteredAlts.map((alt) => {
-                    const isPos = alt.change24h >= 0;
-                    const isDeltaPos = alt.btcDelta >= 0;
-
-                    return (
-                      <tr key={alt.symbol}>
-                        {/* 1. Symbol */}
+                </thead>
+                <tbody>
+                  {currentList.length === 0 ? (
+                    <tr>
+                      <td colSpan="10" style={{ padding: '3rem', textAlign: 'center', color: '#636b73' }}>
+                        No coins match your search.
+                      </td>
+                    </tr>
+                  ) : (
+                    currentList.map((row) => (
+                      <tr
+                        key={row.symbol}
+                        className="vyaps-row"
+                        onClick={() => openAlertModalFor(row, row.spot)}
+                        title={`Click to set alert for ${row.symbol} at current spot $${row.spot}`}
+                      >
+                        {/* 1. Symbol Cell */}
                         <td>
-                          <div className="alt-symbol-cell">
-                            <span className="alt-symbol-name">{alt.displaySymbol}</span>
-                            <span className="alt-symbol-sub">{alt.name}</span>
+                          <div className="vyaps-symbol-cell">
+                            <div className="vyaps-coin-icon">
+                              {row.symbol.slice(0, 3)}
+                            </div>
+                            <span className="vyaps-symbol-name">{row.symbol}</span>
                           </div>
                         </td>
 
-                        {/* 2. Price */}
-                        <td>
-                          <span className="alt-price-cell">{alt.priceFormatted}</span>
-                        </td>
-
-                        {/* 3. 24h Change */}
+                        {/* 2. pY (Prior Year) */}
                         <td>
                           <span
-                            style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontWeight: 800,
-                              color: isPos ? 'var(--bullish)' : 'var(--bearish)',
-                            }}
+                            className={`pivot-pill ${row.pY.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Prior Year ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.pY.level} | Spot: $${row.spot} | Dist: ${row.pY.text}%`}
                           >
-                            {isPos ? '+' : ''}
-                            {alt.change24h}%
+                            {row.pY.text}
                           </span>
                         </td>
 
-                        {/* 4. Relative Delta vs BTC */}
+                        {/* 3. Y (Current Year) */}
                         <td>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span className={`delta-val ${isDeltaPos ? 'delta-pos' : 'delta-neg'}`}>
-                              {isDeltaPos ? '+' : ''}
-                              {alt.btcDelta}%
-                            </span>
-                            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                              {isDeltaPos ? 'Outperforming' : 'Lagging'} BTC
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 5. Bounce Velocity off Low */}
-                        <td>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#38bdf8' }}>
-                            +{alt.bounceVelocity}%
+                          <span
+                            className={`pivot-pill ${row.Y.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Current Year ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.Y.level} | Spot: $${row.spot} | Dist: ${row.Y.text}%`}
+                          >
+                            {row.Y.text}
                           </span>
                         </td>
 
-                        {/* 6. Yearly Open */}
+                        {/* 4. pQ (Prior Quarter) */}
                         <td>
-                          <div className="yo-cell">
-                            <span className="yo-price">{alt.yoFormatted}</span>
-                            <span
-                              className="yo-diff"
-                              style={{
-                                color: alt.isAtYO
-                                  ? 'var(--wolf-yellow-bright)'
-                                  : alt.pctFromYO >= 0
-                                  ? 'var(--bullish)'
-                                  : 'var(--bearish)',
-                              }}
-                            >
-                              {alt.isAtYO ? '🎯 AT YO' : `${alt.pctFromYO > 0 ? '+' : ''}${alt.pctFromYO}%`}
-                            </span>
-                          </div>
+                          <span
+                            className={`pivot-pill ${row.pQ.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Prior Quarter ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.pQ.level} | Spot: $${row.spot} | Dist: ${row.pQ.text}%`}
+                          >
+                            {row.pQ.text}
+                          </span>
                         </td>
 
-                        {/* 7. Tape Read Badge */}
+                        {/* 5. Q (Current Quarter) */}
                         <td>
-                          {alt.isAtYO ? (
-                            <span className="tape-badge badge-yo-target" title="Trading right at 2026 Yearly Open">
-                              🎯 AT YEARLY OPEN
-                            </span>
-                          ) : alt.tapeCategory === 'rock_holder' ? (
-                            <span className="tape-badge badge-rock" title={alt.tapeReason}>
-                              🛡️ ROCK HOLDER
-                            </span>
-                          ) : alt.tapeCategory === 'rocket_pull' ? (
-                            <span className="tape-badge badge-rocket" title={alt.tapeReason}>
-                              🚀 ROCKET PULL
-                            </span>
-                          ) : alt.tapeCategory === 'pump_leader' ? (
-                            <span className="tape-badge badge-pump" title={alt.tapeReason}>
-                              ⚡ PUMP LEADER
-                            </span>
-                          ) : alt.tapeCategory === 'bleeder' ? (
-                            <span className="tape-badge badge-bleeder" title={alt.tapeReason}>
-                              🩸 BLEEDER
-                            </span>
-                          ) : (
-                            <span className="tape-badge badge-neutral">SYNC BTC</span>
-                          )}
+                          <span
+                            className={`pivot-pill ${row.Q.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Current Quarter ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.Q.level} | Spot: $${row.spot} | Dist: ${row.Q.text}%`}
+                          >
+                            {row.Q.text}
+                          </span>
                         </td>
 
-                        {/* 8. Quick Alert Actions */}
-                        <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
-                            <button
-                              className="alts-btn alts-btn-ghost"
-                              style={{ padding: '0.35rem 0.6rem', fontSize: '0.72rem' }}
-                              onClick={() => openAlertModalFor(alt, 'touches_yo')}
-                              title={`Set Alert at Yearly Open ($${alt.yo})`}
-                            >
-                              <IconTarget size={12} color="#ffe600" />
-                              <span>YO Alert</span>
-                            </button>
-                            <button
-                              className="alts-btn alts-btn-ghost"
-                              style={{ padding: '0.35rem 0.6rem', fontSize: '0.72rem' }}
-                              onClick={() => openAlertModalFor(alt, 'price_above')}
-                              title="Set Custom Price Alert"
-                            >
-                              <IconBell size={12} color="var(--wolf-yellow-bright)" />
-                            </button>
-                          </div>
+                        {/* 6. pM (Prior Month) */}
+                        <td>
+                          <span
+                            className={`pivot-pill ${row.pM.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Prior Month ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.pM.level} | Spot: $${row.spot} | Dist: ${row.pM.text}%`}
+                          >
+                            {row.pM.text}
+                          </span>
+                        </td>
+
+                        {/* 7. M (Current Month) */}
+                        <td>
+                          <span
+                            className={`pivot-pill ${row.M.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Current Month ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.M.level} | Spot: $${row.spot} | Dist: ${row.M.text}%`}
+                          >
+                            {row.M.text}
+                          </span>
+                        </td>
+
+                        {/* 8. pW (Prior Week) */}
+                        <td>
+                          <span
+                            className={`pivot-pill ${row.pW.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Prior Week ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.pW.level} | Spot: $${row.spot} | Dist: ${row.pW.text}%`}
+                          >
+                            {row.pW.text}
+                          </span>
+                        </td>
+
+                        {/* 9. W (Current Week) */}
+                        <td>
+                          <span
+                            className={`pivot-pill ${row.W.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Current Week ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.W.level} | Spot: $${row.spot} | Dist: ${row.W.text}%`}
+                          >
+                            {row.W.text}
+                          </span>
+                        </td>
+
+                        {/* 10. State */}
+                        <td>
+                          <span className={`vyaps-state-badge ${row.state === 'BULL' ? 'bull' : 'bear'}`}>
+                            {row.state}
+                          </span>
                         </td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
+
+          <div className="vyaps-footer-note">
+            Highlighted teal cells indicate the asset is testing that exact Value Area pivot within &le; 1.0% distance.
+          </div>
         </div>
       )}
 
       {/* ── Unlimited Alert Creation Modal ── */}
       {showAddModal && selectedCoinForAlert && (
         <div className="alts-modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="alts-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="alts-modal" onClick={(e) => e.stopPropagation()} style={{ background: '#0e1014', border: '1px solid rgba(255,255,255,0.1)' }}>
             <div className="modal-header">
-              <span className="modal-title">
-                <IconBell size={18} color="var(--wolf-yellow-bright)" />
-                Create Unlimited Alert
+              <span className="modal-title" style={{ color: '#2dd4bf' }}>
+                <IconBell size={18} />
+                Set Value Area Alert &bull; {selectedCoinForAlert.symbol}
               </span>
               <button className="modal-close-btn" onClick={() => setShowAddModal(false)}>
                 <IconX size={16} />
@@ -918,81 +629,57 @@ export default function AltsTapeReader() {
 
             <form onSubmit={handleCreateAlert} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="modal-form-group">
-                <label className="modal-form-label">Asset</label>
+                <label className="modal-form-label" style={{ color: '#8b9299' }}>Condition</label>
                 <select
                   className="modal-select"
-                  value={selectedCoinForAlert.symbol}
-                  onChange={(e) => {
-                    const match = data?.alts?.find((x) => x.symbol === e.target.value);
-                    if (match) setSelectedCoinForAlert(match);
-                  }}
-                >
-                  {data?.alts?.map((c) => (
-                    <option key={c.symbol} value={c.symbol}>
-                      {c.displaySymbol} - {c.name} (${c.priceFormatted})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="modal-form-group">
-                <label className="modal-form-label">Condition</label>
-                <select
-                  className="modal-select"
+                  style={{ background: '#090a0d', color: '#eeefed' }}
                   value={alertConditionType}
-                  onChange={(e) => {
-                    const type = e.target.value;
-                    setAlertConditionType(type);
-                    if (type === 'touches_yo') {
-                      setAlertTargetPrice(selectedCoinForAlert.yo.toString());
-                    }
-                  }}
+                  onChange={(e) => setAlertConditionType(e.target.value)}
                 >
                   <option value="price_above">Price crosses ABOVE target</option>
                   <option value="price_below">Price drops BELOW target</option>
-                  <option value="touches_yo">Touches 2026 Yearly Open (${selectedCoinForAlert.yo})</option>
-                  <option value="rock_holder">Holds Like A Rock during BTC dip (+2.5% Delta)</option>
+                  <option value="at_val">Touches Value Area Low (VAL)</option>
                 </select>
               </div>
 
-              {alertConditionType !== 'touches_yo' && alertConditionType !== 'rock_holder' && (
-                <div className="modal-form-group">
-                  <label className="modal-form-label">
-                    Target Price (Current: {selectedCoinForAlert.priceFormatted})
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="modal-input"
-                    placeholder="e.g. 150.00"
-                    value={alertTargetPrice}
-                    onChange={(e) => setAlertTargetPrice(e.target.value)}
-                    required
-                  />
-                </div>
-              )}
+              <div className="modal-form-group">
+                <label className="modal-form-label" style={{ color: '#8b9299' }}>
+                  Target Price (Current Spot: ${selectedCoinForAlert.spot})
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  className="modal-input"
+                  style={{ background: '#090a0d', color: '#eeefed' }}
+                  placeholder="Target price..."
+                  value={alertTargetPrice}
+                  onChange={(e) => setAlertTargetPrice(e.target.value)}
+                  required
+                />
+              </div>
 
               <div className="modal-form-group">
-                <label className="modal-form-label">Custom Note (Optional)</label>
+                <label className="modal-form-label" style={{ color: '#8b9299' }}>Custom Note (Optional)</label>
                 <input
                   type="text"
                   className="modal-input"
-                  placeholder="e.g. Look for SFP rejection, enter swing long..."
+                  style={{ background: '#090a0d', color: '#eeefed' }}
+                  placeholder="e.g. Prior Year VAL bounce entry..."
                   value={alertNote}
                   onChange={(e) => setAlertNote(e.target.value)}
                 />
               </div>
 
               <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem' }}>
-                <button type="submit" className="alts-btn alts-btn-yellow" style={{ flex: 1, justifyContent: 'center' }}>
+                <button
+                  type="submit"
+                  className="alts-btn"
+                  style={{ flex: 1, justifyContent: 'center', background: '#2dd4bf', color: '#090a0d', fontWeight: 800 }}
+                >
                   <IconCheck size={16} />
                   <span>Save Alert</span>
                 </button>
-                <button
-                  type="button"
-                  className="alts-btn alts-btn-ghost"
-                  onClick={() => setShowAddModal(false)}
-                >
+                <button type="button" className="alts-btn alts-btn-ghost" onClick={() => setShowAddModal(false)}>
                   Cancel
                 </button>
               </div>
@@ -1001,85 +688,23 @@ export default function AltsTapeReader() {
         </div>
       )}
 
-      {/* ── Discord / Telegram Webhook Modal ── */}
-      {showWebhookSettings && (
-        <div className="alts-modal-overlay" onClick={() => setShowWebhookSettings(false)}>
-          <div className="alts-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">
-                <IconZap size={18} color="var(--wolf-yellow-bright)" />
-                Mobile Alerts Webhook (Discord / Telegram)
-              </span>
-              <button className="modal-close-btn" onClick={() => setShowWebhookSettings(false)}>
-                <IconX size={16} />
-              </button>
-            </div>
-
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-              Want your phone to buzz when an alert triggers while you are away from the computer? Paste a Discord channel webhook URL.
-              Wolf Tape Reader will dispatch an instant embed directly to your Discord/Telegram channel!
-            </p>
-
-            <div className="modal-form-group">
-              <label className="modal-form-label">Discord Webhook URL</label>
-              <input
-                type="url"
-                className="modal-input"
-                placeholder="https://discord.com/api/webhooks/..."
-                value={discordWebhook}
-                onChange={(e) => saveWebhook(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem' }}>
-              <button
-                className="alts-btn alts-btn-yellow"
-                style={{ flex: 1, justifyContent: 'center' }}
-                onClick={() => {
-                  if (discordWebhook && discordWebhook.startsWith('http')) {
-                    fetch(discordWebhook, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        content: '🐺 **Wolf Tape Reader Test Notification**: Your mobile alerts are active and ready!',
-                      }),
-                    }).then(() => {
-                      addToast({ id: Date.now(), title: 'Webhook Test Sent', message: 'Check your Discord/Telegram channel!' });
-                    }).catch(() => {
-                      alert('Could not dispatch to webhook URL. Please check the URL.');
-                    });
-                  }
-                  setShowWebhookSettings(false);
-                }}
-              >
-                <IconCheck size={16} />
-                <span>Save &amp; Test Webhook</span>
-              </button>
-              <button className="alts-btn alts-btn-ghost" onClick={() => setShowWebhookSettings(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Toast Floating Notifications ── */}
       <div className="alert-toast-container">
         {toasts.map((toast) => (
-          <div key={toast.id} className="alert-toast">
-            <IconBell size={20} color="var(--wolf-yellow-bright)" />
+          <div key={toast.id} className="alert-toast" style={{ background: '#0e1014', borderColor: '#2dd4bf' }}>
+            <IconBell size={20} color="#2dd4bf" />
             <div style={{ flex: 1 }}>
-              <strong style={{ color: 'var(--wolf-yellow-bright)', fontSize: '0.85rem' }}>{toast.title}</strong>
-              <div style={{ color: '#fff', fontSize: '0.78rem', marginTop: '0.1rem' }}>{toast.message}</div>
+              <strong style={{ color: '#2dd4bf', fontSize: '0.85rem' }}>{toast.title}</strong>
+              <div style={{ color: '#eeefed', fontSize: '0.78rem', marginTop: '0.1rem' }}>{toast.message}</div>
               {toast.note && (
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.1rem' }}>
+                <div style={{ color: '#8b9299', fontSize: '0.72rem', marginTop: '0.1rem' }}>
                   &ldquo;{toast.note}&rdquo;
                 </div>
               )}
             </div>
             <button
               onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
-              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              style={{ background: 'none', border: 'none', color: '#8b9299', cursor: 'pointer' }}
             >
               <IconX size={14} />
             </button>
