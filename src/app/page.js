@@ -8,6 +8,7 @@ import WolfKeyLevels from '@/components/WolfKeyLevels';
 import AltsTapeReader from '@/components/AltsTapeReader';
 import MacroWhalesEtf from '@/components/MacroWhalesEtf';
 import WeeklyForecast from '@/components/WeeklyForecast';
+import TwinPatternScanner from '@/components/TwinPatternScanner';
 import BootIntroSequence from '@/components/BootIntroSequence';
 import {
   IconBitcoin,
@@ -17,6 +18,7 @@ import {
   IconRadar,
   IconBarChart,
   IconRefresh,
+  IconZap,
   IconPin,
   IconAlertTriangle,
   IconShield,
@@ -334,6 +336,14 @@ export default function Home() {
                 <span className="alts-count-chip">55</span>
               </button>
               <button
+                className={`mobile-nav-item ${activeTab === 'twin' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('twin'); setMobileMenuOpen(false); }}
+              >
+                <IconZap size={18} color={activeTab === 'twin' ? '#38bdf8' : '#888888'} />
+                <span>Twin Pattern Scanner</span>
+                <span style={{ marginLeft: 'auto', background: '#38bdf8', color: '#000000', fontSize: '0.62rem', fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>AI</span>
+              </button>
+              <button
                 className={`mobile-nav-item ${activeTab === 'macro' ? 'active' : ''}`}
                 onClick={() => { setActiveTab('macro'); setMobileMenuOpen(false); }}
               >
@@ -548,6 +558,11 @@ export default function Home() {
               <span style={{ color: activeTab === 'alts' ? '#38bdf8' : undefined }}>Alts Value Area (VAL/VAH)</span>
               <span style={{ background: '#2dd4bf', color: '#000000', fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>55</span>
             </button>
+            <button id="tab-twin" className={`tab-btn ${activeTab === 'twin' ? 'active' : ''}`} onClick={() => setActiveTab('twin')}>
+              <IconZap size={15} color={activeTab === 'twin' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'twin' ? '#38bdf8' : undefined }}>Twin Pattern Scanner</span>
+              <span style={{ background: '#38bdf8', color: '#000000', fontSize: '0.62rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>AI</span>
+            </button>
             <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => setActiveTab('macro')}>
               <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'macro' ? '#38bdf8' : undefined }}>Whales • MVRV • ETFs</span>
@@ -566,6 +581,11 @@ export default function Home() {
           {/* ── 2. ALTS VALUE AREA TAPE READER VIEW ── */}
           {activeTab === 'alts' && (
             <AltsTapeReader />
+          )}
+
+          {/* ── 2B. TWIN PATTERN SCANNER VIEW (Direct Main Tab) ── */}
+          {activeTab === 'twin' && (
+            <TwinPatternScanner />
           )}
 
           {/* ── 3. MACRO WHALES & ETF VIEW ── */}
@@ -596,6 +616,13 @@ export default function Home() {
         >
           <IconRadar size={18} />
           <span>Alts</span>
+        </button>
+        <button
+          className={`mobile-bottom-btn ${activeTab === 'twin' ? 'active' : ''}`}
+          onClick={() => setActiveTab('twin')}
+        >
+          <IconZap size={18} />
+          <span>Twin Scan</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'macro' ? 'active' : ''}`}
