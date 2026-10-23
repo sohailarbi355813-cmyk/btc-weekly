@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./week-pattern.css";
 import "./wolf-levels.css";
+import "./alts-tape.css";
 
 
 const geistSans = Geist({
@@ -15,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Wolf Tape Read — Key Levels & Statistical Tape Analysis",
-  description: "Wolf Tape Read: Real-time key levels, auction price ladder, previous week high/low, and statistical trading patterns for Bitcoin. Trading the tape, with precision.",
+  title: "Wolf Tape Reader — Key Levels, Statistical Tape & Alts Radar",
+  description: "Wolf Tape Reader: Real-time key levels, auction price ladder, previous week high/low, relative strength alts tape, and statistical trading patterns. Trading the tape, with precision.",
   keywords: "wolf tape read, btc levels, key levels, pdh, pdl, pwh, pwl, weekly open, orderflow, bitcoin, crypto tape reading",
   icons: {
     icon: [

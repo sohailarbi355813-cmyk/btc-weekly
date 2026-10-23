@@ -5,6 +5,7 @@ import { getTodayBias } from '@/lib/biasEngine';
 import { buildWeeklyProfiles, findSimilarWeeks } from '@/lib/weekPatternEngine';
 import { calculateWolfKeyLevels } from '@/lib/wolfLevelsEngine';
 import WolfKeyLevels from '@/components/WolfKeyLevels';
+import AltsTapeReader from '@/components/AltsTapeReader';
 import {
   IconBitcoin,
   IconTrendUp,
@@ -451,8 +452,8 @@ export default function Home() {
                 <IconWolf size={20} color="var(--wolf-yellow-bright)" />
               </div>
               <div className="logo-text">
-                <h1>Wolf Tape Read</h1>
-                <span>Trading The Tape, With Precision &middot; Key Levels &amp; Bias</span>
+                <h1>Wolf Tape Reader</h1>
+                <span>Trading The Tape, With Precision &middot; Key Levels, Alts &amp; Bias</span>
               </div>
             </div>
             <div className="header-right">
@@ -599,6 +600,11 @@ export default function Home() {
               <IconWolf size={15} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-yellow)'} />
               <span style={{ color: activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : undefined }}>Wolf Key Levels</span>
             </button>
+            <button id="tab-alts" className={`tab-btn ${activeTab === 'alts' ? 'active' : ''}`} onClick={() => setActiveTab('alts')}>
+              <IconRadar size={15} color={activeTab === 'alts' ? 'var(--wolf-yellow-bright)' : undefined} />
+              <span style={{ color: activeTab === 'alts' ? 'var(--wolf-yellow-bright)' : undefined }}>Alts Tape Reader</span>
+              <span style={{ background: 'var(--wolf-yellow)', color: '#0b0e14', fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>55</span>
+            </button>
             <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => setActiveTab('pattern')}>
               <IconRadar size={15} />
               <span>Week Pattern Match</span>
@@ -620,6 +626,11 @@ export default function Home() {
           {/* ── WOLF KEY LEVELS VIEW ── */}
           {activeTab === 'levels' && (
             <WolfKeyLevels levelsData={wolfLevels} />
+          )}
+
+          {/* ── ALTS TAPE READER VIEW ── */}
+          {activeTab === 'alts' && (
+            <AltsTapeReader />
           )}
 
           {/* ── WEEK PATTERN MATCHING VIEW ── */}

@@ -174,10 +174,12 @@ body::after {
 
 .logo-text h1 {
   font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.35rem;
+  font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.2;
+  color: #facc15;
+  text-shadow: 0 0 20px rgba(250, 204, 21, 0.45);
 }
 
 .logo-text span {
