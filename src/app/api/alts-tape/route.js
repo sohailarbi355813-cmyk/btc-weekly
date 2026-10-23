@@ -43,10 +43,10 @@ export async function GET() {
       }
     }
 
-    // Helper to format distance text and detect close pivots (within 1.2%)
-    function formatDist(spot, pivotLevel) {
+    // Helper to format distance text and detect close pivots
+    function formatDist(spot, pivotLevel, label) {
       if (!pivotLevel || !spot) {
-        return { dist: 0, text: '--', isClose: false, level: 0 };
+        return { dist: 0, text: '--', isClose: false, level: 0, label };
       }
       const d = ((spot - pivotLevel) / pivotLevel) * 100;
       const absD = Math.abs(d);
@@ -67,10 +67,10 @@ export async function GET() {
         text,
         isClose,
         level: Number(pivotLevel.toFixed(4)),
+        label,
       };
     }
 
-    // 2. Build Bullish States (VAL Lows) and Bearish States (VAH Highs)
     const bullishList = [];
     const bearishList = [];
 
@@ -85,18 +85,19 @@ export async function GET() {
       const shortSymbol = item.symbol.replace('1000', '').replace('USDT', '');
 
       // ─── Bullish State: Value Area Low (VAL) distances ───
-      const pY_val = formatDist(spot, p.py.val);
-      const Y_val = formatDist(spot, p.y.val);
-      const pQ_val = formatDist(spot, p.pq.val);
-      const Q_val = formatDist(spot, p.q.val);
-      const pM_val = formatDist(spot, p.pm.val);
-      const M_val = formatDist(spot, p.m.val);
-      const pW_val = formatDist(spot, p.pw.val);
-      const W_val = formatDist(spot, p.w.val);
+      const pY_val = formatDist(spot, p.py.val, 'Prior Year VAL');
+      const Y_val = formatDist(spot, p.y.val, 'Current Year VAL');
+      const pQ_val = formatDist(spot, p.pq.val, 'Prior Quarter VAL');
+      const Q_val = formatDist(spot, p.q.val, 'Current Quarter VAL');
+      const pM_val = formatDist(spot, p.pm.val, 'Prior Month VAL');
+      const M_val = formatDist(spot, p.m.val, 'Current Month VAL');
+      const pW_val = formatDist(spot, p.pw.val, 'Prior Week VAL');
+      const W_val = formatDist(spot, p.w.val, 'Current Week VAL');
 
       const valArr = [pY_val, Y_val, pQ_val, Q_val, pM_val, M_val, pW_val, W_val];
       const minAbsValDist = Math.min(...valArr.map((x) => Math.abs(x.dist)));
       const hasValHighlight = valArr.some((x) => x.isClose);
+      const closestVal = valArr.reduce((prev, curr) => (Math.abs(curr.dist) < Math.abs(prev.dist) ? curr : prev), valArr[0]);
 
       bullishList.push({
         symbol: shortSymbol,
@@ -112,23 +113,25 @@ export async function GET() {
         pW: pW_val,
         W: W_val,
         state: 'BULL',
-        minAbsDist: minAbsValDist,
+        minAbsDist: Number(minAbsValDist.toFixed(2)),
         hasHighlight: hasValHighlight,
+        closest: closestVal,
       });
 
       // ─── Bearish State: Value Area High (VAH) distances ───
-      const pY_vah = formatDist(spot, p.py.vah);
-      const Y_vah = formatDist(spot, p.y.vah);
-      const pQ_vah = formatDist(spot, p.pq.vah);
-      const Q_vah = formatDist(spot, p.q.vah);
-      const pM_vah = formatDist(spot, p.pm.vah);
-      const M_vah = formatDist(spot, p.m.vah);
-      const pW_vah = formatDist(spot, p.pw.vah);
-      const W_vah = formatDist(spot, p.w.vah);
+      const pY_vah = formatDist(spot, p.py.vah, 'Prior Year VAH');
+      const Y_vah = formatDist(spot, p.y.vah, 'Current Year VAH');
+      const pQ_vah = formatDist(spot, p.pq.vah, 'Prior Quarter VAH');
+      const Q_vah = formatDist(spot, p.q.vah, 'Current Quarter VAH');
+      const pM_vah = formatDist(spot, p.pm.vah, 'Prior Month VAH');
+      const M_vah = formatDist(spot, p.m.vah, 'Current Month VAH');
+      const pW_vah = formatDist(spot, p.pw.vah, 'Prior Week VAH');
+      const W_vah = formatDist(spot, p.w.vah, 'Current Week VAH');
 
       const vahArr = [pY_vah, Y_vah, pQ_vah, Q_vah, pM_vah, M_vah, pW_vah, W_vah];
       const minAbsVahDist = Math.min(...vahArr.map((x) => Math.abs(x.dist)));
       const hasVahHighlight = vahArr.some((x) => x.isClose);
+      const closestVah = vahArr.reduce((prev, curr) => (Math.abs(curr.dist) < Math.abs(prev.dist) ? curr : prev), vahArr[0]);
 
       bearishList.push({
         symbol: shortSymbol,
@@ -144,8 +147,9 @@ export async function GET() {
         pW: pW_vah,
         W: W_vah,
         state: 'BEAR',
-        minAbsDist: minAbsVahDist,
+        minAbsDist: Number(minAbsVahDist.toFixed(2)),
         hasHighlight: hasVahHighlight,
+        closest: closestVah,
       });
     });
 

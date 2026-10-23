@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   IconRadar,
   IconRefresh,
@@ -17,6 +17,7 @@ import { playAlertChime } from '@/lib/alertSound';
 
 const STORAGE_KEY_ALERTS = 'wolf_tape_reader_alerts_v1';
 const STORAGE_KEY_SOUND = 'wolf_tape_reader_sound_muted';
+const STORAGE_KEY_AUTO_ALERT = 'wolf_tape_auto_alert_support_res';
 
 export default function AltsTapeReader() {
   const [data, setData] = useState(null);
@@ -24,12 +25,19 @@ export default function AltsTapeReader() {
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  // Sub-Tabs: 'bull' (Bullish States) | 'bear' (Bearish States) | 'alerts' (Alerts Manager)
+  // Sub-Tabs: 'bull' (Bullish States - VAL Support) | 'bear' (Bearish States - VAH Resistance) | 'alerts'
   const [activeTab, setActiveTab] = useState('bull');
   const [searchQuery, setSearchQuery] = useState('');
   const [soundMuted, setSoundMuted] = useState(false);
 
-  // Alerts Management (Unlimited stored in localStorage)
+  // Proximity Threshold Filter: 'strike' (≤ 1.2% - Testing level right now) | 'near' (≤ 2.5%) | 'all'
+  const [proximityFilter, setProximityFilter] = useState('strike');
+
+  // Auto-Alert on Support / Resistance Hits (Sends notification when ANY coin hits VAL or VAH)
+  const [autoAlertEnabled, setAutoAlertEnabled] = useState(true);
+  const notifiedPivotsRef = useRef(new Set()); // avoids duplicate spam within session
+
+  // Alerts Management (Unlimited custom stored in localStorage)
   const [alerts, setAlerts] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCoinForAlert, setSelectedCoinForAlert] = useState(null);
@@ -41,7 +49,7 @@ export default function AltsTapeReader() {
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [showWebhookSettings, setShowWebhookSettings] = useState(false);
 
-  // Load sound & saved alerts on mount
+  // Load sound, webhook, auto-alert & saved alerts on mount
   useEffect(() => {
     try {
       if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -49,6 +57,9 @@ export default function AltsTapeReader() {
       }
       const savedMuted = localStorage.getItem(STORAGE_KEY_SOUND);
       if (savedMuted !== null) setSoundMuted(savedMuted === 'true');
+
+      const savedAuto = localStorage.getItem(STORAGE_KEY_AUTO_ALERT);
+      if (savedAuto !== null) setAutoAlertEnabled(savedAuto === 'true');
 
       const savedWebhook = localStorage.getItem('wolf_tape_discord_webhook');
       if (savedWebhook) setDiscordWebhook(savedWebhook);
@@ -68,12 +79,21 @@ export default function AltsTapeReader() {
       setNotifPermission(res);
       if (res === 'granted') {
         new Notification('🐺 Wolf Tape Reader', {
-          body: 'Desktop Alerts Enabled! You will be notified even with the tab minimized.',
+          body: 'Desktop Alerts Enabled! You will be notified whenever coins test VAL support or VAH resistance.',
           icon: '/icon.svg',
         });
         playAlertChime();
       }
     }
+  };
+
+  const toggleAutoAlert = () => {
+    const next = !autoAlertEnabled;
+    setAutoAlertEnabled(next);
+    try {
+      localStorage.setItem(STORAGE_KEY_AUTO_ALERT, next ? 'true' : 'false');
+    } catch (e) {}
+    if (next) playAlertChime();
   };
 
   const saveWebhook = (url) => {
@@ -111,15 +131,18 @@ export default function AltsTapeReader() {
       setLastUpdated(new Date());
       setError(null);
 
-      // Check alerts
-      checkAlerts(json.bullishStates, json.bearishStates);
+      // 1. Run Automated Support / Resistance Pivot Scanner (sends alerts for close levels!)
+      runAutoPivotScanner(json.bullishStates, json.bearishStates);
+
+      // 2. Check Custom User Alerts
+      checkCustomAlerts(json.bullishStates, json.bearishStates);
     } catch (err) {
       console.error('Fetch error:', err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoAlertEnabled, discordWebhook]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto refresh interval (every 10 seconds)
   useEffect(() => {
@@ -149,8 +172,64 @@ export default function AltsTapeReader() {
     window.addEventListener('focus', resetOnFocus);
   };
 
-  // Alert Evaluation Engine
-  const checkAlerts = (bullList, bearList) => {
+  // Automated Support / Resistance Scanner
+  // Sends notification when ANY coin is close to / testing a VAL or VAH level!
+  const runAutoPivotScanner = (bullList, bearList) => {
+    if (!autoAlertEnabled) return;
+
+    const scanList = [
+      ...(bullList || []).map((x) => ({ ...x, type: 'SUPPORT (VAL)' })),
+      ...(bearList || []).map((x) => ({ ...x, type: 'RESISTANCE (VAH)' })),
+    ];
+
+    scanList.forEach((coin) => {
+      if (coin.minAbsDist <= 1.0) {
+        const pivotKey = `${coin.symbol}_${coin.closest?.label}`;
+        if (!notifiedPivotsRef.current.has(pivotKey)) {
+          notifiedPivotsRef.current.add(pivotKey);
+
+          const title = `🎯 ${coin.type}: $${coin.symbol}`;
+          const body = `${coin.symbol} is testing ${coin.closest?.label} at $${coin.closest?.level} (Spot: $${coin.spot}, ${coin.closest?.dist}% dist). Watch for reaction!`;
+
+          // In-app toast
+          addToast({
+            id: Date.now() + Math.random(),
+            title,
+            message: body,
+          });
+
+          // Native Desktop Notification
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification(title, { body, icon: '/icon.svg', requireInteraction: true });
+            } catch (e) {}
+          }
+
+          // Sound
+          if (!soundMuted) playAlertChime();
+
+          // Flashing Tab Title
+          flashTabTitle(`🎯 [${coin.symbol}] AT ${coin.closest?.label}!`);
+
+          // Discord Webhook
+          if (discordWebhook && discordWebhook.startsWith('http')) {
+            try {
+              fetch(discordWebhook, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: `🐺 **Wolf Tape Reader Pivot Alert!**\n**Setup**: \`${coin.type}\`\n**Asset**: \`$${coin.symbol}\`\n**Level**: \`${coin.closest?.label}\` at \`$${coin.closest?.level}\`\n**Live Spot**: \`$${coin.spot}\` (Distance: \`${coin.closest?.dist}%\`)`,
+                }),
+              }).catch(() => {});
+            } catch (e) {}
+          }
+        }
+      }
+    });
+  };
+
+  // Custom User Alerts Evaluation
+  const checkCustomAlerts = (bullList, bearList) => {
     if (!alerts.length) return;
     const combined = [...(bullList || []), ...(bearList || [])];
 
@@ -170,16 +249,16 @@ export default function AltsTapeReader() {
       } else if (a.type === 'price_below' && coin.spot <= a.targetPrice) {
         isTriggered = true;
         triggerMsg = `${coin.symbol} dropped BELOW $${a.targetPrice}`;
-      } else if (a.type === 'at_val' && coin.pY?.isClose) {
+      } else if (a.type === 'at_val' && coin.minAbsDist <= 1.0) {
         isTriggered = true;
-        triggerMsg = `${coin.symbol} reached Prior Year VAL at $${coin.pY?.level}`;
+        triggerMsg = `${coin.symbol} is at ${coin.closest?.label} ($${coin.closest?.level})`;
       }
 
       if (isTriggered) {
         triggeredAny = true;
         addToast({
           id: Date.now() + Math.random(),
-          title: `ALERT: ${coin.symbol}`,
+          title: `CUSTOM ALERT: ${coin.symbol}`,
           message: triggerMsg,
           note: a.note,
         });
@@ -195,18 +274,6 @@ export default function AltsTapeReader() {
         }
 
         flashTabTitle(`🚨 [ALERT] ${coin.symbol}!`);
-
-        if (discordWebhook && discordWebhook.startsWith('http')) {
-          try {
-            fetch(discordWebhook, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                content: `🐺 **Wolf Tape Reader Alert!**\n**Symbol**: \`${coin.symbol}\`\n**Condition**: ${triggerMsg}\n**Spot**: \`$${coin.spot}\`${a.note ? `\n**Note**: _${a.note}_` : ''}`,
-              }),
-            }).catch(() => {});
-          } catch (err) {}
-        }
 
         return { ...a, triggered: true, triggeredAt: new Date().toLocaleTimeString() };
       }
@@ -256,7 +323,7 @@ export default function AltsTapeReader() {
     addToast({
       id: Date.now(),
       title: 'Alert Created',
-      message: `Watching ${newAlert.symbol} for ${alertConditionType.replace('_', ' ')} $${newAlert.targetPrice}`,
+      message: `Watching ${newAlert.symbol} at $${newAlert.targetPrice}`,
     });
   };
 
@@ -275,17 +342,36 @@ export default function AltsTapeReader() {
     setShowAddModal(true);
   };
 
-  // Filter current active list (Bullish or Bearish)
+  // Filter current active list by Proximity Threshold (Strike Zone vs Nearby vs All)
   const currentList = useMemo(() => {
     if (!data) return [];
     let list = activeTab === 'bull' ? [...(data.bullishStates || [])] : [...(data.bearishStates || [])];
 
+    // Filter by Proximity
+    if (proximityFilter === 'strike') {
+      // Coins testing a level right now (within <= 1.2%)
+      list = list.filter((item) => item.hasHighlight || item.minAbsDist <= 1.2);
+    } else if (proximityFilter === 'near') {
+      // Coins within <= 2.5%
+      list = list.filter((item) => item.minAbsDist <= 2.5);
+    }
+
+    // Search query filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter((item) => item.symbol.toLowerCase().includes(q) || item.name.toLowerCase().includes(q));
     }
     return list;
-  }, [data, activeTab, searchQuery]);
+  }, [data, activeTab, proximityFilter, searchQuery]);
+
+  // Counts of coins in strike zone
+  const strikeCounts = useMemo(() => {
+    if (!data) return { bullStrike: 0, bearStrike: 0 };
+    return {
+      bullStrike: (data.bullishStates || []).filter((x) => x.hasHighlight || x.minAbsDist <= 1.2).length,
+      bearStrike: (data.bearishStates || []).filter((x) => x.hasHighlight || x.minAbsDist <= 1.2).length,
+    };
+  }, [data]);
 
   return (
     <div className="va-terminal-wrapper">
@@ -296,16 +382,16 @@ export default function AltsTapeReader() {
             className={`va-tab-btn tab-bull ${activeTab === 'bull' ? 'active' : ''}`}
             onClick={() => setActiveTab('bull')}
           >
-            <span>Bullish States</span>
-            <span className="va-tab-count">{data?.bullishStates?.length || 55}</span>
+            <span>Bullish States (Support at VAL)</span>
+            <span className="va-tab-count">{strikeCounts.bullStrike} at VAL</span>
           </button>
 
           <button
             className={`va-tab-btn tab-bear ${activeTab === 'bear' ? 'active' : ''}`}
             onClick={() => setActiveTab('bear')}
           >
-            <span>Bearish States</span>
-            <span className="va-tab-count">{data?.bearishStates?.length || 55}</span>
+            <span>Bearish States (Resistance at VAH)</span>
+            <span className="va-tab-count">{strikeCounts.bearStrike} at VAH</span>
           </button>
 
           <button
@@ -319,32 +405,20 @@ export default function AltsTapeReader() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
-              className="va-search-input"
-              placeholder="Search symbol (e.g. INJ, SUI)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                style={{
-                  position: 'absolute',
-                  right: '8px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  color: '#8b9299',
-                  cursor: 'pointer',
-                }}
-              >
-                <IconX size={12} />
-              </button>
-            )}
-          </div>
+          {/* Auto-Alert on Support / Resistance Hits Toggle */}
+          <button
+            className="va-tab-btn"
+            style={{
+              color: autoAlertEnabled ? '#2dd4bf' : '#8b9299',
+              background: autoAlertEnabled ? 'rgba(45, 212, 191, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+              border: `1px solid ${autoAlertEnabled ? 'rgba(45, 212, 191, 0.35)' : 'rgba(255, 255, 255, 0.08)'}`,
+            }}
+            onClick={toggleAutoAlert}
+            title="Automatically send notification whenever ANY coin tests a VAL Support or VAH Resistance pivot"
+          >
+            <IconZap size={14} />
+            <span>Auto-Alert on Pivots: {autoAlertEnabled ? 'ON' : 'OFF'}</span>
+          </button>
 
           {notifPermission !== 'granted' && (
             <button
@@ -354,9 +428,19 @@ export default function AltsTapeReader() {
               title="Enable Windows Desktop Popups"
             >
               <IconBell size={13} />
-              <span>Enable Alerts</span>
+              <span>Enable Desktop Alerts</span>
             </button>
           )}
+
+          <button
+            className="va-tab-btn"
+            onClick={() => setShowWebhookSettings(true)}
+            title="Configure Telegram / Discord Webhook for Mobile Phone Alerts"
+          >
+            <span style={{ fontSize: '0.78rem', color: discordWebhook ? '#2dd4bf' : '#8b9299' }}>
+              {discordWebhook ? 'Webhook Linked' : 'Webhook'}
+            </span>
+          </button>
 
           <button
             className="va-tab-btn"
@@ -404,7 +488,7 @@ export default function AltsTapeReader() {
           {alerts.length === 0 ? (
             <div style={{ padding: '3rem', textAlign: 'center', color: '#636b73' }}>
               <IconBell size={28} style={{ marginBottom: '0.5rem' }} />
-              <p>No active alerts. Click any coin or pivot to set an alert!</p>
+              <p>No active alerts. Click any coin row in the table to set an alert!</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -452,24 +536,47 @@ export default function AltsTapeReader() {
           )}
         </div>
       ) : (
-        /* ── EXACT VYAPS.XYZ 8-PIVOT TABLE (BULLISH OR BEARISH) ── */
+        /* ── EXACT VYAPS.XYZ 8-PIVOT TABLE (FILTERED BY PROXIMITY) ── */
         <div className="vyaps-card">
           <div className="vyaps-card-header">
             <span className="vyaps-brand">vyaps.xyz</span>
             <span className="vyaps-title">
               {activeTab === 'bull' ? 'Bullish States' : 'Bearish States'}
             </span>
-            <div className="vyaps-meta">
-              <span>{activeTab === 'bull' ? 'Value Area Lows (VAL)' : 'Value Area Highs (VAH)'}</span>
-              <span>&bull;</span>
-              <span>Synced {lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
+
+            {/* Proximity Filter Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#090a0d', padding: '0.25rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <button
+                className={`va-tab-btn ${proximityFilter === 'strike' ? 'active' : ''}`}
+                style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem' }}
+                onClick={() => setProximityFilter('strike')}
+                title="Show only coins actively testing a level (within <= 1.2% distance)"
+              >
+                🎯 In Strike Zone ({activeTab === 'bull' ? strikeCounts.bullStrike : strikeCounts.bearStrike})
+              </button>
+              <button
+                className={`va-tab-btn ${proximityFilter === 'near' ? 'active' : ''}`}
+                style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem' }}
+                onClick={() => setProximityFilter('near')}
+                title="Show coins within <= 2.5% distance"
+              >
+                Nearby (&le; 2.5%)
+              </button>
+              <button
+                className={`va-tab-btn ${proximityFilter === 'all' ? 'active' : ''}`}
+                style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem' }}
+                onClick={() => setProximityFilter('all')}
+                title="Show all 55 coins"
+              >
+                All (55)
+              </button>
             </div>
           </div>
 
           {loading && !data ? (
             <div style={{ padding: '3.5rem', textAlign: 'center', color: '#636b73' }}>
               <IconRefresh size={26} className="spin" style={{ marginBottom: '0.5rem' }} />
-              <p>Calibrating Value Area Pivots across pY, Y, pQ, Q, pM, M, pW, W...</p>
+              <p>Scanning 55 coins for Value Area Low &amp; High pivots...</p>
             </div>
           ) : (
             <div className="vyaps-table-wrapper">
@@ -492,7 +599,7 @@ export default function AltsTapeReader() {
                   {currentList.length === 0 ? (
                     <tr>
                       <td colSpan="10" style={{ padding: '3rem', textAlign: 'center', color: '#636b73' }}>
-                        No coins match your search.
+                        No coins currently in strike zone. Switch to &ldquo;Nearby&rdquo; or &ldquo;All (55)&rdquo; to see all distances.
                       </td>
                     </tr>
                   ) : (
@@ -501,7 +608,7 @@ export default function AltsTapeReader() {
                         key={row.symbol}
                         className="vyaps-row"
                         onClick={() => openAlertModalFor(row, row.spot)}
-                        title={`Click to set alert for ${row.symbol} at current spot $${row.spot}`}
+                        title={`Click to set alert for ${row.symbol} (Closest level: ${row.closest?.label} at $${row.closest?.level})`}
                       >
                         {/* 1. Symbol Cell */}
                         <td>
@@ -608,19 +715,82 @@ export default function AltsTapeReader() {
           )}
 
           <div className="vyaps-footer-note">
-            Highlighted teal cells indicate the asset is testing that exact Value Area pivot within &le; 1.0% distance.
+            Displaying coins currently at or close to Value Area Low (VAL) support pivots for bounce entries.
           </div>
         </div>
       )}
 
-      {/* ── Unlimited Alert Creation Modal ── */}
+      {/* ── Discord / Telegram Webhook Modal ── */}
+      {showWebhookSettings && (
+        <div className="alts-modal-overlay" onClick={() => setShowWebhookSettings(false)}>
+          <div className="alts-modal" onClick={(e) => e.stopPropagation()} style={{ background: '#0e1014', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div className="modal-header">
+              <span className="modal-title" style={{ color: '#2dd4bf' }}>
+                <IconZap size={18} />
+                Mobile Phone Webhook Alerts
+              </span>
+              <button className="modal-close-btn" onClick={() => setShowWebhookSettings(false)}>
+                <IconX size={16} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', color: '#8b9299', lineHeight: 1.4 }}>
+              Want your phone to buzz whenever an altcoin tests a VAL Support or VAH Resistance pivot?
+              Paste your Discord or Telegram webhook URL below. Wolf Tape Reader will push instant alerts straight to your phone lock-screen!
+            </p>
+
+            <div className="modal-form-group">
+              <label className="modal-form-label" style={{ color: '#8b9299' }}>Webhook URL</label>
+              <input
+                type="url"
+                className="modal-input"
+                style={{ background: '#090a0d', color: '#eeefed' }}
+                placeholder="https://discord.com/api/webhooks/..."
+                value={discordWebhook}
+                onChange={(e) => saveWebhook(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem' }}>
+              <button
+                className="alts-btn"
+                style={{ flex: 1, justifyContent: 'center', background: '#2dd4bf', color: '#090a0d', fontWeight: 800 }}
+                onClick={() => {
+                  if (discordWebhook && discordWebhook.startsWith('http')) {
+                    fetch(discordWebhook, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        content: '🐺 **Wolf Tape Reader Pivot Alert Engine Active!** Ready to send Value Area support and resistance hits directly to your phone!',
+                      }),
+                    }).then(() => {
+                      addToast({ id: Date.now(), title: 'Webhook Test Sent', message: 'Check your phone channel!' });
+                    }).catch(() => {
+                      alert('Could not dispatch to webhook URL. Please check the URL.');
+                    });
+                  }
+                  setShowWebhookSettings(false);
+                }}
+              >
+                <IconCheck size={16} />
+                <span>Save &amp; Test</span>
+              </button>
+              <button className="alts-btn alts-btn-ghost" onClick={() => setShowWebhookSettings(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom Alert Modal ── */}
       {showAddModal && selectedCoinForAlert && (
         <div className="alts-modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="alts-modal" onClick={(e) => e.stopPropagation()} style={{ background: '#0e1014', border: '1px solid rgba(255,255,255,0.1)' }}>
             <div className="modal-header">
               <span className="modal-title" style={{ color: '#2dd4bf' }}>
                 <IconBell size={18} />
-                Set Value Area Alert &bull; {selectedCoinForAlert.symbol}
+                Set Alert &bull; {selectedCoinForAlert.symbol}
               </span>
               <button className="modal-close-btn" onClick={() => setShowAddModal(false)}>
                 <IconX size={16} />
@@ -638,7 +808,7 @@ export default function AltsTapeReader() {
                 >
                   <option value="price_above">Price crosses ABOVE target</option>
                   <option value="price_below">Price drops BELOW target</option>
-                  <option value="at_val">Touches Value Area Low (VAL)</option>
+                  <option value="at_val">Touches Value Area Low (VAL Support)</option>
                 </select>
               </div>
 
@@ -664,7 +834,7 @@ export default function AltsTapeReader() {
                   type="text"
                   className="modal-input"
                   style={{ background: '#090a0d', color: '#eeefed' }}
-                  placeholder="e.g. Prior Year VAL bounce entry..."
+                  placeholder="e.g. Look for VAL support bounce entry..."
                   value={alertNote}
                   onChange={(e) => setAlertNote(e.target.value)}
                 />
