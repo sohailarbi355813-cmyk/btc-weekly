@@ -17,6 +17,7 @@ export default function WolfKeyLevels({ levelsData }) {
     dayRange,
     weeklyStats,
     monthlyStats,
+    previousWeekStats,
   } = levelsData;
 
   // Filter ladder rows while always preserving the LAST row
@@ -75,6 +76,54 @@ export default function WolfKeyLevels({ levelsData }) {
               </div>
             </div>
 
+            {/* Previous Week Range (PWH & PWL) */}
+            {previousWeekStats && (
+              <div style={{
+                background: 'rgba(250, 204, 21, 0.04)',
+                border: '1px solid rgba(250, 204, 21, 0.22)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 14px',
+                marginBottom: 16,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--wolf-yellow-bright)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                    Previous Week Range (PWH &middot; PWL)
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                    Range: ${Number(previousWeekStats.range).toLocaleString('en-US', { maximumFractionDigits: 0 })} ({previousWeekStats.rangePct}%)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', marginBottom: 8 }}>
+                  <div>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block' }}>PWL (Previous Week Low)</span>
+                    <span style={{ color: 'var(--wolf-support)', fontWeight: 600 }}>${Number(previousWeekStats.PWL).toLocaleString('en-US', { minimumFractionDigits: 1 })}</span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: 4 }}>({previousWeekStats.pctFromPWL >= 0 ? '+' : ''}{previousWeekStats.pctFromPWL}%)</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block' }}>PWH (Previous Week High)</span>
+                    <span style={{ color: 'var(--wolf-yellow-bright)', fontWeight: 600 }}>${Number(previousWeekStats.PWH).toLocaleString('en-US', { minimumFractionDigits: 1 })}</span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: 4 }}>({previousWeekStats.pctFromPWH >= 0 ? '+' : ''}{previousWeekStats.pctFromPWH}%)</span>
+                  </div>
+                </div>
+                <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', position: 'relative' }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: `${previousWeekStats.positionPct}%`,
+                    background: 'linear-gradient(90deg, #f87171, #facc15)',
+                    borderRadius: 99,
+                  }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
+                  <span>0% (PWL)</span>
+                  <span style={{ color: 'var(--wolf-yellow-bright)', fontWeight: 600 }}>Current Spot: {previousWeekStats.positionPct}% of Prev Week Range</span>
+                  <span>100% (PWH)</span>
+                </div>
+              </div>
+            )}
+
             {/* Range & Anchor Context */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
@@ -91,6 +140,7 @@ export default function WolfKeyLevels({ levelsData }) {
               </div>
             </div>
           </div>
+
 
           {/* Filter Bar */}
           <div className="wolf-filter-row">

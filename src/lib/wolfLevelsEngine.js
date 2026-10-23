@@ -167,6 +167,17 @@ export function calculateWolfKeyLevels(candles, currentPrice) {
       current: spot,
       rangePct: Math.round(((PDH - PDL) / PDL) * 100 * 100) / 100,
     },
+    previousWeekStats: {
+      PWH: Math.round(PWH * 10) / 10,
+      PWL: Math.round(PWL * 10) / 10,
+      PWC: Math.round(PWC * 10) / 10,
+      pctFromPWH: Math.round(((spot - PWH) / PWH) * 100 * 100) / 100,
+      pctFromPWL: Math.round(((spot - PWL) / PWL) * 100 * 100) / 100,
+      range: Math.round((PWH - PWL) * 10) / 10,
+      rangePct: Math.round(((PWH - PWL) / PWL) * 100 * 100) / 100,
+      positionPct: Math.round(Math.min(Math.max(((spot - PWL) / (PWH - PWL)) * 100, 0), 100)),
+      status: spot > PWH ? 'ABOVE_PWH' : spot < PWL ? 'BELOW_PWL' : 'INSIDE_PREV_WEEK_RANGE',
+    },
     weeklyStats: {
       WO,
       pctFromWO: Math.round(((spot - WO) / WO) * 100 * 100) / 100,
