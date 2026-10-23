@@ -1,5 +1,5 @@
-/* ─── Wolf Tape Reader: Value Area Terminal (Pitch Black + 2-Color Matte Minimalist) ─── */
-/* Two colors only: Yellow (#facc15) for positive values, White (#ffffff) for negative & text */
+/* ─── Wolf Tape Reader: Value Area Terminal (Pitch Black + Blue / Red / Green Professional Terminal) ─── */
+/* Colors: Blue (#38bdf8 / #3b82f6) for branding & UI, Green (#22c55e) for Bullish / VAL Support (+), Red (#ef4444) for Bearish / VAH Resistance (-) */
 /* Zero glowing/shining text, 100% pitch black background */
 
 .va-terminal-wrapper {
@@ -55,13 +55,15 @@
 }
 
 .va-tab-btn.active.tab-bull {
-  color: #facc15;
-  border-color: #facc15;
+  color: #22c55e;
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
 }
 
 .va-tab-btn.active.tab-bear {
-  color: #ffffff;
-  border-color: #666666;
+  color: #ef4444;
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .va-tab-count {
@@ -85,7 +87,7 @@
 }
 
 .va-search-input:focus {
-  border-color: #facc15;
+  border-color: #38bdf8;
 }
 
 /* ── Wolf Tape Reader Pitch Black Card ── */
@@ -111,8 +113,11 @@
   font-family: var(--font-mono, monospace);
   font-size: 1.15rem;
   font-weight: 700;
-  color: #facc15;
+  color: #38bdf8;
   letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .vyaps-title {
@@ -149,7 +154,7 @@
   padding: 0.75rem 0.85rem;
   font-size: 0.82rem;
   font-weight: 600;
-  color: #666666;
+  color: #777777;
   border-bottom: 1px solid #1a1a1a;
   background: #000000;
   text-transform: uppercase;
@@ -213,7 +218,7 @@
   justify-content: center;
   font-size: 0.65rem;
   font-weight: 700;
-  color: #ffffff;
+  color: #38bdf8;
   flex-shrink: 0;
 }
 
@@ -223,20 +228,20 @@
   color: #ffffff;
 }
 
-/* ── Flat Two-Color Styling (NO glowing / NO shining) ── */
-/* Positive = Yellow (#facc15), Negative = White (#ffffff) */
+/* ── Blue / Green / Red Color Styling (Matte, High-Contrast) ── */
+/* Positive = Green (#22c55e), Negative = Red (#ef4444) */
 
 .val-pos {
-  color: #facc15 !important;
+  color: #22c55e !important;
   font-weight: 600;
 }
 
 .val-neg {
-  color: #ffffff !important;
-  font-weight: 500;
+  color: #ef4444 !important;
+  font-weight: 600;
 }
 
-/* In-Strike-Zone Box (Testing Support / Resistance) */
+/* In-Strike-Zone Box (Testing Support VAL = Green / Testing Resistance VAH = Red) */
 .pivot-pill {
   display: inline-flex;
   align-items: center;
@@ -248,16 +253,16 @@
 }
 
 .pivot-pill.is-close {
-  background: rgba(250, 204, 21, 0.14);
-  color: #facc15 !important;
-  border: 1px solid #facc15;
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e !important;
+  border: 1px solid #22c55e;
   font-weight: 700;
 }
 
 .pivot-pill.is-close-bear {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff !important;
-  border: 1px solid #ffffff;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444 !important;
+  border: 1px solid #ef4444;
   font-weight: 700;
 }
 
@@ -270,13 +275,15 @@
 }
 
 .vyaps-state-badge.bull {
-  color: #facc15;
-  border: 1px solid rgba(250, 204, 21, 0.4);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.08);
 }
 
 .vyaps-state-badge.bear {
-  color: #ffffff;
-  border: 1px solid #444444;
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .vyaps-footer-note {

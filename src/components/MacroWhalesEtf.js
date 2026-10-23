@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import '../app/macro-whales.css';
-import { IconRefresh, IconRadar, IconBarChart, IconDatabase, IconZap, IconShield } from './Icons';
+import { IconRefresh, IconRadar, IconBarChart, IconDatabase, IconZap, IconShield, IconBlackFlag } from './Icons';
 
 export default function MacroWhalesEtf() {
   const [macroData, setMacroData] = useState(null);
@@ -46,7 +46,7 @@ export default function MacroWhalesEtf() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Format monetary amount in Millions ($M)
+  // Format monetary amount in Millions ($M): Green for +, Red for -
   const formatFlow = (val) => {
     if (val === undefined || val === null || val === 0) {
       return <span className="val-dim">--</span>;
@@ -55,20 +55,20 @@ export default function MacroWhalesEtf() {
     const sign = isPos ? '+' : '';
     const formatted = `${sign}${Number(val).toFixed(1)}M`;
     return (
-      <span className={isPos ? 'val-yellow' : 'val-white'}>
+      <span className={isPos ? 'val-green' : 'val-red'}>
         {formatted}
       </span>
     );
   };
 
-  // Format Large Cumulative ($B or $M)
+  // Format Large Cumulative ($B or $M): Green for +, Red for -
   const formatCumulative = (val) => {
     if (!val && val !== 0) return '--';
     const isPos = val > 0;
     const sign = isPos ? '+' : '';
     const inBillions = (val / 1000).toFixed(2);
     return (
-      <span className={isPos ? 'val-yellow' : 'val-white'}>
+      <span className={isPos ? 'val-green' : 'val-red'}>
         {sign}${inBillions}B
       </span>
     );
@@ -137,7 +137,10 @@ export default function MacroWhalesEtf() {
       {/* Header Bar */}
       <div className="macro-header-bar">
         <div className="macro-title-group">
-          <h2>WOLF TAPE // MACRO & INSTITUTIONAL FLOWS</h2>
+          <h2>
+            <IconBlackFlag size={22} />
+            WOLF TAPE // MACRO & INSTITUTIONAL FLOWS
+          </h2>
           <div className="macro-subtitle">
             REAL-TIME BINANCE WHALES L/S • ON-CHAIN MVRV RATIO • SPOT BITCOIN ETF FLOWS BY ISSUER
           </div>
@@ -164,17 +167,17 @@ export default function MacroWhalesEtf() {
       <div className="macro-ribbon">
         <div className="ribbon-card">
           <span className="ribbon-label">Whales Position L/S Ratio</span>
-          <span className="ribbon-value val-yellow">
+          <span className="ribbon-value val-green">
             {whales?.position?.ratio ? `${whales.position.ratio.toFixed(2)}x` : '--'}
           </span>
           <span className="ribbon-sub">
-            {whales?.position?.longPct}% Long • {whales?.position?.shortPct}% Short
+            <span className="val-green">{whales?.position?.longPct}% Long</span> • <span className="val-red">{whales?.position?.shortPct}% Short</span>
           </span>
         </div>
 
         <div className="ribbon-card">
           <span className="ribbon-label">Live MVRV Valuation</span>
-          <span className="ribbon-value val-yellow">
+          <span className="ribbon-value val-blue">
             {mvrv?.liveMVRV ? `${mvrv.liveMVRV.toFixed(2)}x` : '--'}
           </span>
           <span className="ribbon-sub">
@@ -188,7 +191,7 @@ export default function MacroWhalesEtf() {
             ${mvrv?.realizedPrice ? mvrv.realizedPrice.toLocaleString() : '--'}
           </span>
           <span className="ribbon-sub">
-            Spot: ${macroData?.spotPrice ? Number(macroData.spotPrice).toLocaleString() : '--'}
+            Spot: <span className="val-blue">${macroData?.spotPrice ? Number(macroData.spotPrice).toLocaleString() : '--'}</span>
           </span>
         </div>
 
@@ -229,13 +232,13 @@ export default function MacroWhalesEtf() {
             Top 20% institutional & high-capital accounts weighted by position size (not retail headcounts).
           </div>
 
-          {/* Visual Position Ratio Bar */}
+          {/* Visual Position Ratio Bar (Green for Long, Red for Short) */}
           <div className="ratio-bar-wrapper">
             <div className="ratio-bar-header">
-              <span className="val-yellow">LONGS: {whales?.position?.longPct}%</span>
-              <span className="val-white">SHORTS: {whales?.position?.shortPct}%</span>
+              <span className="val-green">LONGS: {whales?.position?.longPct}%</span>
+              <span className="val-red">SHORTS: {whales?.position?.shortPct}%</span>
             </div>
-            <div className="ratio-bar-track" title="Yellow = Longs, White = Shorts">
+            <div className="ratio-bar-track" title="Green = Longs, Red = Shorts">
               <div
                 className="ratio-bar-fill-long"
                 style={{ width: `${whales?.position?.longPct || 50}%` }}
@@ -256,29 +259,29 @@ export default function MacroWhalesEtf() {
             <tbody>
               <tr>
                 <td style={{ fontWeight: 700 }}>
-                  <span className="val-yellow">●</span> Top Trader Positions (Size-Weighted)
+                  <span className="val-green">●</span> Top Trader Positions (Size-Weighted)
                 </td>
-                <td style={{ textAlign: 'right' }} className="val-yellow">
+                <td style={{ textAlign: 'right' }} className="val-green">
                   {whales?.position?.longPct}%
                 </td>
-                <td style={{ textAlign: 'right' }} className="val-white">
+                <td style={{ textAlign: 'right' }} className="val-red">
                   {whales?.position?.shortPct}%
                 </td>
-                <td style={{ textAlign: 'right', fontWeight: 800 }} className="val-yellow">
+                <td style={{ textAlign: 'right', fontWeight: 800 }} className="val-blue">
                   {whales?.position?.ratio}x
                 </td>
               </tr>
               <tr>
                 <td style={{ fontWeight: 700 }}>
-                  <span className="val-yellow">●</span> Top Trader Accounts (Margin Balance)
+                  <span className="val-green">●</span> Top Trader Accounts (Margin Balance)
                 </td>
-                <td style={{ textAlign: 'right' }} className="val-yellow">
+                <td style={{ textAlign: 'right' }} className="val-green">
                   {whales?.accounts?.longPct}%
                 </td>
-                <td style={{ textAlign: 'right' }} className="val-white">
+                <td style={{ textAlign: 'right' }} className="val-red">
                   {whales?.accounts?.shortPct}%
                 </td>
-                <td style={{ textAlign: 'right', fontWeight: 800 }} className="val-yellow">
+                <td style={{ textAlign: 'right', fontWeight: 800 }} className="val-blue">
                   {whales?.accounts?.ratio}x
                 </td>
               </tr>
@@ -321,9 +324,9 @@ export default function MacroWhalesEtf() {
                         <td style={{ color: '#888888' }}>
                           {new Date(h.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
-                        <td style={{ textAlign: 'right' }} className="val-yellow">{h.longPct}%</td>
-                        <td style={{ textAlign: 'right' }} className="val-white">{h.shortPct}%</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }} className="val-yellow">{h.ratio}x</td>
+                        <td style={{ textAlign: 'right' }} className="val-green">{h.longPct}%</td>
+                        <td style={{ textAlign: 'right' }} className="val-red">{h.shortPct}%</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }} className="val-blue">{h.ratio}x</td>
                       </tr>
                     ))}
                   </tbody>
@@ -346,7 +349,7 @@ export default function MacroWhalesEtf() {
           <div className="mvrv-hero-box">
             <div className="mvrv-big-number">{mvrv?.liveMVRV ? mvrv.liveMVRV.toFixed(2) : '--'}</div>
             <div className="mvrv-hero-info">
-              <span className="mvrv-regime-pill">{mvrv?.regime || 'Accumulation'}</span>
+              <span className="mvrv-regime-pill">{mvrv?.regime || 'Fair Value'}</span>
               <span className="mvrv-regime-desc">
                 Current Bitcoin Market Cap is {mvrv?.liveMVRV}x aggregate purchase cost basis.
               </span>
@@ -356,7 +359,7 @@ export default function MacroWhalesEtf() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
             <div style={{ background: '#0a0a0a', border: '1px solid #222222', padding: '10px 12px', borderRadius: '4px' }}>
               <div style={{ fontSize: '0.7rem', color: '#777777', textTransform: 'uppercase' }}>Bitcoin Spot Price</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#facc15', fontFamily: 'monospace' }}>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'monospace' }}>
                 ${macroData?.spotPrice ? Number(macroData.spotPrice).toLocaleString() : '--'}
               </div>
             </div>
@@ -375,24 +378,24 @@ export default function MacroWhalesEtf() {
             </div>
 
             <div className={`band-row ${mvrv?.liveMVRV >= 3.5 ? 'active' : ''}`}>
-              <span style={{ color: '#ffffff' }}>&gt; 3.5x — Extreme Cycle Blow-Off Top</span>
-              <span style={{ fontFamily: 'monospace' }}>Euphoria / Maximum Risk</span>
+              <span style={{ color: '#ef4444' }}>&gt; 3.5x — Extreme Cycle Blow-Off Top</span>
+              <span style={{ fontFamily: 'monospace', color: '#ef4444' }}>Euphoria / Maximum Risk</span>
             </div>
             <div className={`band-row ${mvrv?.liveMVRV >= 2.4 && mvrv?.liveMVRV < 3.5 ? 'active' : ''}`}>
-              <span style={{ color: '#ffffff' }}>2.4x - 3.2x — Late-Bull Overheating</span>
+              <span style={{ color: '#ef4444' }}>2.4x - 3.2x — Late-Bull Overheating</span>
               <span style={{ fontFamily: 'monospace' }}>Heavy Distribution</span>
             </div>
             <div className={`band-row ${mvrv?.liveMVRV >= 1.5 && mvrv?.liveMVRV < 2.4 ? 'active' : ''}`}>
-              <span style={{ color: '#facc15' }}>1.5x - 2.4x — Fair Value / Mid-Bull (CURRENT)</span>
-              <span style={{ fontFamily: 'monospace', color: '#facc15' }}>Healthy Expansion</span>
+              <span style={{ color: '#38bdf8' }}>1.5x - 2.4x — Fair Value / Mid-Bull (CURRENT)</span>
+              <span style={{ fontFamily: 'monospace', color: '#38bdf8' }}>Healthy Expansion</span>
             </div>
             <div className={`band-row ${mvrv?.liveMVRV >= 1.0 && mvrv?.liveMVRV < 1.5 ? 'active' : ''}`}>
-              <span style={{ color: '#facc15' }}>1.0x - 1.5x — Early Bull / Accumulation</span>
-              <span style={{ fontFamily: 'monospace' }}>Optimal Long Entry</span>
+              <span style={{ color: '#22c55e' }}>1.0x - 1.5x — Early Bull / Accumulation</span>
+              <span style={{ fontFamily: 'monospace', color: '#22c55e' }}>Optimal Long Entry</span>
             </div>
             <div className={`band-row ${mvrv?.liveMVRV < 1.0 ? 'active' : ''}`}>
-              <span style={{ color: '#facc15' }}>&lt; 1.0x — Deep Value / Historical Cycle Bottom</span>
-              <span style={{ fontFamily: 'monospace' }}>Max Historical Opportunity</span>
+              <span style={{ color: '#22c55e' }}>&lt; 1.0x — Deep Value / Historical Cycle Bottom</span>
+              <span style={{ fontFamily: 'monospace', color: '#22c55e' }}>Max Historical Opportunity</span>
             </div>
           </div>
 
@@ -416,7 +419,7 @@ export default function MacroWhalesEtf() {
                     {[...mvrv.history].reverse().slice(0, 10).map((h, idx) => (
                       <tr key={idx}>
                         <td style={{ color: '#888888' }}>{h.date}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }} className="val-yellow">{h.mvrv.toFixed(3)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }} className="val-blue">{h.mvrv.toFixed(3)}</td>
                         <td style={{ textAlign: 'right' }} className="val-white">${h.price.toLocaleString()}</td>
                         <td style={{ textAlign: 'right' }} className="val-white">${h.realizedPrice.toLocaleString()}</td>
                       </tr>
@@ -438,7 +441,7 @@ export default function MacroWhalesEtf() {
               COMPLETE DAILY BTC SPOT ETF INFLOW / OUTFLOW BY ISSUER ($ MILLIONS)
             </h3>
             <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '4px' }}>
-              Official SEC/Farside institutional ledger • Yellow indicates net positive inflows (+), White indicates net outflows (-).
+              Official SEC/Farside institutional ledger • Green indicates net positive inflows (+), Red indicates net outflows (-).
             </div>
           </div>
 
@@ -486,7 +489,7 @@ export default function MacroWhalesEtf() {
             {Object.entries(stats.cumulativeByIssuer).map(([ticker, val]) => (
               <div key={ticker} className="issuer-pill">
                 <span className="issuer-pill-name">{ticker}:</span>
-                <span className={`issuer-pill-val ${val >= 0 ? 'val-yellow' : 'val-white'}`}>
+                <span className={`issuer-pill-val ${val >= 0 ? 'val-green' : 'val-red'}`}>
                   {val >= 0 ? '+' : ''}{Number(val).toLocaleString()}M
                 </span>
               </div>

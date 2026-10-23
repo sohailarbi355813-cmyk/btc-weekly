@@ -12,6 +12,7 @@ import {
   IconX,
   IconCheck,
   IconZap,
+  IconBlackFlag,
 } from './Icons';
 import { playAlertChime } from '@/lib/alertSound';
 
@@ -352,7 +353,7 @@ export default function AltsTapeReader() {
             onClick={() => setActiveTab('bull')}
           >
             <span>Bullish States</span>
-            <span className="va-tab-count" style={{ color: activeTab === 'bull' ? '#facc15' : '#888888' }}>
+            <span className="va-tab-count" style={{ color: activeTab === 'bull' ? '#22c55e' : '#888888' }}>
               {data?.bullishStates?.length || 0}
             </span>
           </button>
@@ -362,7 +363,7 @@ export default function AltsTapeReader() {
             onClick={() => setActiveTab('bear')}
           >
             <span>Bearish States</span>
-            <span className="va-tab-count" style={{ color: activeTab === 'bear' ? '#ffffff' : '#888888' }}>
+            <span className="va-tab-count" style={{ color: activeTab === 'bear' ? '#ef4444' : '#888888' }}>
               {data?.bearishStates?.length || 0}
             </span>
           </button>
@@ -382,9 +383,9 @@ export default function AltsTapeReader() {
           <button
             className="va-tab-btn"
             style={{
-              color: autoAlertEnabled ? '#facc15' : '#888888',
-              background: autoAlertEnabled ? '#141414' : '#000000',
-              border: `1px solid ${autoAlertEnabled ? '#facc15' : '#222222'}`,
+              color: autoAlertEnabled ? '#38bdf8' : '#888888',
+              background: autoAlertEnabled ? '#0c1322' : '#000000',
+              border: `1px solid ${autoAlertEnabled ? '#38bdf8' : '#222222'}`,
             }}
             onClick={toggleAutoAlert}
             title="Automatically send notification whenever a coin reaches support or resistance"
@@ -423,7 +424,7 @@ export default function AltsTapeReader() {
           {notifPermission !== 'granted' && (
             <button
               className="va-tab-btn"
-              style={{ color: '#facc15', border: '1px solid #facc15' }}
+              style={{ color: '#38bdf8', border: '1px solid #38bdf8' }}
               onClick={requestDesktopPermission}
               title="Enable Windows Desktop Popups"
             >
@@ -437,7 +438,7 @@ export default function AltsTapeReader() {
             onClick={() => setShowWebhookSettings(true)}
             title="Configure Telegram / Discord Webhook for Mobile Phone Alerts"
           >
-            <span style={{ fontSize: '0.78rem', color: discordWebhook ? '#facc15' : '#888888' }}>
+            <span style={{ fontSize: '0.78rem', color: discordWebhook ? '#38bdf8' : '#888888' }}>
               {discordWebhook ? 'Webhook Linked' : 'Webhook'}
             </span>
           </button>
@@ -448,7 +449,7 @@ export default function AltsTapeReader() {
             style={{ padding: '0.55rem 0.75rem' }}
             title={soundMuted ? 'Unmute Sound' : 'Mute Sound'}
           >
-            {soundMuted ? <IconVolumeMute size={14} color="#888888" /> : <IconVolume size={14} color="#facc15" />}
+            {soundMuted ? <IconVolumeMute size={14} color="#888888" /> : <IconVolume size={14} color="#38bdf8" />}
           </button>
 
           <button
@@ -466,12 +467,15 @@ export default function AltsTapeReader() {
       {activeTab === 'alerts' ? (
         <div className="vyaps-card" style={{ background: '#000000', borderColor: '#1a1a1a' }}>
           <div className="vyaps-card-header" style={{ borderColor: '#161616' }}>
-            <span className="vyaps-brand" style={{ color: '#facc15' }}>Wolf Tape Reader</span>
+            <span className="vyaps-brand" style={{ color: '#38bdf8' }}>
+              <IconBlackFlag size={18} />
+              Wolf Tape Reader
+            </span>
             <span className="vyaps-title">Unlimited Alerts Manager</span>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 className="va-tab-btn active"
-                style={{ color: '#facc15', borderColor: '#facc15' }}
+                style={{ color: '#38bdf8', borderColor: '#38bdf8' }}
                 onClick={() => {
                   if (data?.bullishStates?.[0]) openAlertModalFor(data.bullishStates[0]);
                 }}
@@ -498,7 +502,7 @@ export default function AltsTapeReader() {
                   key={alert.id}
                   style={{
                     background: '#090909',
-                    border: `1px solid ${alert.triggered ? '#facc15' : '#1c1c1c'}`,
+                    border: `1px solid ${alert.triggered ? '#22c55e' : '#1c1c1c'}`,
                     borderRadius: '6px',
                     padding: '0.75rem 1rem',
                     display: 'flex',
@@ -537,10 +541,13 @@ export default function AltsTapeReader() {
           )}
         </div>
       ) : (
-        /* ── TWO-COLOR PITCH BLACK TABLE (BULLISH OR BEARISH) ── */
+        /* ── BLUE / GREEN / RED PITCH BLACK TABLE (BULLISH OR BEARISH) ── */
         <div className="vyaps-card" style={{ background: '#000000', borderColor: '#1a1a1a' }}>
           <div className="vyaps-card-header" style={{ borderColor: '#161616' }}>
-            <span className="vyaps-brand" style={{ color: '#facc15' }}>Wolf Tape Reader</span>
+            <span className="vyaps-brand" style={{ color: '#38bdf8' }}>
+              <IconBlackFlag size={18} />
+              Wolf Tape Reader
+            </span>
             <span className="vyaps-title">
               {activeTab === 'bull' ? 'Bullish States' : 'Bearish States'}
             </span>
@@ -703,7 +710,7 @@ export default function AltsTapeReader() {
         <div className="alts-modal-overlay" onClick={() => setShowWebhookSettings(false)}>
           <div className="alts-modal" onClick={(e) => e.stopPropagation()} style={{ background: '#0a0a0a', border: '1px solid #222222' }}>
             <div className="modal-header">
-              <span className="modal-title" style={{ color: '#facc15' }}>
+              <span className="modal-title" style={{ color: '#38bdf8' }}>
                 <IconZap size={18} />
                 Mobile Phone Webhook Alerts
               </span>
@@ -732,14 +739,14 @@ export default function AltsTapeReader() {
             <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem' }}>
               <button
                 className="alts-btn"
-                style={{ flex: 1, justifyContent: 'center', background: '#facc15', color: '#000000', fontWeight: 700 }}
+                style={{ flex: 1, justifyContent: 'center', background: '#38bdf8', color: '#000000', fontWeight: 700 }}
                 onClick={() => {
                   if (discordWebhook && discordWebhook.startsWith('http')) {
                     fetch(discordWebhook, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        content: '🐺 **Wolf Tape Reader Pivot Alert Engine Active!** Ready to send Value Area alerts to your phone!',
+                        content: '🚩 **Wolf Tape Reader Pivot Alert Engine Active!** Ready to send Value Area alerts to your phone!',
                       }),
                     }).then(() => {
                       addToast({ title: 'Webhook Test Sent', message: 'Check your phone channel!' });
@@ -766,7 +773,7 @@ export default function AltsTapeReader() {
         <div className="alts-modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="alts-modal" onClick={(e) => e.stopPropagation()} style={{ background: '#0a0a0a', border: '1px solid #222222' }}>
             <div className="modal-header">
-              <span className="modal-title" style={{ color: '#facc15' }}>
+              <span className="modal-title" style={{ color: '#38bdf8' }}>
                 <IconBell size={18} />
                 Set Alert &bull; {selectedCoinForAlert.symbol}
               </span>
@@ -822,7 +829,7 @@ export default function AltsTapeReader() {
                 <button
                   type="submit"
                   className="alts-btn"
-                  style={{ flex: 1, justifyContent: 'center', background: '#facc15', color: '#000000', fontWeight: 700 }}
+                  style={{ flex: 1, justifyContent: 'center', background: '#38bdf8', color: '#000000', fontWeight: 700 }}
                 >
                   <IconCheck size={16} />
                   <span>Save Alert</span>
@@ -839,10 +846,10 @@ export default function AltsTapeReader() {
       {/* ── Toast Floating Notifications (Guaranteed Unique Keys) ── */}
       <div className="alert-toast-container">
         {toasts.map((toast) => (
-          <div key={toast.id} className="alert-toast" style={{ background: '#0a0a0a', borderColor: '#facc15' }}>
-            <IconBell size={18} color="#facc15" />
+          <div key={toast.id} className="alert-toast" style={{ background: '#0a0a0a', borderColor: '#38bdf8' }}>
+            <IconBell size={18} color="#38bdf8" />
             <div style={{ flex: 1 }}>
-              <strong style={{ color: '#facc15', fontSize: '0.85rem' }}>{toast.title}</strong>
+              <strong style={{ color: '#38bdf8', fontSize: '0.85rem' }}>{toast.title}</strong>
               <div style={{ color: '#ffffff', fontSize: '0.78rem', marginTop: '0.1rem' }}>{toast.message}</div>
               {toast.note && (
                 <div style={{ color: '#888888', fontSize: '0.72rem', marginTop: '0.1rem' }}>

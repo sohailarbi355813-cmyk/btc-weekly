@@ -215,16 +215,70 @@ export function IconFilter({ size = 15, className = '', color = 'currentColor' }
   );
 }
 
-export function IconWolf({ size = 16, className = '', color = 'currentColor' }) {
+export function IconBlackFlag({ size = 18, className = '', color = 'currentColor' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <polygon points="12 2 4 8 7 15 12 22 17 15 20 8 12 2" />
-      <polygon points="12 12 8 8 12 2 16 8 12 12" />
-      <line x1="8" y1="12" x2="12" y2="15" />
-      <line x1="16" y1="12" x2="12" y2="15" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      style={{ verticalAlign: 'middle', display: 'inline-block' }}
+    >
+      <defs>
+        <linearGradient id="bf_pole" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#475569" />
+          <stop offset="45%" stopColor="#cbd5e1" />
+          <stop offset="75%" stopColor="#94a3b8" />
+          <stop offset="100%" stopColor="#1e293b" />
+        </linearGradient>
+        <linearGradient id="bf_fabric" x1="0%" y1="0%" x2="100%" y2="25%">
+          <stop offset="0%" stopColor="#050608" />
+          <stop offset="22%" stopColor="#1e2129" />
+          <stop offset="48%" stopColor="#0a0b0f" />
+          <stop offset="74%" stopColor="#282c37" />
+          <stop offset="95%" stopColor="#08090c" />
+        </linearGradient>
+        <linearGradient id="bf_sheen" x1="0%" y1="0%" x2="100%" y2="50%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.22" />
+          <stop offset="35%" stopColor="#ffffff" stopOpacity="0" />
+          <stop offset="70%" stopColor="#ffffff" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.45" />
+        </linearGradient>
+      </defs>
+      {/* Finial Ball */}
+      <circle cx="3.8" cy="2.5" r="1.3" fill="#cbd5e1" />
+      <circle cx="3.4" cy="2.1" r="0.4" fill="#ffffff" />
+      {/* Mast */}
+      <rect x="3.1" y="3.3" width="1.4" height="19.2" rx="0.7" fill="url(#bf_pole)" />
+      <path d="M3 22.5 L4.6 22.5 L3.8 23.8 Z" fill="#334155" />
+      {/* Grommets */}
+      <circle cx="3.8" cy="4.8" r="0.9" fill="none" stroke="#94a3b8" strokeWidth="0.5" />
+      <circle cx="3.8" cy="14.2" r="0.9" fill="none" stroke="#94a3b8" strokeWidth="0.5" />
+      {/* Waving Black Flag Fabric */}
+      <path
+        d="M 4.5 4.6 C 8.5 3.3, 12.2 6.5, 16.2 5.0 C 18.8 4.0, 20.8 5.2, 22.6 4.3 C 22.0 8.0, 22.4 11.8, 21.4 15.2 C 19.5 16.2, 17.5 15.0, 15.2 16.0 C 11.2 17.6, 7.8 14.5, 4.5 15.6 Z"
+        fill="url(#bf_fabric)"
+        stroke="#383c48"
+        strokeWidth="0.45"
+        strokeLinejoin="round"
+      />
+      {/* 3D Wave Highlight Sheen */}
+      <path
+        d="M 4.5 4.6 C 8.5 3.3, 12.2 6.5, 16.2 5.0 C 18.8 4.0, 20.8 5.2, 22.6 4.3 C 22.0 8.0, 22.4 11.8, 21.4 15.2 C 19.5 16.2, 17.5 15.0, 15.2 16.0 C 11.2 17.6, 7.8 14.5, 4.5 15.6 Z"
+        fill="url(#bf_sheen)"
+      />
+      {/* Inner Crease Depth Shadows & Light Ridges */}
+      <path d="M 9.8 4.2 C 10.5 7.8, 9.8 12.5, 8.8 15.8" stroke="#000000" strokeWidth="0.9" strokeLinecap="round" opacity="0.8" />
+      <path d="M 10.7 4.2 C 11.4 7.8, 10.8 12.5, 9.8 15.8" stroke="#474f61" strokeWidth="0.5" strokeLinecap="round" opacity="0.6" />
+      <path d="M 16.8 5.2 C 17.3 8.6, 16.9 12.4, 15.8 15.8" stroke="#000000" strokeWidth="1.0" strokeLinecap="round" opacity="0.85" />
+      <path d="M 17.7 5.2 C 18.2 8.6, 17.8 12.4, 16.7 15.8" stroke="#5a637a" strokeWidth="0.6" strokeLinecap="round" opacity="0.6" />
     </svg>
   );
 }
+
+export const IconWolf = IconBlackFlag;
 
 export function IconLevels({ size = 16, className = '', color = 'currentColor' }) {
   return (

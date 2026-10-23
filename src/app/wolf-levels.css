@@ -4,16 +4,16 @@
 ═══════════════════════════════════════════ */
 
 :root {
-  --wolf-yellow: #facc15;
-  --wolf-yellow-bright: #fde047;
-  --wolf-yellow-dim: rgba(250, 204, 21, 0.12);
-  --wolf-yellow-glow: rgba(250, 204, 21, 0.35);
-  --wolf-yellow-border: rgba(250, 204, 21, 0.25);
-  --wolf-bg: #090a0f;
-  --wolf-card-bg: #0d1018;
-  --wolf-row-hover: rgba(250, 204, 21, 0.05);
-  --wolf-support: #f87171;
-  --wolf-resistance: #4ade80;
+  --wolf-yellow: #38bdf8;
+  --wolf-yellow-bright: #60a5fa;
+  --wolf-yellow-dim: rgba(56, 189, 248, 0.12);
+  --wolf-yellow-glow: rgba(56, 189, 248, 0.15);
+  --wolf-yellow-border: rgba(56, 189, 248, 0.25);
+  --wolf-bg: #000000;
+  --wolf-card-bg: #000000;
+  --wolf-row-hover: rgba(56, 189, 248, 0.05);
+  --wolf-support: #22c55e;
+  --wolf-resistance: #ef4444;
 }
 
 /* Container */

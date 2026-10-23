@@ -1,5 +1,5 @@
 /* src/app/macro-whales.css - Wolf Tape Reader Macro & ETF Terminal */
-/* Strict Pitch Black (#000000) & Two Colors: Yellow (#FACC15) and White (#FFFFFF) */
+/* Professional Pitch Black (#000000) with Blue (#38bdf8), Green (#22c55e), Red (#ef4444) */
 
 .macro-container {
   background-color: #000000;
@@ -16,7 +16,7 @@
   flex-wrap: wrap;
   gap: 16px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #222222;
+  border-bottom: 1px solid #1a1a1a;
   margin-bottom: 22px;
 }
 
@@ -24,9 +24,12 @@
   margin: 0;
   font-size: 1.35rem;
   font-weight: 800;
-  color: #facc15;
+  color: #38bdf8;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .macro-subtitle {
@@ -57,14 +60,14 @@
 }
 
 .macro-btn:hover {
-  border-color: #facc15;
-  color: #facc15;
+  border-color: #38bdf8;
+  color: #38bdf8;
 }
 
 .macro-btn.active {
-  background: #facc15;
+  background: #38bdf8;
   color: #000000;
-  border-color: #facc15;
+  border-color: #38bdf8;
   font-weight: 700;
 }
 
@@ -106,9 +109,17 @@
   margin-top: 4px;
 }
 
-/* Two-color utilities */
-.val-yellow {
-  color: #facc15 !important;
+/* Color utilities: Blue / Green / Red / White */
+.val-blue {
+  color: #38bdf8 !important;
+}
+
+.val-green {
+  color: #22c55e !important;
+}
+
+.val-red {
+  color: #ef4444 !important;
 }
 
 .val-white {
@@ -152,7 +163,7 @@
 .panel-title {
   font-size: 0.95rem;
   font-weight: 800;
-  color: #facc15;
+  color: #38bdf8;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin: 0;
@@ -187,14 +198,14 @@
 
 .ratio-bar-track {
   height: 14px;
-  background: #ffffff; /* Short portion */
+  background: #ef4444; /* Short portion in Red */
   border-radius: 3px;
   overflow: hidden;
   display: flex;
 }
 
 .ratio-bar-fill-long {
-  background: #facc15; /* Long portion */
+  background: #22c55e; /* Long portion in Green */
   height: 100%;
 }
 
@@ -221,7 +232,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-/* MVRV Meter */
+/* MVRV Hero Box */
 .mvrv-hero-box {
   display: flex;
   align-items: baseline;
@@ -232,7 +243,7 @@
 .mvrv-big-number {
   font-size: 2.8rem;
   font-weight: 900;
-  color: #facc15;
+  color: #38bdf8;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   line-height: 1;
 }
@@ -246,7 +257,7 @@
   font-size: 0.78rem;
   font-weight: 700;
   color: #000000;
-  background: #facc15;
+  background: #38bdf8;
   padding: 3px 10px;
   border-radius: 3px;
   display: inline-block;
@@ -283,8 +294,8 @@
 }
 
 .band-row.active {
-  background: #181818;
-  border-left: 3px solid #facc15;
+  background: #141923;
+  border-left: 3px solid #38bdf8;
   font-weight: 700;
 }
 
@@ -325,7 +336,7 @@
 }
 
 .etf-search-input:focus {
-  border-color: #facc15;
+  border-color: #38bdf8;
 }
 
 /* Issuer Pills */
@@ -422,7 +433,7 @@
 .loading-indicator {
   padding: 40px;
   text-align: center;
-  color: #facc15;
+  color: #38bdf8;
   font-weight: 700;
   font-size: 0.9rem;
 }
