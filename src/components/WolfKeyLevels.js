@@ -59,7 +59,7 @@ export default function WolfKeyLevels({ levelsData }) {
                   {nearestResistance ? `$${Number(nearestResistance.price).toLocaleString('en-US', { minimumFractionDigits: 1 })}` : 'All-time High'}
                 </div>
                 <div className="wolf-target-diff pos">
-                  {nearestResistance ? `+${nearestResistance.pctDiff}% (+$${Math.abs(nearestResistance.diff).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : ''}
+                  {nearestResistance ? `+${Math.abs(nearestResistance.pctDiff).toFixed(2)}% (+$${Math.abs(nearestResistance.diff).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : ''}
                 </div>
               </div>
 
@@ -72,7 +72,7 @@ export default function WolfKeyLevels({ levelsData }) {
                   {nearestSupport ? `$${Number(nearestSupport.price).toLocaleString('en-US', { minimumFractionDigits: 1 })}` : '--'}
                 </div>
                 <div className="wolf-target-diff neg">
-                  {nearestSupport ? `${nearestSupport.pctDiff}% (-$${Math.abs(nearestSupport.diff).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : ''}
+                  {nearestSupport ? `-${Math.abs(nearestSupport.pctDiff).toFixed(2)}% (-$${Math.abs(nearestSupport.diff).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : ''}
                 </div>
               </div>
             </div>

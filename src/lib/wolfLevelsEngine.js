@@ -142,10 +142,13 @@ export function calculateWolfKeyLevels(candles, currentPrice) {
     { code: 'YO', name: 'Yearly Open', price: YO, category: 'yearly', importance: 'critical' },
   ];
 
-  // Calculate distances & relative metrics
+  // Calculate distances & relative metrics (relative position of price to level)
+  // When price is below a level (e.g. PW VAH at 83,522 with spot at 80,550),
+  // price is -3.56% BELOW that level (Resistance).
+  // When price is above a level (e.g. support at 78,000), price is +3.27% ABOVE that level (Support).
   const processedLevels = rawLevels.map(lvl => {
-    const diff = lvl.price - spot;
-    const pctDiff = (diff / spot) * 100;
+    const diff = spot - lvl.price;
+    const pctDiff = lvl.price > 0 ? ((spot - lvl.price) / lvl.price) * 100 : 0;
     const isAbove = lvl.price > spot;
     return {
       ...lvl,
