@@ -29,10 +29,6 @@ export default function AltsTapeReader() {
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  // Sub-Tabs: 'bull' (Bullish States - Above all VALs) | 'bear' (Bearish States - Below all VAHs) | 'alerts'
-  const [activeTab, setActiveTab] = useState('bull');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [soundMuted, setSoundMuted] = useState(false);
 
   // Auto-Alert on Support / Resistance Hits (Sends notification when ANY coin hits VAL or VAH)
   const [autoAlertEnabled, setAutoAlertEnabled] = useState(true);
@@ -351,26 +347,134 @@ export default function AltsTapeReader() {
     setShowAddModal(true);
   };
 
-  // Filter current active list (Bullish or Bearish) by search query
+  // Sub-Tabs: 'bull' (Bullish States) | 'bear' (Bearish States) | 'full' (Full 55 Alts Scan) | 'twin' | 'alerts'
+  const [activeTab, setActiveTab] = useState('bull');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [soundMuted, setSoundMuted] = useState(false);
+
+  // Advanced Confluence & Trap Filters
+  const [confluenceFilter, setConfluenceFilter] = useState('all');
+  const [timeframeFilter, setTimeframeFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('closest');
+
+  // Helper: Format turnover volume
+  const formatTurnover = (usd) => {
+    if (!usd) return '--';
+    if (usd >= 1e9) return `$${(usd / 1e9).toFixed(1)}B`;
+    if (usd >= 1e6) return `$${(usd / 1e6).toFixed(1)}M`;
+    if (usd >= 1e3) return `$${(usd / 1e3).toFixed(0)}K`;
+    return `$${usd}`;
+  };
+
+  // Dynamic filter counts
+  const filterCounts = useMemo(() => {
+    if (!data) return {};
+    const bull = data.bullishStates || [];
+    const bear = data.bearishStates || [];
+    const all = data.allCoins || [];
+
+    return {
+      bullAll: bull.length,
+      bullConfirmed: bull.filter((x) => x.change24h >= 0).length,
+      bullBleed: bull.filter((x) => x.isBleeding).length,
+      bullSweet: bull.filter((x) => x.minAbsDist <= 1.5).length,
+      bullMomentum: bull.filter((x) => x.change24h >= 3.0).length,
+      bullVol: bull.filter((x) => x.turnover24h >= 20000000).length,
+
+      bearAll: bear.length,
+      bearConfirmed: bear.filter((x) => x.change24h <= 0).length,
+      bearSqueeze: bear.filter((x) => x.isPumping).length,
+      bearSweet: bear.filter((x) => x.minAbsDist <= 1.5).length,
+      bearBreakdown: bear.filter((x) => x.change24h <= -3.0).length,
+      bearVol: bear.filter((x) => x.turnover24h >= 20000000).length,
+
+      fullAll: all.length,
+      fullBull: all.filter((x) => x.state === 'BULL').length,
+      fullBear: all.filter((x) => x.state === 'BEAR').length,
+      fullBleed: all.filter((x) => x.isBleeding).length,
+      fullGainers: all.filter((x) => x.change24h >= 2.0).length,
+      fullBleeders: all.filter((x) => x.change24h <= -2.0).length,
+      fullVol: all.filter((x) => x.turnover24h >= 20000000).length,
+    };
+  }, [data]);
+
+  // Tab switcher with filter reset
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    setConfluenceFilter('all');
+    setTimeframeFilter('all');
+  };
+
+  // Filter current active list by Confluence, Timeframe, Search query & Sort
   const currentList = useMemo(() => {
     if (!data) return [];
-    let list = activeTab === 'bull' ? [...(data.bullishStates || [])] : [...(data.bearishStates || [])];
+    let list = [];
+    if (activeTab === 'bull') {
+      list = [...(data.bullishStates || [])];
+    } else if (activeTab === 'bear') {
+      list = [...(data.bearishStates || [])];
+    } else if (activeTab === 'full') {
+      list = [...(data.allCoins || [])];
+    }
 
+    // 1. Confluence / Trap Filter
+    if (confluenceFilter !== 'all') {
+      if (confluenceFilter === 'confirmed') {
+        list = list.filter(item => activeTab === 'bull' ? item.change24h >= 0 : item.change24h <= 0);
+      } else if (confluenceFilter === 'bleed_trap') {
+        list = list.filter(item => item.isBleeding || item.grade === 'BLEED_TRAP');
+      } else if (confluenceFilter === 'squeeze_trap') {
+        list = list.filter(item => item.isPumping || item.grade === 'SQUEEZE_TRAP');
+      } else if (confluenceFilter === 'sweet_spot') {
+        list = list.filter(item => item.minAbsDist <= 1.5);
+      } else if (confluenceFilter === 'momentum') {
+        list = list.filter(item => item.change24h >= 3.0);
+      } else if (confluenceFilter === 'breakdown') {
+        list = list.filter(item => item.change24h <= -3.0);
+      } else if (confluenceFilter === 'volume') {
+        list = list.filter(item => item.turnover24h >= 20000000);
+      } else if (confluenceFilter === 'bull_only') {
+        list = list.filter(item => item.state === 'BULL');
+      } else if (confluenceFilter === 'bear_only') {
+        list = list.filter(item => item.state === 'BEAR');
+      } else if (confluenceFilter === 'gainers') {
+        list = list.filter(item => item.change24h >= 2.0);
+      } else if (confluenceFilter === 'bleeders') {
+        list = list.filter(item => item.change24h <= -2.0);
+      }
+    }
+
+    // 2. Timeframe Filter
+    if (timeframeFilter !== 'all') {
+      list = list.filter(item => item.tfType === timeframeFilter);
+    }
+
+    // 3. Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter((item) => item.symbol.toLowerCase().includes(q) || item.name.toLowerCase().includes(q));
     }
+
+    // 4. Sort
+    list.sort((a, b) => {
+      if (sortBy === 'closest') return a.minAbsDist - b.minAbsDist;
+      if (sortBy === 'gainers') return b.change24h - a.change24h;
+      if (sortBy === 'bleeders') return a.change24h - b.change24h;
+      if (sortBy === 'volume') return b.turnover24h - a.turnover24h;
+      return a.minAbsDist - b.minAbsDist;
+    });
+
     return list;
-  }, [data, activeTab, searchQuery]);
+  }, [data, activeTab, confluenceFilter, timeframeFilter, sortBy, searchQuery]);
 
   return (
     <div className="va-terminal-wrapper" style={{ background: '#000000', minHeight: '80vh' }}>
-      {/* ── Sub-Navigation: Bullish States vs Bearish States vs Alerts ── */}
+      {/* ── Sub-Navigation: Bullish vs Bearish vs Full Scan vs Twin vs Alerts ── */}
       <div className="va-tabs-bar" style={{ background: '#000000', borderColor: '#1a1a1a' }}>
         <div className="va-tab-group">
           <button
             className={`va-tab-btn tab-bull ${activeTab === 'bull' ? 'active' : ''}`}
-            onClick={() => setActiveTab('bull')}
+            onClick={() => handleTabChange('bull')}
           >
             <span>Bullish States</span>
             <span className="va-tab-count" style={{ color: activeTab === 'bull' ? '#22c55e' : '#888888' }}>
@@ -380,7 +484,7 @@ export default function AltsTapeReader() {
 
           <button
             className={`va-tab-btn tab-bear ${activeTab === 'bear' ? 'active' : ''}`}
-            onClick={() => setActiveTab('bear')}
+            onClick={() => handleTabChange('bear')}
           >
             <span>Bearish States</span>
             <span className="va-tab-count" style={{ color: activeTab === 'bear' ? '#ef4444' : '#888888' }}>
@@ -389,8 +493,22 @@ export default function AltsTapeReader() {
           </button>
 
           <button
+            className={`va-tab-btn ${activeTab === 'full' ? 'active' : ''}`}
+            onClick={() => handleTabChange('full')}
+            style={{
+              borderColor: activeTab === 'full' ? '#38bdf8' : undefined,
+              color: activeTab === 'full' ? '#38bdf8' : undefined,
+            }}
+          >
+            <span>Full Scan (55 Alts)</span>
+            <span className="va-tab-count" style={{ color: activeTab === 'full' ? '#38bdf8' : '#888888' }}>
+              {data?.allCoins?.length || 55}
+            </span>
+          </button>
+
+          <button
             className={`va-tab-btn ${activeTab === 'twin' ? 'active' : ''}`}
-            onClick={() => setActiveTab('twin')}
+            onClick={() => handleTabChange('twin')}
             style={{
               borderColor: activeTab === 'twin' ? '#38bdf8' : undefined,
               color: activeTab === 'twin' ? '#38bdf8' : undefined,
@@ -412,7 +530,7 @@ export default function AltsTapeReader() {
 
           <button
             className={`va-tab-btn ${activeTab === 'alerts' ? 'active' : ''}`}
-            onClick={() => setActiveTab('alerts')}
+            onClick={() => handleTabChange('alerts')}
           >
             <IconBell size={14} />
             <span>Alerts</span>
@@ -585,27 +703,233 @@ export default function AltsTapeReader() {
           )}
         </div>
       ) : (
-        /* ── BLUE / GREEN / RED PITCH BLACK TABLE (BULLISH OR BEARISH) ── */
+        /* ── BLUE / GREEN / RED PITCH BLACK TABLE (BULLISH, BEARISH OR FULL SCAN) ── */
         <div className="vyaps-card" style={{ background: '#000000', borderColor: '#1a1a1a' }}>
-          <div className="vyaps-card-header" style={{ borderColor: '#161616' }}>
+          <div className="vyaps-card-header" style={{ borderColor: '#161616', flexWrap: 'wrap', gap: 10 }}>
             <span className="vyaps-brand" style={{ color: '#38bdf8' }}>
               <IconBlackFlag size={18} />
               Wolf Tape Reader
             </span>
             <span className="vyaps-title">
-              {activeTab === 'bull' ? 'Bullish States' : 'Bearish States'}
+              {activeTab === 'bull' ? 'Bullish States' : activeTab === 'bear' ? 'Bearish States' : 'Full 55 Alts Scanner'}
             </span>
             <div className="vyaps-meta">
-              <span>{activeTab === 'bull' ? 'Above all VALs &bull; Testing Support' : 'Below all VAHs &bull; Testing Resistance'}</span>
+              <span>
+                {activeTab === 'bull'
+                  ? 'Above all VALs • Testing Support • Bleed Traps Screened'
+                  : activeTab === 'bear'
+                  ? 'Below all VAHs • Testing Resistance • Squeeze Traps Screened'
+                  : '55 Whitelisted Alts • Complete Value Area & Momentum Telemetry'}
+              </span>
               <span>&bull;</span>
               <span>Synced {lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
+            </div>
+          </div>
+
+          {/* ── Advanced Confluence & Trap Quick-Filter Bar ── */}
+          <div style={{
+            background: '#040404',
+            borderBottom: '1px solid #161616',
+            padding: '10px 14px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10
+          }}>
+            {/* Filter Pills */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+              {activeTab === 'bull' && (
+                <>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('all')}
+                  >
+                    All Bullish ({filterCounts.bullAll || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'confirmed' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('confirmed')}
+                    title="Filter out all bleeding coins - only show coins with positive 24h change"
+                  >
+                    <span style={{ color: '#22c55e' }}>●</span> Confirmed Green ({filterCounts.bullConfirmed || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'bleed_trap' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('bleed_trap')}
+                    style={{
+                      borderColor: confluenceFilter === 'bleed_trap' ? '#ef4444' : undefined,
+                      color: confluenceFilter === 'bleed_trap' ? '#f87171' : undefined
+                    }}
+                    title="Warning: Coins above VAL pivots but currently bleeding negative on the day"
+                  >
+                    Bleed Warning ⚠️ ({filterCounts.bullBleed || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'sweet_spot' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('sweet_spot')}
+                  >
+                    Sweet Spot (&lt;1.5%) ({filterCounts.bullSweet || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'momentum' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('momentum')}
+                  >
+                    Momentum (+3%) ({filterCounts.bullMomentum || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'volume' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('volume')}
+                  >
+                    Whale Vol (&gt;$20M) ({filterCounts.bullVol || 0})
+                  </button>
+                </>
+              )}
+
+              {activeTab === 'bear' && (
+                <>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('all')}
+                  >
+                    All Bearish ({filterCounts.bearAll || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'confirmed' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('confirmed')}
+                  >
+                    <span style={{ color: '#ef4444' }}>●</span> Confirmed Dump ({filterCounts.bearConfirmed || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'squeeze_trap' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('squeeze_trap')}
+                    style={{
+                      borderColor: confluenceFilter === 'squeeze_trap' ? '#f59e0b' : undefined,
+                      color: confluenceFilter === 'squeeze_trap' ? '#f59e0b' : undefined
+                    }}
+                    title="Warning: Coins below VAH pivots but currently pumping on the day"
+                  >
+                    Squeeze Trap ⚠️ ({filterCounts.bearSqueeze || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'sweet_spot' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('sweet_spot')}
+                  >
+                    Sweet Spot Short ({filterCounts.bearSweet || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'breakdown' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('breakdown')}
+                  >
+                    Heavy Breakdown (-3%) ({filterCounts.bearBreakdown || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'volume' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('volume')}
+                  >
+                    Whale Vol (&gt;$20M) ({filterCounts.bearVol || 0})
+                  </button>
+                </>
+              )}
+
+              {activeTab === 'full' && (
+                <>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('all')}
+                  >
+                    All 55 Alts ({filterCounts.fullAll || 55})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'bull_only' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('bull_only')}
+                  >
+                    Bullish ({filterCounts.fullBull || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'bear_only' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('bear_only')}
+                  >
+                    Bearish ({filterCounts.fullBear || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'bleed_trap' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('bleed_trap')}
+                    style={{
+                      borderColor: confluenceFilter === 'bleed_trap' ? '#ef4444' : undefined,
+                      color: confluenceFilter === 'bleed_trap' ? '#f87171' : undefined
+                    }}
+                  >
+                    Bleed Traps ⚠️ ({filterCounts.fullBleed || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'gainers' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('gainers')}
+                  >
+                    Top Gainers ({filterCounts.fullGainers || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'bleeders' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('bleeders')}
+                  >
+                    Top Bleeders ({filterCounts.fullBleeders || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'volume' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('volume')}
+                  >
+                    Whale Vol (&gt;$20M) ({filterCounts.fullVol || 0})
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Timeframe & Sorting Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <select
+                value={timeframeFilter}
+                onChange={(e) => setTimeframeFilter(e.target.value)}
+                style={{
+                  background: '#0e0e0e',
+                  color: '#ffffff',
+                  border: '1px solid #282828',
+                  padding: '5px 8px',
+                  borderRadius: 4,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.72rem',
+                }}
+              >
+                <option value="all">All Pivots</option>
+                <option value="weekly">Weekly (pW/W)</option>
+                <option value="monthly">Monthly (pM/M)</option>
+                <option value="macro">Macro (pQ/Q/pY/Y)</option>
+              </select>
+
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{
+                  background: '#0e0e0e',
+                  color: '#ffffff',
+                  border: '1px solid #282828',
+                  padding: '5px 8px',
+                  borderRadius: 4,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.72rem',
+                }}
+              >
+                <option value="closest">Sort: Closest to Pivot</option>
+                <option value="gainers">Sort: 24h Gainers (%)</option>
+                <option value="bleeders">Sort: 24h Bleeders (%)</option>
+                <option value="volume">Sort: 24h Volume (USD)</option>
+              </select>
             </div>
           </div>
 
           {loading && !data ? (
             <div style={{ padding: '3.5rem', textAlign: 'center', color: '#666666' }}>
               <IconRefresh size={26} className="spin" style={{ marginBottom: '0.5rem' }} />
-              <p>Filtering coins by Value Area structure...</p>
+              <p>Filtering coins by Value Area structure &amp; 24h momentum...</p>
             </div>
           ) : (
             <div className="vyaps-table-wrapper" style={{ background: '#000000' }}>
@@ -613,6 +937,9 @@ export default function AltsTapeReader() {
                 <thead>
                   <tr>
                     <th>Symbol</th>
+                    <th>24h %</th>
+                    <th>24h Vol</th>
+                    <th>Signal / Trap</th>
                     <th>pY</th>
                     <th>Y</th>
                     <th>pQ</th>
@@ -627,8 +954,8 @@ export default function AltsTapeReader() {
                 <tbody>
                   {currentList.length === 0 ? (
                     <tr>
-                      <td colSpan="10" style={{ padding: '3rem', textAlign: 'center', color: '#666666' }}>
-                        No coins currently qualify for this state.
+                      <td colSpan="13" style={{ padding: '3rem', textAlign: 'center', color: '#666666' }}>
+                        No coins currently match the selected filter criteria.
                       </td>
                     </tr>
                   ) : (
@@ -645,93 +972,159 @@ export default function AltsTapeReader() {
                             <div className="vyaps-coin-icon">
                               {row.symbol.slice(0, 3)}
                             </div>
-                            <span className="vyaps-symbol-name">{row.symbol}</span>
+                            <div>
+                              <span className="vyaps-symbol-name">{row.symbol}</span>
+                              <span style={{ fontSize: '0.62rem', color: '#666666', display: 'block', fontFamily: 'var(--font-mono)' }}>
+                                ${row.spot}
+                              </span>
+                            </div>
                           </div>
                         </td>
 
-                        {/* 2. pY */}
+                        {/* 2. 24h % */}
                         <td>
-                          <span
-                            className={`pivot-pill ${row.pY.isPos ? 'val-pos' : 'val-neg'} ${row.pY.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
-                            title={`pY ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.pY.level} | Spot: $${row.spot} | Dist: ${row.pY.text}%`}
-                          >
-                            {row.pY.text}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              color: row.change24h >= 0 ? '#38bdf8' : '#ef4444'
+                            }}>
+                              {row.change24h >= 0 ? '+' : ''}{row.change24h}%
+                            </span>
+                            {row.isBleeding && row.state === 'BULL' && (
+                              <span style={{
+                                background: 'rgba(239, 68, 68, 0.2)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                fontSize: '0.58rem',
+                                padding: '1px 3px',
+                                borderRadius: 2,
+                                fontWeight: 800,
+                                letterSpacing: '0.04em'
+                              }}>
+                                BLEED ⚠️
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 3. 24h Vol */}
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: '#aaaaaa' }}>
+                          {formatTurnover(row.turnover24h)}
+                        </td>
+
+                        {/* 4. Confluence / Trap Grade */}
+                        <td>
+                          <span style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: 3,
+                            display: 'inline-block',
+                            background: row.grade === 'BLEED_TRAP' ? 'rgba(239, 68, 68, 0.15)' :
+                                        row.grade === 'SWEET_SPOT' || row.grade === 'SWEET_SPOT_SHORT' ? 'rgba(56, 189, 248, 0.15)' :
+                                        row.grade === 'MOMENTUM_LEADER' || row.grade === 'MOMENTUM_RUNNER' ? 'rgba(34, 197, 94, 0.15)' :
+                                        row.grade === 'SQUEEZE_TRAP' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                            color: row.grade === 'BLEED_TRAP' ? '#ef4444' :
+                                   row.grade === 'SWEET_SPOT' || row.grade === 'SWEET_SPOT_SHORT' ? '#38bdf8' :
+                                   row.grade === 'MOMENTUM_LEADER' || row.grade === 'MOMENTUM_RUNNER' ? '#22c55e' :
+                                   row.grade === 'SQUEEZE_TRAP' ? '#f59e0b' : '#aaaaaa',
+                            border: `1px solid ${
+                              row.grade === 'BLEED_TRAP' ? 'rgba(239, 68, 68, 0.35)' :
+                              row.grade === 'SWEET_SPOT' || row.grade === 'SWEET_SPOT_SHORT' ? 'rgba(56, 189, 248, 0.35)' :
+                              row.grade === 'MOMENTUM_LEADER' || row.grade === 'MOMENTUM_RUNNER' ? 'rgba(34, 197, 94, 0.35)' :
+                              row.grade === 'SQUEEZE_TRAP' ? 'rgba(245, 158, 11, 0.35)' : 'rgba(255, 255, 255, 0.1)'
+                            }`
+                          }}>
+                            {row.gradeLabel}
                           </span>
                         </td>
 
-                        {/* 3. Y */}
+                        {/* 5. pY */}
                         <td>
                           <span
-                            className={`pivot-pill ${row.Y.isPos ? 'val-pos' : 'val-neg'} ${row.Y.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
-                            title={`Y ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.Y.level} | Spot: $${row.spot} | Dist: ${row.Y.text}%`}
+                            className={`pivot-pill ${row.pY?.isPos ? 'val-pos' : 'val-neg'} ${row.pY?.isClose ? (row.state === 'BULL' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`pY: $${row.pY?.level} | Spot: $${row.spot} | Dist: ${row.pY?.text}%`}
                           >
-                            {row.Y.text}
+                            {row.pY?.text || '--'}
                           </span>
                         </td>
 
-                        {/* 4. pQ */}
+                        {/* 6. Y */}
                         <td>
                           <span
-                            className={`pivot-pill ${row.pQ.isPos ? 'val-pos' : 'val-neg'} ${row.pQ.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
-                            title={`pQ ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.pQ.level} | Spot: $${row.spot} | Dist: ${row.pQ.text}%`}
+                            className={`pivot-pill ${row.Y?.isPos ? 'val-pos' : 'val-neg'} ${row.Y?.isClose ? (row.state === 'BULL' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Y: $${row.Y?.level} | Spot: $${row.spot} | Dist: ${row.Y?.text}%`}
                           >
-                            {row.pQ.text}
+                            {row.Y?.text || '--'}
                           </span>
                         </td>
 
-                        {/* 5. Q */}
+                        {/* 7. pQ */}
                         <td>
                           <span
-                            className={`pivot-pill ${row.Q.isPos ? 'val-pos' : 'val-neg'} ${row.Q.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
-                            title={`Q ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.Q.level} | Spot: $${row.spot} | Dist: ${row.Q.text}%`}
+                            className={`pivot-pill ${row.pQ?.isPos ? 'val-pos' : 'val-neg'} ${row.pQ?.isClose ? (row.state === 'BULL' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`pQ: $${row.pQ?.level} | Spot: $${row.spot} | Dist: ${row.pQ?.text}%`}
                           >
-                            {row.Q.text}
+                            {row.pQ?.text || '--'}
                           </span>
                         </td>
 
-                        {/* 6. pM */}
+                        {/* 8. Q */}
                         <td>
                           <span
-                            className={`pivot-pill ${row.pM.isPos ? 'val-pos' : 'val-neg'} ${row.pM.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
-                            title={`pM ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.pM.level} | Spot: $${row.spot} | Dist: ${row.pM.text}%`}
+                            className={`pivot-pill ${row.Q?.isPos ? 'val-pos' : 'val-neg'} ${row.Q?.isClose ? (row.state === 'BULL' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`Q: $${row.Q?.level} | Spot: $${row.spot} | Dist: ${row.Q?.text}%`}
                           >
-                            {row.pM.text}
+                            {row.Q?.text || '--'}
                           </span>
                         </td>
 
-                        {/* 7. M */}
+                        {/* 9. pM */}
                         <td>
                           <span
-                            className={`pivot-pill ${row.M.isPos ? 'val-pos' : 'val-neg'} ${row.M.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
-                            title={`M ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.M.level} | Spot: $${row.spot} | Dist: ${row.M.text}%`}
+                            className={`pivot-pill ${row.pM?.isPos ? 'val-pos' : 'val-neg'} ${row.pM?.isClose ? (row.state === 'BULL' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`pM: $${row.pM?.level} | Spot: $${row.spot} | Dist: ${row.pM?.text}%`}
                           >
-                            {row.M.text}
+                            {row.pM?.text || '--'}
                           </span>
                         </td>
 
-                        {/* 8. pW */}
+                        {/* 10. M */}
                         <td>
                           <span
-                            className={`pivot-pill ${row.pW.isPos ? 'val-pos' : 'val-neg'} ${row.pW.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
-                            title={`pW ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.pW.level} | Spot: $${row.spot} | Dist: ${row.pW.text}%`}
+                            className={`pivot-pill ${row.M?.isPos ? 'val-pos' : 'val-neg'} ${row.M?.isClose ? (row.state === 'BULL' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`M: $${row.M?.level} | Spot: $${row.spot} | Dist: ${row.M?.text}%`}
                           >
-                            {row.pW.text}
+                            {row.M?.text || '--'}
                           </span>
                         </td>
 
-                        {/* 9. W */}
+                        {/* 11. pW */}
                         <td>
                           <span
-                            className={`pivot-pill ${row.W.isPos ? 'val-pos' : 'val-neg'} ${row.W.isClose ? (activeTab === 'bull' ? 'is-close' : 'is-close-bear') : ''}`}
-                            title={`W ${activeTab === 'bull' ? 'VAL' : 'VAH'}: $${row.W.level} | Spot: $${row.spot} | Dist: ${row.W.text}%`}
+                            className={`pivot-pill ${row.pW?.isPos ? 'val-pos' : 'val-neg'} ${row.pW?.isClose ? (row.state === 'BULL' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`pW: $${row.pW?.level} | Spot: $${row.spot} | Dist: ${row.pW?.text}%`}
                           >
-                            {row.W.text}
+                            {row.pW?.text || '--'}
                           </span>
                         </td>
 
-                        {/* 10. State */}
+                        {/* 12. W */}
                         <td>
-                          <span className={`vyaps-state-badge ${row.state === 'BULL' ? 'bull' : 'bear'}`}>
+                          <span
+                            className={`pivot-pill ${row.W?.isPos ? 'val-pos' : 'val-neg'} ${row.W?.isClose ? (row.state === 'BULL' ? 'is-close' : 'is-close-bear') : ''}`}
+                            title={`W: $${row.W?.level} | Spot: $${row.spot} | Dist: ${row.W?.text}%`}
+                          >
+                            {row.W?.text || '--'}
+                          </span>
+                        </td>
+
+                        {/* 13. State */}
+                        <td>
+                          <span className={`vyaps-state-badge ${row.state === 'BULL' ? 'bull' : row.state === 'BEAR' ? 'bear' : ''}`}>
                             {row.state}
                           </span>
                         </td>
@@ -744,7 +1137,7 @@ export default function AltsTapeReader() {
           )}
 
           <div className="vyaps-footer-note">
-            Filtered strictly for assets above all VAL pivots (Bullish State) or below all VAH pivots (Bearish State).
+            Full confluence &amp; trap filtering enabled. Never get trapped in a bleeding altcoin when historical bias is bullish.
           </div>
         </div>
       )}

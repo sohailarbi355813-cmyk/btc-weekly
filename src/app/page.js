@@ -9,6 +9,7 @@ import AltsTapeReader from '@/components/AltsTapeReader';
 import MacroWhalesEtf from '@/components/MacroWhalesEtf';
 import WeeklyForecast from '@/components/WeeklyForecast';
 import TwinPatternScanner from '@/components/TwinPatternScanner';
+import SessionProfiler from '@/components/SessionProfiler';
 import BootIntroSequence from '@/components/BootIntroSequence';
 import {
   IconBitcoin,
@@ -29,6 +30,7 @@ import {
   IconMenu,
   IconX,
   IconCalendar,
+  IconClock,
 } from '@/components/Icons';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -357,6 +359,14 @@ export default function Home() {
                 <IconCalendar size={18} color={activeTab === 'pattern' ? '#38bdf8' : '#888888'} />
                 <span>Weekly Forecast</span>
               </button>
+              <button
+                className={`mobile-nav-item ${activeTab === 'session' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('session'); setMobileMenuOpen(false); }}
+              >
+                <IconClock size={18} color={activeTab === 'session' ? '#38bdf8' : '#888888'} />
+                <span>Session HOD/LOD (Asia/Lon/NY)</span>
+                <span style={{ marginLeft: 'auto', background: '#38bdf8', color: '#000000', fontSize: '0.62rem', fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>PROB</span>
+              </button>
             </nav>
 
             <div className="mobile-drawer-actions">
@@ -571,6 +581,11 @@ export default function Home() {
               <IconCalendar size={15} color={activeTab === 'pattern' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'pattern' ? '#38bdf8' : undefined }}>Weekly Forecast</span>
             </button>
+            <button id="tab-session" className={`tab-btn ${activeTab === 'session' ? 'active' : ''}`} onClick={() => setActiveTab('session')}>
+              <IconClock size={15} color={activeTab === 'session' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'session' ? '#38bdf8' : undefined }}>Session HOD/LOD</span>
+              <span style={{ background: '#38bdf8', color: '#000000', fontSize: '0.62rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>PROB</span>
+            </button>
           </div>
 
           {/* ── 1. WOLF KEY LEVELS VIEW ── */}
@@ -598,10 +613,15 @@ export default function Home() {
             <WeeklyForecast weekPattern={weekPattern} formatPrice={formatPrice} />
           )}
 
+          {/* ── 5. SESSION PROFILER (Asia · London · NY HOD/LOD Probabilities) ── */}
+          {activeTab === 'session' && (
+            <SessionProfiler />
+          )}
+
         </div>
       </main>
 
-      {/* ── Mobile Sticky Bottom Bar (4 Quick-Switch Tools) ── */}
+      {/* ── Mobile Sticky Bottom Bar (6 Quick-Switch Tools) ── */}
       <div className="mobile-bottom-bar">
         <button
           className={`mobile-bottom-btn ${activeTab === 'levels' ? 'active' : ''}`}
@@ -637,6 +657,13 @@ export default function Home() {
         >
           <IconCalendar size={18} />
           <span>Forecast</span>
+        </button>
+        <button
+          className={`mobile-bottom-btn ${activeTab === 'session' ? 'active' : ''}`}
+          onClick={() => setActiveTab('session')}
+        >
+          <IconClock size={18} />
+          <span>Sessions</span>
         </button>
       </div>
 
