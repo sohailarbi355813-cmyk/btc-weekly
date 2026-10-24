@@ -363,7 +363,7 @@ export default function AltsTapeReader() {
       setSortDir((prev) => (prev === 'desc' ? 'asc' : 'desc'));
     } else {
       setSortBy(key);
-      setSortDir(key === 'symbol' || key === 'closest' ? 'asc' : 'desc');
+      setSortDir(key === 'symbol' || key === 'closest' || key === 'sma200' ? 'asc' : 'desc');
     }
   };
 
@@ -390,6 +390,8 @@ export default function AltsTapeReader() {
       bullSweet: bull.filter((x) => x.minAbsDist <= 1.5).length,
       bullMomentum: bull.filter((x) => x.change24h >= 3.0).length,
       bullVol: bull.filter((x) => (x.turnover24h || 0) >= 50000000).length,
+      bullSma1to3: bull.filter((x) => x.isNear4HSma200).length,
+      bullSma3: bull.filter((x) => x.isAt4HSma200).length,
 
       bearAll: bear.length,
       bearConfirmed: bear.filter((x) => x.change24h <= 0).length,
@@ -397,6 +399,8 @@ export default function AltsTapeReader() {
       bearSweet: bear.filter((x) => x.minAbsDist <= 1.5).length,
       bearBreakdown: bear.filter((x) => x.change24h <= -3.0).length,
       bearVol: bear.filter((x) => (x.turnover24h || 0) >= 50000000).length,
+      bearSma1to3: bear.filter((x) => x.isNear4HSma200).length,
+      bearSma3: bear.filter((x) => x.isAt4HSma200).length,
 
       fullAll: all.length,
       fullBull: all.filter((x) => x.state === 'BULL').length,
@@ -405,6 +409,8 @@ export default function AltsTapeReader() {
       fullGainers: all.filter((x) => x.change24h >= 2.0).length,
       fullBleeders: all.filter((x) => x.change24h <= -2.0).length,
       fullVol: all.filter((x) => (x.turnover24h || 0) >= 50000000).length,
+      fullSma1to3: all.filter((x) => x.isNear4HSma200).length,
+      fullSma3: all.filter((x) => x.isAt4HSma200).length,
     };
   }, [data]);
 
@@ -443,6 +449,10 @@ export default function AltsTapeReader() {
         list = list.filter(item => item.change24h <= -3.0);
       } else if (confluenceFilter === 'volume' || confluenceFilter === 'massive_vol') {
         list = list.filter(item => (item.turnover24h || 0) >= 50000000);
+      } else if (confluenceFilter === 'sma200_1_3') {
+        list = list.filter(item => item.isNear4HSma200);
+      } else if (confluenceFilter === 'sma200_3') {
+        list = list.filter(item => item.isAt4HSma200);
       } else if (confluenceFilter === 'bull_only') {
         list = list.filter(item => item.state === 'BULL');
       } else if (confluenceFilter === 'bear_only') {
@@ -465,7 +475,7 @@ export default function AltsTapeReader() {
       list = list.filter((item) => item.symbol.toLowerCase().includes(q) || item.name.toLowerCase().includes(q));
     }
 
-    // 4. Sort (Support ascending/descending and direct volume ranking)
+    // 4. Sort (Support ascending/descending, volume, and 4H 200 SMA proximity ranking)
     list.sort((a, b) => {
       let res = 0;
       if (sortBy === 'volume' || sortBy === 'turnover24h') {
@@ -476,6 +486,10 @@ export default function AltsTapeReader() {
         res = (a.change24h || 0) - (b.change24h || 0);
       } else if (sortBy === 'symbol') {
         res = a.symbol.localeCompare(b.symbol);
+      } else if (sortBy === 'sma200') {
+        const distA = a.distSma200_4h !== null && a.distSma200_4h !== undefined ? Math.abs(a.distSma200_4h) : 999;
+        const distB = b.distSma200_4h !== null && b.distSma200_4h !== undefined ? Math.abs(b.distSma200_4h) : 999;
+        res = distA - distB;
       } else {
         res = (a.minAbsDist || 0) - (b.minAbsDist || 0);
       }
@@ -784,6 +798,17 @@ export default function AltsTapeReader() {
                     Bleed Warning ⚠️ ({filterCounts.bullBleed || 0})
                   </button>
                   <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'sma200_1_3' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('sma200_1_3')}
+                    style={{
+                      borderColor: confluenceFilter === 'sma200_1_3' ? '#eab308' : undefined,
+                      color: confluenceFilter === 'sma200_1_3' ? '#fde047' : undefined
+                    }}
+                    title="Scan bullish coins within ±1-3% buffer from 4H 200 SMA"
+                  >
+                    🎯 4H 200 SMA (±1-3%) ({filterCounts.bullSma1to3 || 0})
+                  </button>
+                  <button
                     className={`wolf-filter-btn ${confluenceFilter === 'sweet_spot' ? 'active' : ''}`}
                     onClick={() => setConfluenceFilter('sweet_spot')}
                   >
@@ -835,6 +860,17 @@ export default function AltsTapeReader() {
                     Squeeze Trap ⚠️ ({filterCounts.bearSqueeze || 0})
                   </button>
                   <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'sma200_1_3' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('sma200_1_3')}
+                    style={{
+                      borderColor: confluenceFilter === 'sma200_1_3' ? '#eab308' : undefined,
+                      color: confluenceFilter === 'sma200_1_3' ? '#fde047' : undefined
+                    }}
+                    title="Scan bearish coins within ±1-3% buffer from 4H 200 SMA"
+                  >
+                    🎯 4H 200 SMA (±1-3%) ({filterCounts.bearSma1to3 || 0})
+                  </button>
+                  <button
                     className={`wolf-filter-btn ${confluenceFilter === 'sweet_spot' ? 'active' : ''}`}
                     onClick={() => setConfluenceFilter('sweet_spot')}
                   >
@@ -867,6 +903,28 @@ export default function AltsTapeReader() {
                     onClick={() => setConfluenceFilter('all')}
                   >
                     All 55 Alts ({filterCounts.fullAll || 55})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'sma200_1_3' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('sma200_1_3')}
+                    style={{
+                      borderColor: confluenceFilter === 'sma200_1_3' ? '#eab308' : undefined,
+                      color: confluenceFilter === 'sma200_1_3' ? '#fde047' : undefined
+                    }}
+                    title="Scan all coins within ±1-3% buffer from 4H 200 SMA"
+                  >
+                    🎯 4H 200 SMA (±1-3%) ({filterCounts.fullSma1to3 || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'sma200_3' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('sma200_3')}
+                    style={{
+                      borderColor: confluenceFilter === 'sma200_3' ? '#eab308' : undefined,
+                      color: confluenceFilter === 'sma200_3' ? '#fde047' : undefined
+                    }}
+                    title="Scan all coins within ±3% of 4H 200 SMA (touch & buffer)"
+                  >
+                    🎯 Near 4H SMA (≤3%) ({filterCounts.fullSma3 || 0})
                   </button>
                   <button
                     className={`wolf-filter-btn ${confluenceFilter === 'bull_only' ? 'active' : ''}`}
@@ -943,7 +1001,7 @@ export default function AltsTapeReader() {
                 onChange={(e) => {
                   const val = e.target.value;
                   setSortBy(val);
-                  setSortDir(val === 'closest' || val === 'symbol' ? 'asc' : 'desc');
+                  setSortDir(val === 'closest' || val === 'symbol' || val === 'sma200' ? 'asc' : 'desc');
                 }}
                 style={{
                   background: '#0e0e0e',
@@ -956,6 +1014,7 @@ export default function AltsTapeReader() {
                 }}
               >
                 <option value="volume">🔥 Sort: Massive Volume ($USD)</option>
+                <option value="sma200">🎯 Sort: Closest to 4H 200 SMA</option>
                 <option value="closest">Sort: Closest to Pivot</option>
                 <option value="gainers">Sort: 24h Gainers (%)</option>
                 <option value="bleeders">Sort: 24h Bleeders (%)</option>
@@ -1000,6 +1059,19 @@ export default function AltsTapeReader() {
                     >
                       🔥 24h Vol {sortBy === 'volume' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                     </th>
+                    <th
+                      onClick={() => handleHeaderSort('sma200')}
+                      style={{
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        color: sortBy === 'sma200' ? '#eab308' : undefined,
+                        transition: 'color 0.15s ease',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title="Click to sort by distance to 4H 200 SMA"
+                    >
+                      🎯 4H 200 SMA {sortBy === 'sma200' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
                     <th>Signal / Trap</th>
                     <th>pY</th>
                     <th>Y</th>
@@ -1015,7 +1087,7 @@ export default function AltsTapeReader() {
                 <tbody>
                   {currentList.length === 0 ? (
                     <tr>
-                      <td colSpan="13" style={{ padding: '3rem', textAlign: 'center', color: '#666666' }}>
+                      <td colSpan="14" style={{ padding: '3rem', textAlign: 'center', color: '#666666' }}>
                         No coins currently match the selected filter criteria.
                       </td>
                     </tr>
@@ -1104,7 +1176,52 @@ export default function AltsTapeReader() {
                           </div>
                         </td>
 
-                        {/* 4. Confluence / Trap Grade */}
+                        {/* 4. 4H 200 SMA */}
+                        <td>
+                          {row.sma200_4h ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
+                              <span
+                                className={`pivot-pill ${
+                                  row.isNear4HSma200
+                                    ? 'val-pos'
+                                    : row.isAt4HSma200
+                                      ? 'val-pos'
+                                      : (row.distSma200_4h >= 0 ? 'val-pos' : 'val-neg')
+                                } ${row.isAt4HSma200 ? 'is-close' : ''}`}
+                                style={{
+                                  fontSize: '0.66rem',
+                                  padding: '2px 5px',
+                                  fontWeight: row.isAt4HSma200 ? 800 : 500,
+                                  borderColor: row.isNear4HSma200
+                                    ? '#eab308'
+                                    : row.isAt4HSma200
+                                      ? '#38bdf8'
+                                      : undefined,
+                                  color: row.isNear4HSma200
+                                    ? '#fde047'
+                                    : row.isAt4HSma200
+                                      ? '#38bdf8'
+                                      : undefined,
+                                  background: row.isNear4HSma200
+                                    ? 'rgba(234, 179, 8, 0.15)'
+                                    : row.isAt4HSma200
+                                      ? 'rgba(56, 189, 248, 0.12)'
+                                      : undefined,
+                                }}
+                                title={`4H 200 SMA: $${row.sma200_4h} | Spot: $${row.spot} | Distance: ${row.distSma200Text}`}
+                              >
+                                {row.isNear4HSma200 ? '🎯 ' : ''}{row.distSma200Text}
+                              </span>
+                              <span style={{ fontSize: '0.58rem', color: '#666666', fontFamily: 'var(--font-mono)' }}>
+                                ${row.sma200_4h}
+                              </span>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#444444', fontSize: '0.7rem' }}>--</span>
+                          )}
+                        </td>
+
+                        {/* 5. Confluence / Trap Grade */}
                         <td>
                           <span style={{
                             fontFamily: 'var(--font-mono)',

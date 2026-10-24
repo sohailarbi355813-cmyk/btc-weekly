@@ -2,6 +2,72 @@ import { NextResponse } from 'next/server';
 import { ALTS_WHITELIST } from '@/lib/altsData';
 import pivotsData from '@/lib/pivotsData.json';
 
+let cachedSmaMap = new Map();
+let lastSmaFetchTimestamp = 0;
+const SMA_CACHE_TTL = 5 * 60 * 1000; // 5-minute cache
+
+async function get4H200SmaMap() {
+  const now = Date.now();
+  if (now - lastSmaFetchTimestamp < SMA_CACHE_TTL && cachedSmaMap.size > 0) {
+    return cachedSmaMap;
+  }
+
+  const symbols = ALTS_WHITELIST.map((a) => a.symbol);
+  const CHUNK_SIZE = 15;
+  const newMap = new Map();
+
+  for (let i = 0; i < symbols.length; i += CHUNK_SIZE) {
+    const chunk = symbols.slice(i, i + CHUNK_SIZE);
+    const promises = chunk.map(async (sym) => {
+      // 1. Bybit Linear 4H Kline
+      try {
+        const res = await fetch(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${sym}&interval=240&limit=200`, {
+          headers: { 'User-Agent': 'WolfTapeReader/2.0' },
+          signal: AbortSignal.timeout(4000),
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.result?.list && json.result.list.length >= 20) {
+            const list = json.result.list;
+            const closes = list.map((k) => parseFloat(k[4])).filter((n) => !isNaN(n));
+            const count = Math.min(closes.length, 200);
+            const sma = closes.slice(0, count).reduce((a, b) => a + b, 0) / count;
+            newMap.set(sym, { sma: Number(sma.toFixed(6)), count });
+            return;
+          }
+        }
+      } catch (err) {}
+
+      // 2. Fallback: Binance Vision 4H Kline
+      try {
+        const bRes = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=4h&limit=200`, {
+          headers: { 'User-Agent': 'WolfTapeReader/2.0' },
+          signal: AbortSignal.timeout(3500),
+          cache: 'no-store',
+        });
+        if (bRes.ok) {
+          const bList = await bRes.json();
+          if (Array.isArray(bList) && bList.length >= 20) {
+            const closes = bList.map((k) => parseFloat(k[4])).filter((n) => !isNaN(n));
+            const count = Math.min(closes.length, 200);
+            const sma = closes.slice(0, count).reduce((a, b) => a + b, 0) / count;
+            newMap.set(sym, { sma: Number(sma.toFixed(6)), count });
+          }
+        }
+      } catch (err) {}
+    });
+
+    await Promise.allSettled(promises);
+  }
+
+  if (newMap.size > 0) {
+    cachedSmaMap = newMap;
+    lastSmaFetchTimestamp = now;
+  }
+  return cachedSmaMap;
+}
+
 export async function GET() {
   try {
     // 1. Fetch live 24h ticker tape from Bybit Linear
@@ -47,6 +113,9 @@ export async function GET() {
         console.error('Binance fallback failed:', e.message);
       }
     }
+
+    // Fetch or read cached 4H 200 SMA map
+    const sma200Map = await get4H200SmaMap();
 
     // Distance formatter: positive formatted with yellow, negative in white
     function formatDist(spot, pivotLevel, label) {
@@ -99,6 +168,22 @@ export async function GET() {
       const low24h = ticker ? parseFloat(ticker.lowPrice24h || spot) : spot;
       const prevPrice1h = ticker?.prevPrice1h ? parseFloat(ticker.prevPrice1h) : null;
       const change1h = prevPrice1h ? parseFloat((((spot - prevPrice1h) / prevPrice1h) * 100).toFixed(2)) : 0;
+
+      // 4H 200 SMA Calculation
+      const smaData = sma200Map.get(item.symbol);
+      const sma200_4h = smaData ? smaData.sma : null;
+      let distSma200_4h = null;
+      let distSma200Text = '--';
+      let isNear4HSma200 = false;
+      let isAt4HSma200 = false;
+
+      if (sma200_4h && spot) {
+        distSma200_4h = Number((((spot - sma200_4h) / sma200_4h) * 100).toFixed(2));
+        distSma200Text = (distSma200_4h >= 0 ? '+' : '') + distSma200_4h.toFixed(1) + '%';
+        const absDist = Math.abs(distSma200_4h);
+        isNear4HSma200 = absDist >= 1.0 && absDist <= 3.0;
+        isAt4HSma200 = absDist <= 3.0;
+      }
 
       // ─── 1. Bullish State Calculation ───
       // Rule: Must be ABOVE all VALs (small dip wick >= -1.5% is allowed, e.g. -0.1%, but NOT -33%).
@@ -166,6 +251,11 @@ export async function GET() {
           grade,
           gradeLabel,
           isBleeding,
+          sma200_4h,
+          distSma200_4h,
+          distSma200Text,
+          isNear4HSma200,
+          isAt4HSma200,
         });
       }
 
@@ -233,6 +323,11 @@ export async function GET() {
           grade,
           gradeLabel,
           isPumping,
+          sma200_4h,
+          distSma200_4h,
+          distSma200Text,
+          isNear4HSma200,
+          isAt4HSma200,
         });
       }
 
@@ -295,6 +390,11 @@ export async function GET() {
         grade: generalGrade,
         gradeLabel: generalGradeLabel,
         isBleeding: change24h < 0,
+        sma200_4h,
+        distSma200_4h,
+        distSma200Text,
+        isNear4HSma200,
+        isAt4HSma200,
       });
     });
 
