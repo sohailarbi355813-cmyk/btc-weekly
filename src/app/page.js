@@ -109,6 +109,85 @@ export default function Home() {
   const [bootDone, setBootDone] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // ── High-Probability Bias Filters State ──
+  const [biasFilters, setBiasFilters] = useState({
+    preset: 'highest_prob', // 'highest_prob' | 'bleed_guard' | 'trend_only' | 'recent_cycle' | 'raw_legacy' | 'custom'
+    enableTrend: true,
+    enableBleedGuard: true,
+    enableWeeklyOpen: true,
+    enableRecentRegime: true,
+    enableRawStats: true,
+  });
+  const [showConfluences, setShowConfluences] = useState(false);
+
+  const applyBiasFilterPreset = (presetKey) => {
+    let newFilters = { ...biasFilters, preset: presetKey };
+    if (presetKey === 'highest_prob') {
+      newFilters = {
+        preset: 'highest_prob',
+        enableTrend: true,
+        enableBleedGuard: true,
+        enableWeeklyOpen: true,
+        enableRecentRegime: true,
+        enableRawStats: true,
+      };
+    } else if (presetKey === 'bleed_guard') {
+      newFilters = {
+        preset: 'bleed_guard',
+        enableTrend: true,
+        enableBleedGuard: true,
+        enableWeeklyOpen: true,
+        enableRecentRegime: false,
+        enableRawStats: false,
+      };
+    } else if (presetKey === 'trend_only') {
+      newFilters = {
+        preset: 'trend_only',
+        enableTrend: true,
+        enableBleedGuard: false,
+        enableWeeklyOpen: true,
+        enableRecentRegime: false,
+        enableRawStats: false,
+      };
+    } else if (presetKey === 'recent_cycle') {
+      newFilters = {
+        preset: 'recent_cycle',
+        enableTrend: false,
+        enableBleedGuard: true,
+        enableWeeklyOpen: false,
+        enableRecentRegime: true,
+        enableRawStats: false,
+      };
+    } else if (presetKey === 'raw_legacy') {
+      newFilters = {
+        preset: 'raw_legacy',
+        enableTrend: false,
+        enableBleedGuard: false,
+        enableWeeklyOpen: false,
+        enableRecentRegime: false,
+        enableRawStats: true,
+      };
+    }
+    setBiasFilters(newFilters);
+    if (data?.candles) {
+      const updatedBias = getTodayBias(data.candles, data.currentPrice, clientDate, newFilters);
+      setBias(updatedBias);
+    }
+  };
+
+  const toggleSingleBiasFilter = (filterKey) => {
+    const newFilters = {
+      ...biasFilters,
+      preset: 'custom',
+      [filterKey]: !biasFilters[filterKey],
+    };
+    setBiasFilters(newFilters);
+    if (data?.candles) {
+      const updatedBias = getTodayBias(data.candles, data.currentPrice, clientDate, newFilters);
+      setBias(updatedBias);
+    }
+  };
+
   const loadData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     setRefreshing(true);
@@ -139,7 +218,7 @@ export default function Home() {
       setLoadStep(3); // Calculating statistical bias & weekly profiles
       const now = new Date();
       setClientDate(now);
-      const biasResult = getTodayBias(json.candles, currentPrice, now);
+      const biasResult = getTodayBias(json.candles, currentPrice, now, biasFilters);
 
       setLoadStep(4); // Week pattern matching and predictive sequence forecasts
       const weeklyProfiles = buildWeeklyProfiles(json.candles);
@@ -159,7 +238,7 @@ export default function Home() {
       setLoading(false);
       setTimeout(() => setRefreshing(false), 500);
     }
-  }, []);
+  }, [biasFilters]);
 
   useEffect(() => {
     loadData();
@@ -287,11 +366,22 @@ export default function Home() {
 
   // Today's description
   const todayDowStats = bias.dowStats;
-  const biasSummary = bias.bias === 'bullish'
-    ? `${bias.dayName}s have been bullish ${todayDowStats.bullishRate.toFixed(0)}% of the time historically. Current week is trading ${bias.weeklyBias.priceVsWeeklyOpen} the weekly open by ${Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%.`
-    : bias.bias === 'bearish'
-    ? `${bias.dayName}s have been bearish ${todayDowStats.bearishRate.toFixed(0)}% of the time historically. Current week is trading ${bias.weeklyBias.priceVsWeeklyOpen} the weekly open by ${Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%.`
-    : `${bias.dayName}s show no strong directional edge historically. Mixed signals from day-of-week and weekly open analysis.`;
+  let biasSummary = '';
+  if (bias.isFiltered) {
+    if (bias.bias === 'bearish') {
+      biasSummary = `Filtered High-Probability Bias: Bearish (${bias.confidence}% Conviction). Key confluences: ${bias.technicalMetrics ? `Trading ${bias.technicalMetrics.priceVsEma20Pct}% vs 20 EMA ($${bias.technicalMetrics.ema20.toLocaleString()}), 24h delta is ${bias.technicalMetrics.change24h}%, RSI ${bias.technicalMetrics.rsi14}` : 'Structure & weekly open confirm downside pressure'}.`;
+    } else if (bias.bias === 'bullish') {
+      biasSummary = `Filtered High-Probability Bias: Bullish (${bias.confidence}% Conviction). Key confluences: ${bias.technicalMetrics ? `Holding above 20 EMA ($${bias.technicalMetrics.ema20.toLocaleString()}), weekly open acceptance (+${Math.abs(bias.technicalMetrics.pctFromWeeklyOpen)}%), and positive momentum expansion` : 'Structure & weekly open confirm bullish continuation'}.`;
+    } else {
+      biasSummary = `Filtered High-Probability Bias: Neutral / Defensive (${bias.confidence}% Confidence). Mixed indicators between trend structure and orderflow delta. Avoid blind directional bets.`;
+    }
+  } else {
+    biasSummary = bias.bias === 'bullish'
+      ? `${bias.dayName}s have been bullish ${todayDowStats.bullishRate.toFixed(0)}% of the time historically (Raw 5-Year Average). Current week is trading ${bias.weeklyBias.priceVsWeeklyOpen} the weekly open by ${Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%.`
+      : bias.bias === 'bearish'
+      ? `${bias.dayName}s have been bearish ${todayDowStats.bearishRate.toFixed(0)}% of the time historically (Raw 5-Year Average). Current week is trading ${bias.weeklyBias.priceVsWeeklyOpen} the weekly open by ${Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%.`
+      : `${bias.dayName}s show no strong directional edge historically. Mixed signals from day-of-week and weekly open analysis.`;
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
@@ -454,53 +544,261 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ── TODAY'S BIAS HERO ── */}
+          {/* ── TODAY'S BIAS HERO WITH INSTITUTIONAL HIGH-PROBABILITY FILTERS ── */}
           <div id="todays-bias" className={`bias-hero hero-${bColor}`}>
             <div className="hero-glow-bg" />
+
+            {/* 1. Bias Filter Presets Bar & Matrix Toggle */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 8,
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              paddingBottom: 14,
+              marginBottom: 16,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: '0.68rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)',
+                  marginRight: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}>
+                  <IconZap size={12} color="#38bdf8" /> Bias Filters:
+                </span>
+                
+                <button
+                  className={`bias-filter-pill ${biasFilters.preset === 'highest_prob' ? 'active' : ''}`}
+                  onClick={() => applyBiasFilterPreset('highest_prob')}
+                  title="Combines 20 EMA structure, Bleed Guard, Weekly Open & Regime to output highest probability bias"
+                >
+                  🎯 Highest Probability
+                </button>
+                <button
+                  className={`bias-filter-pill ${biasFilters.preset === 'bleed_guard' ? 'active' : ''}`}
+                  onClick={() => applyBiasFilterPreset('bleed_guard')}
+                  title="Detects intraday bleeding and prevents 67% bullish bleed traps"
+                >
+                  🛡️ Bleed Trap Guard
+                </button>
+                <button
+                  className={`bias-filter-pill ${biasFilters.preset === 'trend_only' ? 'active' : ''}`}
+                  onClick={() => applyBiasFilterPreset('trend_only')}
+                  title="20 EMA / 50 EMA Market Structure & Weekly Open"
+                >
+                  📈 Trend Structure
+                </button>
+                <button
+                  className={`bias-filter-pill ${biasFilters.preset === 'recent_cycle' ? 'active' : ''}`}
+                  onClick={() => applyBiasFilterPreset('recent_cycle')}
+                  title="Recent 8-Week Regime Momentum vs Stale 5-Year History"
+                >
+                  ⚡ 8-Week Regime
+                </button>
+                <button
+                  className={`bias-filter-pill ${biasFilters.preset === 'raw_legacy' ? 'active' : ''}`}
+                  onClick={() => applyBiasFilterPreset('raw_legacy')}
+                  title="Raw 2021-Present Unfiltered Statistics (No Technical Overlays)"
+                >
+                  📊 Raw Legacy Stats
+                </button>
+              </div>
+
+              <button
+                className="confluence-toggle-btn"
+                onClick={() => setShowConfluences(!showConfluences)}
+                style={{
+                  background: showConfluences ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                  border: `1px solid ${showConfluences ? '#38bdf8' : 'rgba(255, 255, 255, 0.1)'}`,
+                  color: showConfluences ? '#38bdf8' : 'var(--text-muted)',
+                  borderRadius: 4,
+                  padding: '4px 10px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontFamily: 'var(--font-mono)'
+                }}
+              >
+                <span>Confluence Matrix</span>
+                <span style={{ fontSize: '0.65rem' }}>{showConfluences ? '▲ Hide' : '▼ View'}</span>
+              </button>
+            </div>
+
+            {/* 2. Bleed Trap Alert Warning Banner (Triggers if Bleed Guard detects trap) */}
+            {bias.bleedTrap?.detected && bias.isFiltered && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                marginBottom: 16,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12,
+              }}>
+                <div style={{
+                  background: '#ef4444',
+                  color: '#000000',
+                  fontWeight: 900,
+                  fontSize: '0.68rem',
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  fontFamily: 'var(--font-mono)',
+                  marginTop: 1,
+                  flexShrink: 0
+                }}>
+                  BLEED TRAP ⚠️
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#fca5a5', lineHeight: 1.45 }}>
+                  <strong style={{ color: '#ffffff' }}>{bias.bleedTrap.title}:</strong> {bias.bleedTrap.explanation}
+                </div>
+              </div>
+            )}
+
+            {/* 3. Interactive Confluence Chip Toggles */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+              <span style={{ fontSize: '0.68rem', color: '#666', fontFamily: 'var(--font-mono)', marginRight: 2 }}>Confluences:</span>
+              <button
+                className={`confluence-chip ${biasFilters.enableTrend ? 'active' : ''}`}
+                onClick={() => toggleSingleBiasFilter('enableTrend')}
+              >
+                {biasFilters.enableTrend ? '✓ ' : '+ '}Trend (20 EMA)
+              </button>
+              <button
+                className={`confluence-chip ${biasFilters.enableBleedGuard ? 'active' : ''}`}
+                onClick={() => toggleSingleBiasFilter('enableBleedGuard')}
+              >
+                {biasFilters.enableBleedGuard ? '✓ ' : '+ '}Bleed Trap Guard
+              </button>
+              <button
+                className={`confluence-chip ${biasFilters.enableWeeklyOpen ? 'active' : ''}`}
+                onClick={() => toggleSingleBiasFilter('enableWeeklyOpen')}
+              >
+                {biasFilters.enableWeeklyOpen ? '✓ ' : '+ '}Weekly Open
+              </button>
+              <button
+                className={`confluence-chip ${biasFilters.enableRecentRegime ? 'active' : ''}`}
+                onClick={() => toggleSingleBiasFilter('enableRecentRegime')}
+              >
+                {biasFilters.enableRecentRegime ? '✓ ' : '+ '}Recent 8W Regime
+              </button>
+              <button
+                className={`confluence-chip ${biasFilters.enableRawStats ? 'active' : ''}`}
+                onClick={() => toggleSingleBiasFilter('enableRawStats')}
+              >
+                {biasFilters.enableRawStats ? '✓ ' : '+ '}Historical DOW
+              </button>
+            </div>
+
+            {/* 4. Hero Main Content */}
             <div className="hero-content">
               <div className="hero-left">
                 <div className="hero-date">{formattedToday}</div>
-                <div className={`hero-title bias-${bColor}-text`}>
-                  {bias.bias === 'bullish' ? (
-                    <IconTrendUp size={28} className="hero-bias-icon" />
-                  ) : bias.bias === 'bearish' ? (
-                    <IconTrendDown size={28} className="hero-bias-icon" />
-                  ) : (
-                    <IconScale size={28} className="hero-bias-icon" />
-                  )}
-                  <span>{bias.bias.charAt(0).toUpperCase() + bias.bias.slice(1)} Bias</span>
+                <div className={`hero-title bias-${bColor}-text`} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {bias.bias === 'bullish' ? (
+                      <IconTrendUp size={28} className="hero-bias-icon" />
+                    ) : bias.bias === 'bearish' ? (
+                      <IconTrendDown size={28} className="hero-bias-icon" />
+                    ) : (
+                      <IconScale size={28} className="hero-bias-icon" />
+                    )}
+                    <span>{bias.bias.charAt(0).toUpperCase() + bias.bias.slice(1)} Bias</span>
+                  </div>
+                  
+                  {/* High Probability Conviction Badge */}
+                  <span style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    padding: '3px 8px',
+                    borderRadius: 4,
+                    fontFamily: 'var(--font-mono)',
+                    letterSpacing: '0.04em',
+                    background: bias.isFiltered ? (bias.bias === 'bearish' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)') : 'rgba(255, 255, 255, 0.08)',
+                    color: bias.isFiltered ? (bias.bias === 'bearish' ? '#f87171' : '#4ade80') : '#888888',
+                    border: `1px solid ${bias.isFiltered ? (bias.bias === 'bearish' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)') : '#333333'}`,
+                  }}>
+                    {bias.isFiltered ? `HIGHEST PROBABILITY: ${bias.confidence}% CONVICTION` : `RAW UNFILTERED: ${bias.confidence}%`}
+                  </span>
                 </div>
                 <p className="hero-subtitle">{biasSummary}</p>
+
+                {/* Real-time Filtered Confluence Signals */}
                 <div className="hero-signals">
-                  <div className="signal-pill">
-                    <span className={`pill-dot ${biasColor(todayDowStats.bias)}`} />
-                    <span className="pill-label">Day-of-Week</span>
-                    <span className={`pill-value value-${biasColor(todayDowStats.bias)}`}>
-                      {todayDowStats.bullishRate.toFixed(0)}% Bull
-                    </span>
-                  </div>
-                  <div className="signal-pill">
-                    <span className={`pill-dot ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'bullish' : 'bearish'}`} />
-                    <span className="pill-label">Weekly Open</span>
-                    <span className={`pill-value ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'value-bullish' : 'value-bearish'}`}>
-                      {bias.weeklyBias.priceVsWeeklyOpen === 'above' ? '+' : '-'}
-                      {Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%
-                    </span>
-                  </div>
-                  <div className="signal-pill">
-                    <span className={`pill-dot ${biasColor(bias.monthlyStats.bias)}`} />
-                    <span className="pill-label">{MONTHS[todayMonth]} Seasonal</span>
-                    <span className={`pill-value value-${biasColor(bias.monthlyStats.bias)}`}>
-                      {bias.monthlyStats.bullishRate.toFixed(0)}% Bull
-                    </span>
-                  </div>
-                  <div className="signal-pill">
-                    <span className={`pill-dot ${bias.recentBullRate > 50 ? 'bullish' : 'bearish'}`} />
-                    <span className="pill-label">Recent {DAY_SHORT[todayDow]}s</span>
-                    <span className={`pill-value ${bias.recentBullRate > 50 ? 'value-bullish' : 'value-bearish'}`}>
-                      {bias.recentBullRate}% last 8
-                    </span>
-                  </div>
+                  {bias.isFiltered && bias.technicalMetrics ? (
+                    <>
+                      <div className="signal-pill">
+                        <span className={`pill-dot ${bias.technicalMetrics.priceVsEma20Pct >= 0 ? 'bullish' : 'bearish'}`} />
+                        <span className="pill-label">20 EMA Structure</span>
+                        <span className={`pill-value ${bias.technicalMetrics.priceVsEma20Pct >= 0 ? 'value-bullish' : 'value-bearish'}`}>
+                          {bias.technicalMetrics.priceVsEma20Pct >= 0 ? '+' : ''}{bias.technicalMetrics.priceVsEma20Pct}% (${bias.technicalMetrics.ema20.toLocaleString()})
+                        </span>
+                      </div>
+                      <div className="signal-pill">
+                        <span className={`pill-dot ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'bullish' : 'bearish'}`} />
+                        <span className="pill-label">Weekly Open</span>
+                        <span className={`pill-value ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'value-bullish' : 'value-bearish'}`}>
+                          {bias.weeklyBias.priceVsWeeklyOpen === 'above' ? '+' : '-'}
+                          {Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%
+                        </span>
+                      </div>
+                      <div className="signal-pill">
+                        <span className={`pill-dot ${bias.technicalMetrics.change24h >= 0 ? 'bullish' : 'bearish'}`} />
+                        <span className="pill-label">Bleed Guard</span>
+                        <span className={`pill-value ${bias.technicalMetrics.change24h >= 0 ? 'value-bullish' : 'value-bearish'}`}>
+                          24h: {bias.technicalMetrics.change24h >= 0 ? '+' : ''}{bias.technicalMetrics.change24h}% · RSI {bias.technicalMetrics.rsi14}
+                        </span>
+                      </div>
+                      <div className="signal-pill">
+                        <span className={`pill-dot ${bias.recentBullRate > 50 ? 'bullish' : 'bearish'}`} />
+                        <span className="pill-label">Recent {DAY_SHORT[todayDow]}s</span>
+                        <span className={`pill-value ${bias.recentBullRate > 50 ? 'value-bullish' : 'value-bearish'}`}>
+                          {bias.recentBullRate}% last 8
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="signal-pill">
+                        <span className={`pill-dot ${biasColor(todayDowStats.bias)}`} />
+                        <span className="pill-label">Day-of-Week</span>
+                        <span className={`pill-value value-${biasColor(todayDowStats.bias)}`}>
+                          {todayDowStats.bullishRate.toFixed(0)}% Bull
+                        </span>
+                      </div>
+                      <div className="signal-pill">
+                        <span className={`pill-dot ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'bullish' : 'bearish'}`} />
+                        <span className="pill-label">Weekly Open</span>
+                        <span className={`pill-value ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'value-bullish' : 'value-bearish'}`}>
+                          {bias.weeklyBias.priceVsWeeklyOpen === 'above' ? '+' : '-'}
+                          {Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%
+                        </span>
+                      </div>
+                      <div className="signal-pill">
+                        <span className={`pill-dot ${biasColor(bias.monthlyStats.bias)}`} />
+                        <span className="pill-label">{MONTHS[todayMonth]} Seasonal</span>
+                        <span className={`pill-value value-${biasColor(bias.monthlyStats.bias)}`}>
+                          {bias.monthlyStats.bullishRate.toFixed(0)}% Bull
+                        </span>
+                      </div>
+                      <div className="signal-pill">
+                        <span className={`pill-dot ${bias.recentBullRate > 50 ? 'bullish' : 'bearish'}`} />
+                        <span className="pill-label">Recent {DAY_SHORT[todayDow]}s</span>
+                        <span className={`pill-value ${bias.recentBullRate > 50 ? 'value-bullish' : 'value-bearish'}`}>
+                          {bias.recentBullRate}% last 8
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -508,10 +806,81 @@ export default function Home() {
               <div className="confidence-meter">
                 <ConfidenceRing confidence={bias.confidence} bias={bias.bias} />
                 <div className="meter-description">
-                  Model confidence<br />from 3 composite signals
+                  {bias.isFiltered ? (
+                    <>Highest-probability<br />multi-confluence filter</>
+                  ) : (
+                    <>Raw unweighted<br />3-signal baseline</>
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* 5. Confluence Matrix Breakdown (Toggleable) */}
+            {showConfluences && bias.confluences && (
+              <div style={{
+                marginTop: 20,
+                paddingTop: 16,
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                animation: 'fadeIn 0.2s ease',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 10,
+                  fontSize: '0.75rem',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-secondary)',
+                }}>
+                  <span>CONFLUENCE ALIGNMENT SCORECARD:</span>
+                  <span style={{ color: bias.bias === 'bearish' ? '#f87171' : '#4ade80', fontWeight: 700 }}>
+                    Composite Score: {bias.confluenceScore > 0 ? '+' : ''}{bias.confluenceScore}
+                  </span>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 10,
+                }}>
+                  {bias.confluences.map((c) => {
+                    const isBull = c.state === 'bullish';
+                    const isBear = c.state === 'bearish';
+                    return (
+                      <div
+                        key={c.id}
+                        style={{
+                          background: '#090909',
+                          border: `1px solid ${isBull ? 'rgba(34, 197, 94, 0.25)' : isBear ? 'rgba(239, 68, 68, 0.25)' : '#1f1f1f'}`,
+                          borderRadius: 6,
+                          padding: '8px 12px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <span style={{ fontSize: '0.72rem', color: '#aaaaaa', fontFamily: 'var(--font-mono)' }}>{c.name}</span>
+                          <span style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 800,
+                            padding: '1px 6px',
+                            borderRadius: 3,
+                            background: isBull ? 'rgba(34, 197, 94, 0.2)' : isBear ? 'rgba(239, 68, 68, 0.2)' : '#222222',
+                            color: isBull ? '#4ade80' : isBear ? '#f87171' : '#888888',
+                          }}>
+                            {c.state.toUpperCase()}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e5e5e5', fontFamily: 'var(--font-mono)' }}>
+                          {c.valueText}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: '#666666', marginTop: 2 }}>
+                          {c.detail}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── QUICK STATS ── */}

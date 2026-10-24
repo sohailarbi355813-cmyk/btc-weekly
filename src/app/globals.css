@@ -1905,3 +1905,57 @@ body::after {
   color: #777777;
   letter-spacing: 0.06em;
 }
+
+/* ── Bias Hero High-Probability Filter Pills & Confluence Matrix ── */
+.bias-filter-pill {
+  background: #0d0d0d;
+  border: 1px solid #222222;
+  color: #888888;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bias-filter-pill:hover {
+  border-color: #38bdf8;
+  color: #e5e5e5;
+}
+
+.bias-filter-pill.active {
+  background: rgba(56, 189, 248, 0.15) !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+
+.confluence-chip {
+  background: #0d0d0d;
+  border: 1px solid #1c1c1c;
+  color: #666666;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.confluence-chip:hover {
+  border-color: #444444;
+  color: #aaaaaa;
+}
+
+.confluence-chip.active {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+

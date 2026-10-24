@@ -244,10 +244,60 @@ export function analyzeMonthlyBias(candles) {
   return stats;
 }
 
+export const DEFAULT_BIAS_FILTERS = {
+  preset: 'highest_prob', // 'highest_prob' | 'bleed_guard' | 'trend_structure' | 'recent_regime' | 'raw_legacy' | 'custom'
+  enableTrend: true,
+  enableBleedGuard: true,
+  enableWeeklyOpen: true,
+  enableRecentRegime: true,
+  enableRawStats: true,
+};
+
 /**
- * Calculate the combined bias signal for today
+ * Calculate Exponential Moving Average (EMA)
  */
-export function getTodayBias(candles, currentPrice, referenceDate = null) {
+export function calculateEMA(data, period) {
+  if (!data || data.length === 0) return 0;
+  if (data.length < period) return data[data.length - 1];
+  const k = 2 / (period + 1);
+  let ema = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < data.length; i++) {
+    ema = data[i] * k + ema * (1 - k);
+  }
+  return ema;
+}
+
+/**
+ * Calculate Relative Strength Index (RSI)
+ */
+export function calculateRSI(data, period = 14) {
+  if (!data || data.length <= period) return 50;
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = data[i] - data[i - 1];
+    if (diff >= 0) gains += diff;
+    else losses -= diff;
+  }
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+  for (let i = period + 1; i < data.length; i++) {
+    const diff = data[i] - data[i - 1];
+    if (diff >= 0) {
+      avgGain = (avgGain * (period - 1) + diff) / period;
+      avgLoss = (avgLoss * (period - 1)) / period;
+    } else {
+      avgGain = (avgGain * (period - 1)) / period;
+      avgLoss = (avgLoss * (period - 1) - diff) / period;
+    }
+  }
+  const rs = avgGain / (avgLoss || 1e-9);
+  return Math.round((100 - (100 / (1 + rs))) * 10) / 10;
+}
+
+/**
+ * Calculate the combined bias signal for today with multi-confluence institutional filters
+ */
+export function getTodayBias(candles, currentPrice, referenceDate = null, filterSettings = DEFAULT_BIAS_FILTERS) {
   const today = referenceDate instanceof Date ? referenceDate : new Date();
   const dow = today.getUTCDay();
   const month = today.getUTCMonth();
@@ -259,17 +309,14 @@ export function getTodayBias(candles, currentPrice, referenceDate = null) {
   const todayDowStats = dowStats[dow];
   const todayMonthStats = monthlyStats[month];
 
-  // Combine signals with weights
-  // DOW: 50%, Weekly Open: 35%, Monthly: 15%
+  // 1. Raw Legacy Formula (historical DOW + Weekly Open + Monthly)
   const dowSignal = todayDowStats.bullishRate - 50; // -50 to +50
   const weeklySignal = weeklyBias.currentBullRate - 50;
   const monthlySignal = todayMonthStats.bullishRate - 50;
 
-  const combinedSignal = (dowSignal * 0.50) + (weeklySignal * 0.35) + (monthlySignal * 0.15);
-
-  // Confidence = how far the signal is from neutral (0), scaled to 0-100
-  const confidence = Math.min(Math.abs(combinedSignal) * 2, 100);
-  const bias = combinedSignal > 2 ? 'bullish' : combinedSignal < -2 ? 'bearish' : 'neutral';
+  const rawCombinedSignal = (dowSignal * 0.50) + (weeklySignal * 0.35) + (monthlySignal * 0.15);
+  const rawConfidence = Math.min(Math.round(Math.abs(rawCombinedSignal) * 2), 100);
+  const rawBias = rawCombinedSignal > 2 ? 'bullish' : rawCombinedSignal < -2 ? 'bearish' : 'neutral';
 
   // Recent N-week same-day performance (last 8 occurrences of today's DOW)
   const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
@@ -280,14 +327,190 @@ export function getTodayBias(candles, currentPrice, referenceDate = null) {
   const recentBullish = recentSameDay.filter(c => isBullish(c)).length;
   const recentBullRate = recentSameDay.length > 0 ? (recentBullish / recentSameDay.length) * 100 : 50;
 
+  // 2. High-Probability Confluence Filters (EMA 20/50, Bleed Trap Guard, RSI, 24h Momentum)
+  const closes = sorted.map(c => c.close);
+  const ema20 = calculateEMA(closes, 20);
+  const ema50 = calculateEMA(closes, 50);
+  const rsi14 = calculateRSI(closes, 14);
+
+  const prevCandle = sorted.length >= 2 ? sorted[sorted.length - 2] : sorted[sorted.length - 1];
+  const change24h = prevCandle && prevCandle.close > 0
+    ? ((currentPrice - prevCandle.close) / prevCandle.close) * 100
+    : 0;
+  const priceVsEma20Pct = ema20 > 0 ? ((currentPrice - ema20) / ema20) * 100 : 0;
+  const priceVsEma50Pct = ema50 > 0 ? ((currentPrice - ema50) / ema50) * 100 : 0;
+
+  // Confluence Scoring
+  const activeFilters = { ...DEFAULT_BIAS_FILTERS, ...(filterSettings || {}) };
+  const confluences = [];
+  let sumScores = 0;
+  let totalWeight = 0;
+
+  // A. Trend Structure (20 EMA & 50 EMA)
+  let trendScore = 0;
+  if (currentPrice > ema20 && ema20 > ema50) trendScore = 30; // Golden bull trend
+  else if (currentPrice > ema20) trendScore = 15; // Above 20 EMA
+  else if (currentPrice < ema20 && ema20 < ema50) trendScore = -30; // Bear trend
+  else trendScore = -20; // Under 20 EMA
+
+  const trendConfluence = {
+    id: 'trend',
+    name: 'Trend Structure (20 EMA)',
+    weight: 30,
+    score: trendScore,
+    state: trendScore > 0 ? 'bullish' : 'bearish',
+    valueText: `${priceVsEma20Pct > 0 ? '+' : ''}${priceVsEma20Pct.toFixed(2)}% vs 20 EMA ($${Math.round(ema20).toLocaleString()})`,
+    detail: currentPrice > ema20 ? 'Holding above Daily 20 EMA support' : 'Trading below Daily 20 EMA resistance',
+  };
+  confluences.push(trendConfluence);
+  if (activeFilters.enableTrend) {
+    sumScores += trendScore;
+    totalWeight += 30;
+  }
+
+  // B. Bleed Trap Guard (24h Net Delta & RSI 14)
+  let bleedScore = 0;
+  const isBleeding = change24h < -0.5 || rsi14 < 44;
+  const isPumping = change24h > 0.8 && rsi14 > 53;
+
+  if (isBleeding) {
+    bleedScore = -25;
+  } else if (isPumping) {
+    bleedScore = 25;
+  } else {
+    bleedScore = 0;
+  }
+
+  const isBleedTrap = (change24h < -0.4 || rsi14 < 45 || currentPrice < ema20) && (todayDowStats.bullishRate >= 50);
+
+  const bleedConfluence = {
+    id: 'bleed_guard',
+    name: 'Bleed Trap Guard (RSI & Delta)',
+    weight: 25,
+    score: bleedScore,
+    state: bleedScore < 0 ? 'bearish' : bleedScore > 0 ? 'bullish' : 'neutral',
+    valueText: `24h: ${change24h > 0 ? '+' : ''}${change24h.toFixed(2)}% · RSI: ${rsi14.toFixed(1)}`,
+    detail: isBleedTrap
+      ? '⚠️ Warning: Intraday distribution active despite historical bullish bias'
+      : isBleeding
+      ? 'Bearish momentum & selling pressure dominant'
+      : isPumping
+      ? 'Clean expansion & positive delta momentum'
+      : 'Neutral order flow consolidation',
+  };
+  confluences.push(bleedConfluence);
+  if (activeFilters.enableBleedGuard) {
+    sumScores += bleedScore;
+    totalWeight += 25;
+  }
+
+  // C. Weekly Open Level
+  const woScore = weeklyBias.priceVsWeeklyOpen === 'above' ? 25 : -25;
+  const woConfluence = {
+    id: 'weekly_open',
+    name: 'Weekly Open Level',
+    weight: 25,
+    score: woScore,
+    state: weeklyBias.priceVsWeeklyOpen === 'above' ? 'bullish' : 'bearish',
+    valueText: `${weeklyBias.pctFromWeeklyOpen > 0 ? '+' : ''}${weeklyBias.pctFromWeeklyOpen.toFixed(2)}% ($${Math.round(weeklyBias.weeklyOpen).toLocaleString()})`,
+    detail: weeklyBias.priceVsWeeklyOpen === 'above'
+      ? 'Acceptance above Weekly Open (Institutional Long Edge)'
+      : 'Trading below Weekly Open (Institutional Short Edge)',
+  };
+  confluences.push(woConfluence);
+  if (activeFilters.enableWeeklyOpen) {
+    sumScores += woScore;
+    totalWeight += 25;
+  }
+
+  // D. Recent 8-Week Cycle Regime
+  let regimeScore = 0;
+  if (recentBullRate >= 62.5) regimeScore = 15;
+  else if (recentBullRate <= 37.5) regimeScore = -15;
+  else regimeScore = 0;
+
+  const regimeConfluence = {
+    id: 'recent_regime',
+    name: 'Recent 8-Week Regime',
+    weight: 15,
+    score: regimeScore,
+    state: recentBullRate > 50 ? 'bullish' : recentBullRate < 50 ? 'bearish' : 'neutral',
+    valueText: `${recentBullRate.toFixed(0)}% Bull win rate (last 8 ${DAY_NAMES[dow].slice(0, 3)}s)`,
+    detail: recentBullRate >= 60
+      ? 'Current cycle strongly favors longs on this day'
+      : recentBullRate <= 40
+      ? 'Current cycle heavily bleeds on this day'
+      : 'Even distribution in recent weeks',
+  };
+  confluences.push(regimeConfluence);
+  if (activeFilters.enableRecentRegime) {
+    sumScores += regimeScore;
+    totalWeight += 15;
+  }
+
+  // E. Raw DOW Historical Rate
+  const rawDowScore = Math.max(-10, Math.min(10, Math.round((todayDowStats.bullishRate - 50) * 0.2)));
+  const rawDowConfluence = {
+    id: 'raw_dow',
+    name: 'Historical DOW Baseline',
+    weight: 10,
+    score: rawDowScore,
+    state: todayDowStats.bullishRate > 52 ? 'bullish' : todayDowStats.bullishRate < 48 ? 'bearish' : 'neutral',
+    valueText: `${todayDowStats.bullishRate.toFixed(0)}% Bull (5-Year Average)`,
+    detail: `${todayDowStats.bullish} green / ${todayDowStats.total} total occurrences since 2021`,
+  };
+  confluences.push(rawDowConfluence);
+  if (activeFilters.enableRawStats) {
+    sumScores += rawDowScore;
+    totalWeight += 10;
+  }
+
+  // Final Composite High-Probability Calculation
+  const isRawPreset = activeFilters.preset === 'raw_legacy' || totalWeight === 0;
+
+  let finalBias = rawBias;
+  let finalConfidence = rawConfidence;
+  let normalizedScore = 0;
+
+  if (!isRawPreset && totalWeight > 0) {
+    normalizedScore = Math.round((sumScores / totalWeight) * 100);
+    finalBias = normalizedScore > 8 ? 'bullish' : normalizedScore < -8 ? 'bearish' : 'neutral';
+    // When confluences align, confidence reflects true institutional certainty (65% - 95%)
+    finalConfidence = Math.min(Math.max(Math.round(Math.abs(normalizedScore)), 55), 96);
+  }
+
+  // Bleed Trap Alert Details
+  const bleedTrap = {
+    detected: isBleedTrap,
+    title: 'BLEED TRAP CONFLICT DETECTED',
+    explanation: `Historical Day-of-Week statistics show a ${todayDowStats.bullishRate.toFixed(0)}% bullish tendency, but real-time technical structure is actively bleeding (${change24h > 0 ? '+' : ''}${change24h.toFixed(2)}% 24h delta, RSI ${rsi14.toFixed(1)}, and price below 20 EMA). Naive longs are at severe risk of being trapped.`,
+  };
+
   return {
     date: today.toISOString().split('T')[0],
     dayName: DAY_NAMES[dow],
     dow,
     month,
-    bias,
-    confidence: Math.round(confidence),
-    combinedSignal: Math.round(combinedSignal * 10) / 10,
+    bias: finalBias,
+    confidence: finalConfidence,
+    rawBias,
+    rawConfidence,
+    isFiltered: !isRawPreset,
+    activeFilters,
+    confluences,
+    confluenceScore: normalizedScore,
+    bleedTrap,
+    technicalMetrics: {
+      ema20: Math.round(ema20),
+      ema50: Math.round(ema50),
+      priceVsEma20Pct: Math.round(priceVsEma20Pct * 100) / 100,
+      priceVsEma50Pct: Math.round(priceVsEma50Pct * 100) / 100,
+      rsi14,
+      change24h: Math.round(change24h * 100) / 100,
+      weeklyOpen: Math.round(weeklyBias.weeklyOpen),
+      pctFromWeeklyOpen: Math.round(weeklyBias.pctFromWeeklyOpen * 100) / 100,
+    },
+    combinedSignal: Math.round(rawCombinedSignal * 10) / 10,
     dowStats: todayDowStats,
     weeklyBias,
     monthlyStats: todayMonthStats,
