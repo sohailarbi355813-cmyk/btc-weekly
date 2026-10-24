@@ -282,7 +282,7 @@ export default function WolfKeyLevels({ levelsData }) {
               const isMonthlyVA = ['PM VAH', 'PM POC', 'PM VAL'].includes(row.code);
 
               return (
-                <div key={row.code + idx} className={`wolf-row tooltip-wrap ${isWeeklyVA ? 'is-va-level' : ''} ${isMonthlyVA ? 'is-monthly-va' : ''}`}>
+                <div key={row.code + idx} className={`wolf-row ${isWeeklyVA ? 'is-va-level' : ''} ${isMonthlyVA ? 'is-monthly-va' : ''}`}>
                   <div>
                     <div className="wolf-row-code">
                       {row.code}
@@ -296,15 +296,6 @@ export default function WolfKeyLevels({ levelsData }) {
                   </div>
                   <div className={`wolf-row-pct ${isPositive ? 'pos' : 'neg'}`}>
                     {isPositive ? '+' : ''}{row.pctDiff.toFixed(2)} %
-                  </div>
-
-                  {/* Tooltip */}
-                  <div className="tooltip-box" style={{ minWidth: 200 }}>
-                    <div className="tooltip-row"><span className="tooltip-key">Level</span><span className="tooltip-val" style={{ color: 'var(--wolf-yellow)' }}>{row.code} ({row.name})</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Price</span><span className="tooltip-val">${Number(row.price).toLocaleString('en-US', { minimumFractionDigits: 1 })}</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Distance</span><span className="tooltip-val">{isPositive ? '+' : ''}{row.pctDiff}% (${Math.abs(row.diff).toLocaleString('en-US')})</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Role</span><span className="tooltip-val">{row.role}</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Category</span><span className="tooltip-val">{row.category.toUpperCase()}</span></div>
                   </div>
                 </div>
               );
