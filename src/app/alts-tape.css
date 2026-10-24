@@ -12,35 +12,104 @@
 /* ── Top Sub-Tabs ── */
 .va-tabs-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.5rem 0.75rem;
+  padding: 0.6rem 0.75rem;
   background: #000000;
   border: 1px solid #1a1a1a;
   border-radius: 8px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .va-tabs-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 .va-tab-group {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 3px;
+}
+
+.va-tab-group::-webkit-scrollbar {
+  display: none;
+}
+
+.va-tab-group > * {
+  flex-shrink: 0;
+}
+
+.va-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 3px;
+}
+
+.va-controls-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.va-controls-bar > * {
+  flex-shrink: 0;
+}
+
+@media (min-width: 1024px) {
+  .va-tab-group {
+    width: auto;
+    overflow-x: visible;
+  }
+  .va-controls-bar {
+    width: auto;
+    justify-content: flex-end;
+    overflow-x: visible;
+  }
 }
 
 .va-tab-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 0.9rem;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
   background: transparent;
   color: #888888;
   border: 1px solid transparent;
   transition: all 0.15s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+  user-select: none;
 }
 
 .va-tab-btn:hover {
@@ -292,3 +361,51 @@
   text-align: center;
   margin-top: 0.5rem;
 }
+
+/* ── Mobile Touch Scrolling & Swiping Helpers ── */
+.wolf-filter-pills-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 3px;
+}
+
+.wolf-filter-pills-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.wolf-filter-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .vyaps-card {
+    padding: 0.85rem 0.5rem;
+  }
+
+  .va-search-input {
+    min-width: 130px;
+    width: 140px;
+  }
+
+  .va-tabs-bar {
+    padding: 0.5rem;
+  }
+
+  .va-tab-btn {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.78rem;
+  }
+}
+

@@ -332,7 +332,7 @@ export default function RsiDivergenceScanner({ onSetAlert }) {
           background: '#020202',
         }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+        <div className="wolf-filter-pills-scroll">
           <button
             className={`wolf-filter-btn ${filterDirection === 'all' ? 'active' : ''}`}
             onClick={() => setFilterDirection('all')}

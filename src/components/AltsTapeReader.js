@@ -601,7 +601,7 @@ export default function AltsTapeReader() {
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <div className="va-controls-bar">
           {/* Auto-Alert Toggle */}
           <button
             className="va-tab-btn"
@@ -803,7 +803,7 @@ export default function AltsTapeReader() {
             gap: 10
           }}>
             {/* Filter Pills */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+            <div className="wolf-filter-pills-scroll">
               {activeTab === 'bull' && (
                 <>
                   <button
