@@ -21,11 +21,18 @@ export default function SessionProfiler() {
   const [selectedDow, setSelectedDow] = useState(null); // Defaults to today's DOW once data loads
   const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'weekly-cycle' | 'logs'
 
-  const fetchSessionData = async () => {
+  const [retrying, setRetrying] = useState(false);
+
+  const fetchSessionData = async (isManualRetry = false) => {
     try {
-      setLoading(true);
+      if (isManualRetry) setRetrying(true);
+      else setLoading(true);
+
       const res = await fetch('/api/session-profiler');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || `HTTP ${res.status}`);
+      }
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to analyze sessions');
 
@@ -39,6 +46,7 @@ export default function SessionProfiler() {
       setError(err.message);
     } finally {
       setLoading(false);
+      setRetrying(false);
     }
   };
 
@@ -51,7 +59,7 @@ export default function SessionProfiler() {
       <div className="vyaps-card" style={{ background: '#000000', borderColor: '#1a1a1a', padding: '3.5rem', textAlign: 'center' }}>
         <IconRefresh size={28} className="spin" color="#38bdf8" style={{ marginBottom: 12 }} />
         <div style={{ fontFamily: 'var(--font-mono)', color: '#888888', fontSize: '0.9rem' }}>
-          Scanning 700+ hourly candles from previous month across Asia, London &amp; New York sessions...
+          Scanning 1,000 hourly candles across Asia, London &amp; New York sessions...
         </div>
       </div>
     );
@@ -59,10 +67,21 @@ export default function SessionProfiler() {
 
   if (error && !data) {
     return (
-      <div className="vyaps-card" style={{ background: '#000000', borderColor: '#1a1a1a', padding: '2.5rem', textAlign: 'center' }}>
-        <div style={{ color: '#ef4444', marginBottom: 10 }}>Session Scanner Error: {error}</div>
-        <button className="va-tab-btn" onClick={fetchSessionData}>
-          <IconRefresh size={14} /> Retry Scan
+      <div className="vyaps-card" style={{ background: '#000000', borderColor: '#ef444433', padding: '2.5rem', textAlign: 'center' }}>
+        <div style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.95rem', marginBottom: 6 }}>
+          Telemetry Latency Reconnecting: {error}
+        </div>
+        <div style={{ color: '#777777', fontSize: '0.8rem', marginBottom: 16 }}>
+          Exchanges experienced high latency during request. Live fallback cache is ready.
+        </div>
+        <button
+          className="va-tab-btn"
+          onClick={() => fetchSessionData(true)}
+          disabled={retrying}
+          style={{ background: '#38bdf8', color: '#000000', borderColor: '#38bdf8', fontWeight: 700 }}
+        >
+          <IconRefresh size={14} className={retrying ? 'spin' : ''} />
+          {retrying ? 'Scanning Telemetry...' : 'Retry Scan'}
         </button>
       </div>
     );

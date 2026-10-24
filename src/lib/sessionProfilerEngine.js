@@ -112,13 +112,15 @@ export function analyzeSessions(hourlyCandles, customNow = null) {
     const dayRange = dayHigh - dayLow;
     const dayRangePct = (dayRange / dayLow) * 100;
 
-    const highCandles = list.filter(x => x.high === dayHigh);
-    const lowCandles = list.filter(x => x.low === dayLow);
-    const hodCandle = highCandles[0];
-    const lodCandle = lowCandles[0];
+    let hodCandle = list[0];
+    let lodCandle = list[0];
+    for (const item of list) {
+      if (item.high >= hodCandle.high) hodCandle = item;
+      if (item.low <= lodCandle.low) lodCandle = item;
+    }
 
-    const hodSession = getSessionNameForHour(hodCandle.hour);
-    const lodSession = getSessionNameForHour(lodCandle.hour);
+    const hodSession = getSessionNameForHour(hodCandle ? hodCandle.hour : 12);
+    const lodSession = getSessionNameForHour(lodCandle ? lodCandle.hour : 4);
 
     // Calculate individual session highs & lows
     const asiaCandles = list.filter(x => x.hour >= 0 && x.hour < 8);
@@ -295,10 +297,14 @@ export function analyzeSessions(hourlyCandles, customNow = null) {
   for (const [mondayStr, list] of Object.entries(weekMap)) {
     if (list.length < 100) continue; // Skip incomplete weeks
     completedWeeks++;
-    const weekHigh = Math.max(...list.map(x => x.high));
-    const weekLow = Math.min(...list.map(x => x.low));
-    const highCandle = list.find(x => x.high === weekHigh);
-    const lowCandle = list.find(x => x.low === weekLow);
+    let highCandle = list[0];
+    let lowCandle = list[0];
+    for (const item of list) {
+      if (item.high >= highCandle.high) highCandle = item;
+      if (item.low <= lowCandle.low) lowCandle = item;
+    }
+    const weekHigh = highCandle.high;
+    const weekLow = lowCandle.low;
 
     howCounts[highCandle.dow]++;
     lowCounts[lowCandle.dow]++;
