@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { scanAltsDivergences } from '@/lib/divergenceEngine';
 
-export const dynamic = 'force-dynamic';
-
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);

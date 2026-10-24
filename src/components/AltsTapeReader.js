@@ -17,6 +17,7 @@ import {
 import { playAlertChime } from '@/lib/alertSound';
 import TwinPatternScanner from './TwinPatternScanner';
 import RsiDivergenceScanner from './RsiDivergenceScanner';
+import CvdDivergenceScanner from './CvdDivergenceScanner';
 
 const STORAGE_KEY_ALERTS = 'wolf_tape_reader_alerts_v1';
 const STORAGE_KEY_SOUND = 'wolf_tape_reader_sound_muted';
@@ -570,6 +571,28 @@ export default function AltsTapeReader() {
           </button>
 
           <button
+            className={`va-tab-btn ${activeTab === 'cvd' ? 'active' : ''}`}
+            onClick={() => handleTabChange('cvd')}
+            style={{
+              borderColor: activeTab === 'cvd' ? '#f59e0b' : undefined,
+              color: activeTab === 'cvd' ? '#f59e0b' : undefined,
+            }}
+          >
+            <IconZap size={14} color={activeTab === 'cvd' ? '#f59e0b' : undefined} />
+            <span>CVD Divergences</span>
+            <span style={{
+              background: '#f59e0b',
+              color: '#000000',
+              fontSize: '0.62rem',
+              fontWeight: 800,
+              padding: '1px 5px',
+              borderRadius: 3,
+            }}>
+              BTC+55
+            </span>
+          </button>
+
+          <button
             className={`va-tab-btn ${activeTab === 'twin' ? 'active' : ''}`}
             onClick={() => handleTabChange('twin')}
             style={{
@@ -686,8 +709,10 @@ export default function AltsTapeReader() {
         </div>
       </div>
 
-      {/* ── RSI DIVERGENCE SCANNER VIEW ── */}
-      {activeTab === 'div' ? (
+      {/* ── CVD DIVERGENCE SCANNER VIEW (BTC + 55 ALTS) ── */}
+      {activeTab === 'cvd' ? (
+        <CvdDivergenceScanner />
+      ) : activeTab === 'div' ? (
         <RsiDivergenceScanner onSetAlert={handleQuickSetAlert} />
       ) : activeTab === 'twin' ? (
         <TwinPatternScanner onSetAlert={handleQuickSetAlert} />

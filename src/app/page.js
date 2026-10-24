@@ -11,6 +11,7 @@ import WeeklyForecast from '@/components/WeeklyForecast';
 import TwinPatternScanner from '@/components/TwinPatternScanner';
 import SessionProfiler from '@/components/SessionProfiler';
 import BootIntroSequence from '@/components/BootIntroSequence';
+import CvdDivergenceScanner from '@/components/CvdDivergenceScanner';
 import {
   IconBitcoin,
   IconTrendUp,
@@ -964,6 +965,11 @@ export default function Home() {
               <span style={{ color: activeTab === 'alts' ? '#38bdf8' : undefined }}>Alts Value Area (VAL/VAH)</span>
               <span style={{ background: '#2dd4bf', color: '#000000', fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>55</span>
             </button>
+            <button id="tab-cvd" className={`tab-btn ${activeTab === 'cvd' ? 'active' : ''}`} onClick={() => setActiveTab('cvd')}>
+              <IconZap size={15} color={activeTab === 'cvd' ? '#f59e0b' : undefined} />
+              <span style={{ color: activeTab === 'cvd' ? '#f59e0b' : undefined }}>CVD Divergences</span>
+              <span style={{ background: '#f59e0b', color: '#000000', fontSize: '0.62rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>BTC+55</span>
+            </button>
             <button id="tab-twin" className={`tab-btn ${activeTab === 'twin' ? 'active' : ''}`} onClick={() => setActiveTab('twin')}>
               <IconZap size={15} color={activeTab === 'twin' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'twin' ? '#38bdf8' : undefined }}>Twin Pattern Scanner</span>
@@ -997,6 +1003,11 @@ export default function Home() {
           {/* ── 2B. TWIN PATTERN SCANNER VIEW (Direct Main Tab) ── */}
           {activeTab === 'twin' && (
             <TwinPatternScanner />
+          )}
+
+          {/* ── 2C. CVD DIVERGENCE SCANNER VIEW (BTC + 55 Alts across 30m, 1h, 2h, 3h, 4h) ── */}
+          {activeTab === 'cvd' && (
+            <CvdDivergenceScanner />
           )}
 
           {/* ── 3. MACRO WHALES & ETF VIEW ── */}
