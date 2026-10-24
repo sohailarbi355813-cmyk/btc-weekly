@@ -9,6 +9,7 @@ export async function GET() {
     try {
       const res = await fetch('https://api.bybit.com/v5/market/tickers?category=linear', {
         headers: { 'User-Agent': 'WolfTapeReader/2.0' },
+        signal: AbortSignal.timeout(3500),
         cache: 'no-store',
       });
       if (res.ok) {
@@ -21,11 +22,12 @@ export async function GET() {
       console.warn('Bybit linear tickers fetch failed:', e.message);
     }
 
-    // Fallback: If Bybit had an issue, fetch from Binance Futures
+    // Fallback: If Bybit had an issue, fetch from Binance Vision 24hr tickers
     if (bybitMap.size === 0) {
       try {
-        const bRes = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr', {
+        const bRes = await fetch('https://data-api.binance.vision/api/v3/ticker/24hr', {
           headers: { 'User-Agent': 'WolfTapeReader/2.0' },
+          signal: AbortSignal.timeout(3500),
           cache: 'no-store',
         });
         if (bRes.ok) {
@@ -35,6 +37,9 @@ export async function GET() {
               symbol: t.symbol,
               lastPrice: t.lastPrice,
               price24hPcnt: (parseFloat(t.priceChangePercent) / 100).toString(),
+              turnover24h: t.quoteVolume || t.volume || '0',
+              highPrice24h: t.highPrice,
+              lowPrice24h: t.lowPrice,
             });
           });
         }

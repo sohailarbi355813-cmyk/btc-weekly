@@ -356,6 +356,16 @@ export default function AltsTapeReader() {
   const [confluenceFilter, setConfluenceFilter] = useState('all');
   const [timeframeFilter, setTimeframeFilter] = useState('all');
   const [sortBy, setSortBy] = useState('closest');
+  const [sortDir, setSortDir] = useState('desc'); // 'asc' or 'desc'
+
+  const handleHeaderSort = (key) => {
+    if (sortBy === key) {
+      setSortDir((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortBy(key);
+      setSortDir(key === 'symbol' || key === 'closest' ? 'asc' : 'desc');
+    }
+  };
 
   // Helper: Format turnover volume
   const formatTurnover = (usd) => {
@@ -379,14 +389,14 @@ export default function AltsTapeReader() {
       bullBleed: bull.filter((x) => x.isBleeding).length,
       bullSweet: bull.filter((x) => x.minAbsDist <= 1.5).length,
       bullMomentum: bull.filter((x) => x.change24h >= 3.0).length,
-      bullVol: bull.filter((x) => x.turnover24h >= 20000000).length,
+      bullVol: bull.filter((x) => (x.turnover24h || 0) >= 50000000).length,
 
       bearAll: bear.length,
       bearConfirmed: bear.filter((x) => x.change24h <= 0).length,
       bearSqueeze: bear.filter((x) => x.isPumping).length,
       bearSweet: bear.filter((x) => x.minAbsDist <= 1.5).length,
       bearBreakdown: bear.filter((x) => x.change24h <= -3.0).length,
-      bearVol: bear.filter((x) => x.turnover24h >= 20000000).length,
+      bearVol: bear.filter((x) => (x.turnover24h || 0) >= 50000000).length,
 
       fullAll: all.length,
       fullBull: all.filter((x) => x.state === 'BULL').length,
@@ -394,7 +404,7 @@ export default function AltsTapeReader() {
       fullBleed: all.filter((x) => x.isBleeding).length,
       fullGainers: all.filter((x) => x.change24h >= 2.0).length,
       fullBleeders: all.filter((x) => x.change24h <= -2.0).length,
-      fullVol: all.filter((x) => x.turnover24h >= 20000000).length,
+      fullVol: all.filter((x) => (x.turnover24h || 0) >= 50000000).length,
     };
   }, [data]);
 
@@ -431,8 +441,8 @@ export default function AltsTapeReader() {
         list = list.filter(item => item.change24h >= 3.0);
       } else if (confluenceFilter === 'breakdown') {
         list = list.filter(item => item.change24h <= -3.0);
-      } else if (confluenceFilter === 'volume') {
-        list = list.filter(item => item.turnover24h >= 20000000);
+      } else if (confluenceFilter === 'volume' || confluenceFilter === 'massive_vol') {
+        list = list.filter(item => (item.turnover24h || 0) >= 50000000);
       } else if (confluenceFilter === 'bull_only') {
         list = list.filter(item => item.state === 'BULL');
       } else if (confluenceFilter === 'bear_only') {
@@ -455,17 +465,25 @@ export default function AltsTapeReader() {
       list = list.filter((item) => item.symbol.toLowerCase().includes(q) || item.name.toLowerCase().includes(q));
     }
 
-    // 4. Sort
+    // 4. Sort (Support ascending/descending and direct volume ranking)
     list.sort((a, b) => {
-      if (sortBy === 'closest') return a.minAbsDist - b.minAbsDist;
-      if (sortBy === 'gainers') return b.change24h - a.change24h;
-      if (sortBy === 'bleeders') return a.change24h - b.change24h;
-      if (sortBy === 'volume') return b.turnover24h - a.turnover24h;
-      return a.minAbsDist - b.minAbsDist;
+      let res = 0;
+      if (sortBy === 'volume' || sortBy === 'turnover24h') {
+        res = (b.turnover24h || 0) - (a.turnover24h || 0);
+      } else if (sortBy === 'gainers' || sortBy === 'change24h') {
+        res = (b.change24h || 0) - (a.change24h || 0);
+      } else if (sortBy === 'bleeders') {
+        res = (a.change24h || 0) - (b.change24h || 0);
+      } else if (sortBy === 'symbol') {
+        res = a.symbol.localeCompare(b.symbol);
+      } else {
+        res = (a.minAbsDist || 0) - (b.minAbsDist || 0);
+      }
+      return sortDir === 'asc' ? -res : res;
     });
 
     return list;
-  }, [data, activeTab, confluenceFilter, timeframeFilter, sortBy, searchQuery]);
+  }, [data, activeTab, confluenceFilter, timeframeFilter, sortBy, sortDir, searchQuery]);
 
   return (
     <div className="va-terminal-wrapper" style={{ background: '#000000', minHeight: '80vh' }}>
@@ -780,8 +798,13 @@ export default function AltsTapeReader() {
                   <button
                     className={`wolf-filter-btn ${confluenceFilter === 'volume' ? 'active' : ''}`}
                     onClick={() => setConfluenceFilter('volume')}
+                    style={{
+                      borderColor: confluenceFilter === 'volume' ? '#38bdf8' : undefined,
+                      color: confluenceFilter === 'volume' ? '#38bdf8' : undefined
+                    }}
+                    title="Filter coins gaining massive volume (Over $50M+ 24h turnover)"
                   >
-                    Whale Vol (&gt;$20M) ({filterCounts.bullVol || 0})
+                    🔥 Massive Vol ($50M+) ({filterCounts.bullVol || 0})
                   </button>
                 </>
               )}
@@ -826,8 +849,13 @@ export default function AltsTapeReader() {
                   <button
                     className={`wolf-filter-btn ${confluenceFilter === 'volume' ? 'active' : ''}`}
                     onClick={() => setConfluenceFilter('volume')}
+                    style={{
+                      borderColor: confluenceFilter === 'volume' ? '#38bdf8' : undefined,
+                      color: confluenceFilter === 'volume' ? '#38bdf8' : undefined
+                    }}
+                    title="Filter coins gaining massive volume (Over $50M+ 24h turnover)"
                   >
-                    Whale Vol (&gt;$20M) ({filterCounts.bearVol || 0})
+                    🔥 Massive Vol ($50M+) ({filterCounts.bearVol || 0})
                   </button>
                 </>
               )}
@@ -877,8 +905,13 @@ export default function AltsTapeReader() {
                   <button
                     className={`wolf-filter-btn ${confluenceFilter === 'volume' ? 'active' : ''}`}
                     onClick={() => setConfluenceFilter('volume')}
+                    style={{
+                      borderColor: confluenceFilter === 'volume' ? '#38bdf8' : undefined,
+                      color: confluenceFilter === 'volume' ? '#38bdf8' : undefined
+                    }}
+                    title="Filter coins gaining massive volume (Over $50M+ 24h turnover)"
                   >
-                    Whale Vol (&gt;$20M) ({filterCounts.fullVol || 0})
+                    🔥 Massive Vol ($50M+) ({filterCounts.fullVol || 0})
                   </button>
                 </>
               )}
@@ -907,7 +940,11 @@ export default function AltsTapeReader() {
 
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSortBy(val);
+                  setSortDir(val === 'closest' || val === 'symbol' ? 'asc' : 'desc');
+                }}
                 style={{
                   background: '#0e0e0e',
                   color: '#ffffff',
@@ -918,10 +955,11 @@ export default function AltsTapeReader() {
                   fontSize: '0.72rem',
                 }}
               >
+                <option value="volume">🔥 Sort: Massive Volume ($USD)</option>
                 <option value="closest">Sort: Closest to Pivot</option>
                 <option value="gainers">Sort: 24h Gainers (%)</option>
                 <option value="bleeders">Sort: 24h Bleeders (%)</option>
-                <option value="volume">Sort: 24h Volume (USD)</option>
+                <option value="symbol">Sort: Symbol (A-Z)</option>
               </select>
             </div>
           </div>
@@ -936,9 +974,32 @@ export default function AltsTapeReader() {
               <table className="vyaps-table" style={{ background: '#000000' }}>
                 <thead>
                   <tr>
-                    <th>Symbol</th>
-                    <th>24h %</th>
-                    <th>24h Vol</th>
+                    <th
+                      onClick={() => handleHeaderSort('symbol')}
+                      style={{ cursor: 'pointer', userSelect: 'none', transition: 'color 0.15s ease' }}
+                      title="Click to sort by Symbol"
+                    >
+                      Symbol {sortBy === 'symbol' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleHeaderSort('change24h')}
+                      style={{ cursor: 'pointer', userSelect: 'none', transition: 'color 0.15s ease' }}
+                      title="Click to sort by 24h % Return"
+                    >
+                      24h % {(sortBy === 'change24h' || sortBy === 'gainers' || sortBy === 'bleeders') ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleHeaderSort('volume')}
+                      style={{
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        color: sortBy === 'volume' ? '#38bdf8' : undefined,
+                        transition: 'color 0.15s ease',
+                      }}
+                      title="Click to sort by 24h Turnover Volume"
+                    >
+                      🔥 24h Vol {sortBy === 'volume' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
                     <th>Signal / Trap</th>
                     <th>pY</th>
                     <th>Y</th>
@@ -1010,8 +1071,37 @@ export default function AltsTapeReader() {
                         </td>
 
                         {/* 3. 24h Vol */}
-                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: '#aaaaaa' }}>
-                          {formatTurnover(row.turnover24h)}
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-mono)', fontSize: '0.74rem' }}>
+                            <span style={{ color: (row.turnover24h || 0) >= 50000000 ? '#ffffff' : '#aaaaaa', fontWeight: (row.turnover24h || 0) >= 50000000 ? 700 : 400 }}>
+                              {formatTurnover(row.turnover24h)}
+                            </span>
+                            {(row.turnover24h || 0) >= 100000000 ? (
+                              <span style={{
+                                background: 'rgba(56, 189, 248, 0.15)',
+                                color: '#38bdf8',
+                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                fontSize: '0.58rem',
+                                fontWeight: 800,
+                                padding: '1px 4px',
+                                borderRadius: 3,
+                              }}>
+                                🐋 $100M+
+                              </span>
+                            ) : (row.turnover24h || 0) >= 50000000 ? (
+                              <span style={{
+                                background: 'rgba(245, 158, 11, 0.15)',
+                                color: '#f59e0b',
+                                border: '1px solid rgba(245, 158, 11, 0.35)',
+                                fontSize: '0.58rem',
+                                fontWeight: 800,
+                                padding: '1px 4px',
+                                borderRadius: 3,
+                              }}>
+                                🔥 $50M+
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
 
                         {/* 4. Confluence / Trap Grade */}
