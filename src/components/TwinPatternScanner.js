@@ -13,25 +13,27 @@ import {
   IconTarget,
 } from './Icons';
 import { playAlertChime } from '@/lib/alertSound';
+import { ALTS_WHITELIST } from '@/lib/altsData';
 
-const QUICK_MOVERS = [
-  { symbol: 'SUI', change: '+24.2%', dir: 'pump' },
-  { symbol: 'TAO', change: '+31.5%', dir: 'pump' },
-  { symbol: 'ENA', change: '+19.4%', dir: 'pump' },
-  { symbol: 'TIA', change: '-14.8%', dir: 'dump' },
-  { symbol: 'DOGE', change: '+22.0%', dir: 'pump' },
-  { symbol: 'VIRTUAL', change: '-18.6%', dir: 'dump' },
-  { symbol: 'RENDER', change: '+16.2%', dir: 'pump' },
-  { symbol: 'APT', change: '+14.1%', dir: 'pump' },
+const INITIAL_RUNNERS = [
+  { symbol: 'NEAR', change: '-6.3%', dir: 'dump' },
+  { symbol: 'WLD', change: '-9.3%', dir: 'dump' },
+  { symbol: 'ENA', change: '-8.0%', dir: 'dump' },
+  { symbol: 'DOT', change: '-7.0%', dir: 'dump' },
+  { symbol: 'SUI', change: '-3.9%', dir: 'dump' },
+  { symbol: 'APT', change: '-4.5%', dir: 'dump' },
+  { symbol: 'ASTER', change: '+0.7%', dir: 'pump' },
+  { symbol: 'TRX', change: '-0.2%', dir: 'dump' },
 ];
 
 export default function TwinPatternScanner({ onSetAlert }) {
-  const [targetInput, setTargetInput] = useState('SUI');
-  const [activeQuery, setActiveQuery] = useState('SUI');
+  const [targetInput, setTargetInput] = useState('NEAR');
+  const [activeQuery, setActiveQuery] = useState('NEAR');
   const [loading, setLoading] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [error, setError] = useState(null);
   const [armedAlerts, setArmedAlerts] = useState(new Set());
+  const [quickRunners, setQuickRunners] = useState(INITIAL_RUNNERS);
 
   const executeScan = async (symbolToScan) => {
     const sym = (symbolToScan || targetInput).trim().toUpperCase();
@@ -40,14 +42,19 @@ export default function TwinPatternScanner({ onSetAlert }) {
     setLoading(true);
     setError(null);
     setActiveQuery(sym);
+    setTargetInput(sym);
 
     try {
       const res = await fetch(`/api/catalyst-scanner?symbol=${encodeURIComponent(sym)}`);
-      if (!res.ok) throw new Error('Failed to query catalyst engine.');
       const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Scan failed');
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to query catalyst engine.');
+      }
 
       setScanResult(data);
+      if (data.quickRunners && data.quickRunners.length > 0) {
+        setQuickRunners(data.quickRunners);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -56,7 +63,7 @@ export default function TwinPatternScanner({ onSetAlert }) {
   };
 
   useEffect(() => {
-    executeScan('SUI');
+    executeScan('NEAR');
   }, []);
 
   const handleArmAlert = (twin) => {
@@ -74,7 +81,18 @@ export default function TwinPatternScanner({ onSetAlert }) {
   };
 
   const diagnosis = scanResult?.diagnosis;
+  const targetCoin = scanResult?.targetCoin;
   const twins = scanResult?.twins || [];
+  const btcChange = scanResult?.btcChange || 0;
+
+  // Filter 55 whitelist suggestions as user types
+  const inputUpper = targetInput.trim().toUpperCase();
+  const suggestions = inputUpper && inputUpper.length >= 1
+    ? ALTS_WHITELIST.filter((a) => {
+        const clean = a.symbol.replace('1000', '').replace('USDT', '');
+        return clean.includes(inputUpper) || a.name.toUpperCase().includes(inputUpper);
+      }).slice(0, 6)
+    : [];
 
   return (
     <div style={{ animation: 'fadeInUp 0.35s ease' }}>
@@ -91,11 +109,11 @@ export default function TwinPatternScanner({ onSetAlert }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <IconZap size={18} color="#38bdf8" />
               <span style={{ fontSize: '1rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.02em', fontFamily: 'var(--font-display)' }}>
-                CATALYST ATTRIBUTION &amp; PATTERN TWIN SCANNER
+                INSTITUTIONAL CATALYST &amp; VALUE AREA TWIN SCANNER
               </span>
             </div>
             <p style={{ fontSize: '0.74rem', color: '#888888', marginTop: 4 }}>
-              Type ANY coin that pumped or dumped. The system diagnoses the underlying orderflow catalyst, then immediately identifies which of our 55 whitelisted alts are currently forming the exact same pattern!
+              Diagnoses the exact orderflow &amp; Value Area driver behind any coin (dump or pump), then instantly matches which of our 55 whitelisted alts are currently forming the identical setup!
             </p>
           </div>
         </div>
@@ -106,14 +124,14 @@ export default function TwinPatternScanner({ onSetAlert }) {
             e.preventDefault();
             executeScan(targetInput);
           }}
-          style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}
+          style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: suggestions.length > 0 ? 8 : 14 }}
         >
           <div style={{ position: 'relative', flex: 1, minWidth: 240 }}>
             <input
               type="text"
               value={targetInput}
               onChange={(e) => setTargetInput(e.target.value.toUpperCase())}
-              placeholder="Type coin that moved hard (e.g. SUI, ENA, TAO, TIA, DOGE)..."
+              placeholder="Type coin that moved hard (e.g. NEAR, WLD, ENA, SUI, APT, DOGE)..."
               style={{
                 width: '100%',
                 background: '#000000',
@@ -151,16 +169,48 @@ export default function TwinPatternScanner({ onSetAlert }) {
             }}
           >
             <IconSearch size={15} className={loading ? 'spin-icon' : ''} />
-            <span>{loading ? 'Diagnosing Catalyst...' : 'Scan Reason & Find 55 Alts Twins'}</span>
+            <span>{loading ? 'Analyzing Market Structure...' : 'Scan Reason & Find 55 Alts Twins'}</span>
           </button>
         </form>
 
-        {/* Quick Movers Pills */}
+        {/* Dynamic Autocomplete Suggestions (if typing) */}
+        {suggestions.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            <span style={{ fontSize: '0.68rem', color: '#777777', fontFamily: 'var(--font-mono)' }}>Select:</span>
+            {suggestions.map((item) => {
+              const sym = item.symbol.replace('1000', '').replace('USDT', '');
+              return (
+                <button
+                  key={item.symbol}
+                  type="button"
+                  onClick={() => {
+                    setTargetInput(sym);
+                    executeScan(sym);
+                  }}
+                  style={{
+                    background: '#111111',
+                    border: '1px solid #333333',
+                    borderRadius: 4,
+                    padding: '3px 8px',
+                    fontSize: '0.72rem',
+                    color: '#38bdf8',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                >
+                  {sym} <span style={{ color: '#888888', fontSize: '0.68rem' }}>({item.name})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Live Quick Movers Pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.68rem', color: '#666666', fontFamily: 'var(--font-mono)' }}>
-            QUICK RUNNERS:
+            LIVE RUNNERS:
           </span>
-          {QUICK_MOVERS.map((m) => (
+          {quickRunners.map((m) => (
             <button
               key={m.symbol}
               type="button"
@@ -198,7 +248,7 @@ export default function TwinPatternScanner({ onSetAlert }) {
       )}
 
       {/* ── Section A: Diagnosed Catalyst Reason Card ── */}
-      {diagnosis && (
+      {diagnosis && targetCoin && (
         <div style={{
           background: '#070707',
           border: `1px solid ${diagnosis.direction === 'PUMP' ? 'rgba(34, 197, 94, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
@@ -212,8 +262,8 @@ export default function TwinPatternScanner({ onSetAlert }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
-                width: 44,
-                height: 44,
+                width: 46,
+                height: 46,
                 borderRadius: 8,
                 background: '#000000',
                 border: '1px solid #2a2a2a',
@@ -225,12 +275,12 @@ export default function TwinPatternScanner({ onSetAlert }) {
                 color: '#38bdf8',
                 fontSize: '1rem',
               }}>
-                {diagnosis.symbol.slice(0, 3)}
+                {diagnosis.symbol.slice(0, 4)}
               </div>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', fontFamily: 'var(--font-display)' }}>
-                    {diagnosis.symbol}
+                    {diagnosis.symbol} / USDT
                   </span>
                   <span style={{
                     fontSize: '0.82rem',
@@ -245,8 +295,16 @@ export default function TwinPatternScanner({ onSetAlert }) {
                     {diagnosis.magnitude} (24H {diagnosis.direction})
                   </span>
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#888888', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
-                  Spot: ${Number(diagnosis.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.74rem', color: '#aaaaaa', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
+                  <span>
+                    Spot Price: <strong style={{ color: '#ffffff' }}>${Number(diagnosis.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</strong>
+                  </span>
+                  <span>|</span>
+                  <span>24H High: ${Number(targetCoin.high24h).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+                  <span>|</span>
+                  <span>24H Low: ${Number(targetCoin.low24h).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+                  <span>|</span>
+                  <span>BTC: {btcChange >= 0 ? '+' : ''}{btcChange.toFixed(1)}%</span>
                 </div>
               </div>
             </div>
@@ -283,7 +341,7 @@ export default function TwinPatternScanner({ onSetAlert }) {
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#38bdf8', marginBottom: 8, fontFamily: 'var(--font-display)' }}>
               {diagnosis.archetype.name}
             </div>
-            <p style={{ fontSize: '0.82rem', color: '#cccccc', lineHeight: 1.6, marginBottom: 10 }}>
+            <p style={{ fontSize: '0.82rem', color: '#dddddd', lineHeight: 1.6, marginBottom: 12 }}>
               {diagnosis.detailedReason}
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10, fontSize: '0.74rem', borderTop: '1px solid #181818', paddingTop: 10 }}>
@@ -292,8 +350,10 @@ export default function TwinPatternScanner({ onSetAlert }) {
                 <span style={{ color: '#ffffff' }}>{diagnosis.archetype.preCondition}</span>
               </div>
               <div>
-                <span style={{ color: '#888888', display: 'block' }}>Scanning 55 Alts For:</span>
-                <span style={{ color: '#22c55e' }}>{diagnosis.archetype.twinCriteria}</span>
+                <span style={{ color: '#888888', display: 'block' }}>Active Twin Scan Criteria:</span>
+                <span style={{ color: diagnosis.direction === 'PUMP' ? '#22c55e' : '#ef4444' }}>
+                  {diagnosis.archetype.twinCriteria}
+                </span>
               </div>
             </div>
           </div>
@@ -320,7 +380,7 @@ export default function TwinPatternScanner({ onSetAlert }) {
             </span>
           </div>
           <span style={{ fontSize: '0.72rem', color: '#888888', fontFamily: 'var(--font-mono)' }}>
-            Sorted by Twin Match Similarity
+            Sorted by Multi-Factor Pattern Similarity
           </span>
         </div>
 
@@ -328,12 +388,14 @@ export default function TwinPatternScanner({ onSetAlert }) {
           <div style={{ padding: '3rem', textAlign: 'center', background: '#070707', border: '1px solid #1a1a1a', borderRadius: 8, color: '#888888' }}>
             <IconRadar size={32} color="#38bdf8" style={{ marginBottom: 12, opacity: 0.7 }} />
             <p style={{ fontSize: '0.9rem', color: '#ffffff', fontWeight: 600 }}>No exact twin candidates active for this archetype right now.</p>
-            <p style={{ fontSize: '0.75rem', marginTop: 4 }}>Try scanning another runner like SUI, TAO, or ENA.</p>
+            <p style={{ fontSize: '0.75rem', marginTop: 4 }}>Try scanning another runner like NEAR, WLD, SUI, or ENA.</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 14 }}>
             {twins.map((twin) => {
               const isArmed = armedAlerts.has(twin.symbol);
+              const isTwinPump = twin.change24h >= 0;
+
               return (
                 <div
                   key={twin.symbol}
@@ -356,8 +418,8 @@ export default function TwinPatternScanner({ onSetAlert }) {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{
-                          width: 36,
-                          height: 36,
+                          width: 38,
+                          height: 38,
                           borderRadius: 6,
                           background: '#000000',
                           border: '1px solid #262626',
@@ -378,8 +440,22 @@ export default function TwinPatternScanner({ onSetAlert }) {
                             </span>
                             <span style={{ fontSize: '0.72rem', color: '#888888' }}>{twin.name}</span>
                           </div>
-                          <div style={{ fontSize: '0.74rem', color: '#aaaaaa', fontFamily: 'var(--font-mono)' }}>
-                            Spot: ${Number(twin.spot).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                            <span style={{ fontSize: '0.76rem', color: '#ffffff', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                              ${Number(twin.spot).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                            </span>
+                            <span style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 800,
+                              fontFamily: 'var(--font-mono)',
+                              padding: '1px 5px',
+                              borderRadius: 3,
+                              background: isTwinPump ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                              color: isTwinPump ? '#22c55e' : '#ef4444',
+                              border: `1px solid ${isTwinPump ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                            }}>
+                              {isTwinPump ? '+' : ''}{twin.change24h.toFixed(1)}% 24h
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -409,7 +485,7 @@ export default function TwinPatternScanner({ onSetAlert }) {
                       padding: '8px 12px',
                       fontSize: '0.74rem',
                       fontFamily: 'var(--font-mono)',
-                      color: '#22c55e',
+                      color: isTwinPump ? '#22c55e' : '#ef4444',
                       marginBottom: 12,
                     }}>
                       ⚡ {twin.stage}
@@ -430,7 +506,7 @@ export default function TwinPatternScanner({ onSetAlert }) {
                       fontFamily: 'var(--font-mono)',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 4,
+                      gap: 5,
                       marginBottom: 16,
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -439,11 +515,11 @@ export default function TwinPatternScanner({ onSetAlert }) {
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#777777' }}>Target:</span>
-                        <span style={{ color: '#22c55e', fontWeight: 700 }}>{twin.targetPrice}</span>
+                        <span style={{ color: isTwinPump ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{twin.targetPrice}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#777777' }}>Invalidation:</span>
-                        <span style={{ color: '#ef4444' }}>{twin.invalidation}</span>
+                        <span style={{ color: '#f59e0b' }}>{twin.invalidation}</span>
                       </div>
                     </div>
                   </div>
