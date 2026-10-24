@@ -100,7 +100,6 @@ export async function GET(request) {
     ALTS_WHITELIST.forEach((item) => {
       const ticker = bybitMap.get(item.symbol);
       let spot = ticker ? parseFloat(ticker.lastPrice) : item.yo;
-      if (item.scaleFactor) spot = spot * item.scaleFactor;
 
       const change24h = ticker ? parseFloat(ticker.price24hPcnt || '0') * 100 : 0;
       const shortSymbol = item.symbol.replace('1000', '').replace('USDT', '');

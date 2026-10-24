@@ -11,7 +11,7 @@ export const ALTS_WHITELIST = [
   { symbol: 'AVAXUSDT', displaySymbol: 'AVAXUSDT.P', name: 'Avalanche', yo: 12.306, decimals: 3 },
   { symbol: 'BCHUSDT', displaySymbol: 'BCHUSDT.P', name: 'Bitcoin Cash', yo: 599.0, decimals: 1 },
   { symbol: 'BNBUSDT', displaySymbol: 'BNBUSDT.P', name: 'BNB', yo: 863.6, decimals: 1 },
-  { symbol: '1000BONKUSDT', displaySymbol: 'BONKUSDT.P', name: 'Bonk', yo: 0.007463, decimals: 8, scaleFactor: 0.001 },
+  { symbol: '1000BONKUSDT', displaySymbol: 'BONKUSDT.P', name: 'Bonk', yo: 0.007463, decimals: 6 },
   { symbol: 'CRVUSDT', displaySymbol: 'CRVUSDT.P', name: 'Curve DAO', yo: 0.3589, decimals: 4 },
   { symbol: 'DOGEUSDT', displaySymbol: 'DOGEUSDT.P', name: 'Dogecoin', yo: 0.1174, decimals: 5 },
   { symbol: 'DOTUSDT', displaySymbol: 'DOTUSDT.P', name: 'Polkadot', yo: 1.7893, decimals: 4 },

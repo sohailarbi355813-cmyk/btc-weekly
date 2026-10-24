@@ -80,7 +80,6 @@ export async function GET() {
     ALTS_WHITELIST.forEach((item) => {
       const ticker = bybitMap.get(item.symbol);
       let spot = ticker ? parseFloat(ticker.lastPrice) : item.yo;
-      if (item.scaleFactor) spot = spot * item.scaleFactor;
 
       const p = pivotsData[item.symbol];
       if (!p) return;

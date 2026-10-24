@@ -202,18 +202,7 @@ export default function Home() {
       if (json.error) throw new Error(json.error);
 
       setLoadStep(2); // Analyzing latest live candle
-      let currentPrice = json.candles[json.candles.length - 1]?.close ?? 0;
-      try {
-        const binanceRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
-        if (binanceRes.ok) {
-          const binanceData = await binanceRes.json();
-          if (binanceData?.price) {
-            currentPrice = parseFloat(binanceData.price);
-          }
-        }
-      } catch {
-        // Fallback to candle close
-      }
+      let currentPrice = json.currentPrice || json.candles[json.candles.length - 1]?.close || 0;
 
       setLoadStep(3); // Calculating statistical bias & weekly profiles
       const now = new Date();
@@ -243,6 +232,44 @@ export default function Home() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Real-time live price ticker (every 4 seconds for sub-second precision)
+  useEffect(() => {
+    let isMounted = true;
+    const pollLivePrice = async () => {
+      try {
+        const res = await fetch('/api/live-price');
+        if (!res.ok) return;
+        const pData = await res.json();
+        if (pData?.success && pData.price > 0 && isMounted) {
+          setData((prev) => {
+            if (!prev) return prev;
+            if (prev.currentPrice === pData.price) return prev;
+            return {
+              ...prev,
+              currentPrice: pData.price,
+            };
+          });
+
+          setWolfLevels((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              spot: pData.price,
+            };
+          });
+        }
+      } catch (err) {
+        // Silent ticker error
+      }
+    };
+
+    const interval = setInterval(pollLivePrice, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleRefresh = () => {
     loadData(true);
