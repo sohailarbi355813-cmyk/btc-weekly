@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ALTS_WHITELIST } from '@/lib/altsData';
 import pivotsData from '@/lib/pivotsData.json';
+import { detectDivergences } from '@/lib/divergenceEngine';
 
 let cachedSmaMap = new Map();
 let lastSmaFetchTimestamp = 0;
@@ -33,7 +34,26 @@ async function get4H200SmaMap() {
             const closes = list.map((k) => parseFloat(k[4])).filter((n) => !isNaN(n));
             const count = Math.min(closes.length, 200);
             const sma = closes.slice(0, count).reduce((a, b) => a + b, 0) / count;
-            newMap.set(sym, { sma: Number(sma.toFixed(6)), count });
+
+            const candles = list.slice(0, 100).reverse().map((k) => ({
+              time: parseInt(k[0]),
+              open: parseFloat(k[1]),
+              high: parseFloat(k[2]),
+              low: parseFloat(k[3]),
+              close: parseFloat(k[4]),
+              vol: parseFloat(k[5]),
+            }));
+            const divResult = detectDivergences(candles);
+
+            newMap.set(sym, {
+              sma: Number(sma.toFixed(6)),
+              count,
+              currentRsi: divResult.currentRsi,
+              divergences: divResult.divergences,
+              primaryDiv: divResult.divergences[0] || null,
+              hasBullishDiv: divResult.divergences.some((d) => d.direction === 'BULL'),
+              hasBearishDiv: divResult.divergences.some((d) => d.direction === 'BEAR'),
+            });
             return;
           }
         }
@@ -52,7 +72,26 @@ async function get4H200SmaMap() {
             const closes = bList.map((k) => parseFloat(k[4])).filter((n) => !isNaN(n));
             const count = Math.min(closes.length, 200);
             const sma = closes.slice(0, count).reduce((a, b) => a + b, 0) / count;
-            newMap.set(sym, { sma: Number(sma.toFixed(6)), count });
+
+            const candles = bList.slice(0, 100).map((k) => ({
+              time: parseInt(k[0]),
+              open: parseFloat(k[1]),
+              high: parseFloat(k[2]),
+              low: parseFloat(k[3]),
+              close: parseFloat(k[4]),
+              vol: parseFloat(k[5]),
+            }));
+            const divResult = detectDivergences(candles);
+
+            newMap.set(sym, {
+              sma: Number(sma.toFixed(6)),
+              count,
+              currentRsi: divResult.currentRsi,
+              divergences: divResult.divergences,
+              primaryDiv: divResult.divergences[0] || null,
+              hasBullishDiv: divResult.divergences.some((d) => d.direction === 'BULL'),
+              hasBearishDiv: divResult.divergences.some((d) => d.direction === 'BEAR'),
+            });
           }
         }
       } catch (err) {}
@@ -169,7 +208,7 @@ export async function GET() {
       const prevPrice1h = ticker?.prevPrice1h ? parseFloat(ticker.prevPrice1h) : null;
       const change1h = prevPrice1h ? parseFloat((((spot - prevPrice1h) / prevPrice1h) * 100).toFixed(2)) : 0;
 
-      // 4H 200 SMA Calculation
+      // 4H 200 SMA & RSI Divergence Calculation
       const smaData = sma200Map.get(item.symbol);
       const sma200_4h = smaData ? smaData.sma : null;
       let distSma200_4h = null;
@@ -184,6 +223,12 @@ export async function GET() {
         isNear4HSma200 = absDist >= 1.0 && absDist <= 3.0;
         isAt4HSma200 = absDist <= 3.0;
       }
+
+      const rsi4h = smaData?.currentRsi ?? null;
+      const divergences = smaData?.divergences ?? [];
+      const primaryDiv = smaData?.primaryDiv ?? null;
+      const hasBullishDiv = smaData?.hasBullishDiv ?? false;
+      const hasBearishDiv = smaData?.hasBearishDiv ?? false;
 
       // ─── 1. Bullish State Calculation ───
       // Rule: Must be ABOVE all VALs (small dip wick >= -1.5% is allowed, e.g. -0.1%, but NOT -33%).
@@ -256,6 +301,11 @@ export async function GET() {
           distSma200Text,
           isNear4HSma200,
           isAt4HSma200,
+          rsi4h,
+          divergences,
+          primaryDiv,
+          hasBullishDiv,
+          hasBearishDiv,
         });
       }
 
@@ -328,6 +378,11 @@ export async function GET() {
           distSma200Text,
           isNear4HSma200,
           isAt4HSma200,
+          rsi4h,
+          divergences,
+          primaryDiv,
+          hasBullishDiv,
+          hasBearishDiv,
         });
       }
 
@@ -395,6 +450,11 @@ export async function GET() {
         distSma200Text,
         isNear4HSma200,
         isAt4HSma200,
+        rsi4h,
+        divergences,
+        primaryDiv,
+        hasBullishDiv,
+        hasBearishDiv,
       });
     });
 

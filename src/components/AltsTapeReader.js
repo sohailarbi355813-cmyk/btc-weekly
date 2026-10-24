@@ -16,6 +16,7 @@ import {
 } from './Icons';
 import { playAlertChime } from '@/lib/alertSound';
 import TwinPatternScanner from './TwinPatternScanner';
+import RsiDivergenceScanner from './RsiDivergenceScanner';
 
 const STORAGE_KEY_ALERTS = 'wolf_tape_reader_alerts_v1';
 const STORAGE_KEY_SOUND = 'wolf_tape_reader_sound_muted';
@@ -392,6 +393,7 @@ export default function AltsTapeReader() {
       bullVol: bull.filter((x) => (x.turnover24h || 0) >= 50000000).length,
       bullSma1to3: bull.filter((x) => x.isNear4HSma200).length,
       bullSma3: bull.filter((x) => x.isAt4HSma200).length,
+      bullDiv: bull.filter((x) => x.hasBullishDiv).length,
 
       bearAll: bear.length,
       bearConfirmed: bear.filter((x) => x.change24h <= 0).length,
@@ -401,6 +403,7 @@ export default function AltsTapeReader() {
       bearVol: bear.filter((x) => (x.turnover24h || 0) >= 50000000).length,
       bearSma1to3: bear.filter((x) => x.isNear4HSma200).length,
       bearSma3: bear.filter((x) => x.isAt4HSma200).length,
+      bearDiv: bear.filter((x) => x.hasBearishDiv).length,
 
       fullAll: all.length,
       fullBull: all.filter((x) => x.state === 'BULL').length,
@@ -411,6 +414,8 @@ export default function AltsTapeReader() {
       fullVol: all.filter((x) => (x.turnover24h || 0) >= 50000000).length,
       fullSma1to3: all.filter((x) => x.isNear4HSma200).length,
       fullSma3: all.filter((x) => x.isAt4HSma200).length,
+      fullBullDiv: all.filter((x) => x.hasBullishDiv).length,
+      fullBearDiv: all.filter((x) => x.hasBearishDiv).length,
     };
   }, [data]);
 
@@ -453,6 +458,10 @@ export default function AltsTapeReader() {
         list = list.filter(item => item.isNear4HSma200);
       } else if (confluenceFilter === 'sma200_3') {
         list = list.filter(item => item.isAt4HSma200);
+      } else if (confluenceFilter === 'bull_div') {
+        list = list.filter(item => item.hasBullishDiv);
+      } else if (confluenceFilter === 'bear_div') {
+        list = list.filter(item => item.hasBearishDiv);
       } else if (confluenceFilter === 'bull_only') {
         list = list.filter(item => item.state === 'BULL');
       } else if (confluenceFilter === 'bear_only') {
@@ -535,6 +544,28 @@ export default function AltsTapeReader() {
             <span>Full Scan (55 Alts)</span>
             <span className="va-tab-count" style={{ color: activeTab === 'full' ? '#38bdf8' : '#888888' }}>
               {data?.allCoins?.length || 55}
+            </span>
+          </button>
+
+          <button
+            className={`va-tab-btn ${activeTab === 'div' ? 'active' : ''}`}
+            onClick={() => handleTabChange('div')}
+            style={{
+              borderColor: activeTab === 'div' ? '#38bdf8' : undefined,
+              color: activeTab === 'div' ? '#38bdf8' : undefined,
+            }}
+          >
+            <IconRadar size={14} color={activeTab === 'div' ? '#38bdf8' : undefined} />
+            <span>RSI Divergences</span>
+            <span style={{
+              background: '#22c55e',
+              color: '#000000',
+              fontSize: '0.62rem',
+              fontWeight: 800,
+              padding: '1px 5px',
+              borderRadius: 3,
+            }}>
+              PRO
             </span>
           </button>
 
@@ -655,8 +686,10 @@ export default function AltsTapeReader() {
         </div>
       </div>
 
-      {/* ── TWIN PATTERN SCANNER VIEW ── */}
-      {activeTab === 'twin' ? (
+      {/* ── RSI DIVERGENCE SCANNER VIEW ── */}
+      {activeTab === 'div' ? (
+        <RsiDivergenceScanner onSetAlert={handleQuickSetAlert} />
+      ) : activeTab === 'twin' ? (
         <TwinPatternScanner onSetAlert={handleQuickSetAlert} />
       ) : activeTab === 'alerts' ? (
         <div className="vyaps-card" style={{ background: '#000000', borderColor: '#1a1a1a' }}>
@@ -809,6 +842,17 @@ export default function AltsTapeReader() {
                     🎯 4H 200 SMA (±1-3%) ({filterCounts.bullSma1to3 || 0})
                   </button>
                   <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'bull_div' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('bull_div')}
+                    style={{
+                      borderColor: confluenceFilter === 'bull_div' ? '#22c55e' : undefined,
+                      color: confluenceFilter === 'bull_div' ? '#22c55e' : undefined
+                    }}
+                    title="Scan coins printing active Bullish Divergence on 4H (Price Lower Low, RSI Higher Low)"
+                  >
+                    🟢 Bull Div ({filterCounts.bullDiv || 0})
+                  </button>
+                  <button
                     className={`wolf-filter-btn ${confluenceFilter === 'sweet_spot' ? 'active' : ''}`}
                     onClick={() => setConfluenceFilter('sweet_spot')}
                   >
@@ -871,6 +915,17 @@ export default function AltsTapeReader() {
                     🎯 4H 200 SMA (±1-3%) ({filterCounts.bearSma1to3 || 0})
                   </button>
                   <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'bear_div' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('bear_div')}
+                    style={{
+                      borderColor: confluenceFilter === 'bear_div' ? '#ef4444' : undefined,
+                      color: confluenceFilter === 'bear_div' ? '#ef4444' : undefined
+                    }}
+                    title="Scan coins printing active Bearish Divergence on 4H (Price Higher High, RSI Lower High)"
+                  >
+                    🔴 Bear Div ({filterCounts.bearDiv || 0})
+                  </button>
+                  <button
                     className={`wolf-filter-btn ${confluenceFilter === 'sweet_spot' ? 'active' : ''}`}
                     onClick={() => setConfluenceFilter('sweet_spot')}
                   >
@@ -925,6 +980,28 @@ export default function AltsTapeReader() {
                     title="Scan all coins within ±3% of 4H 200 SMA (touch & buffer)"
                   >
                     🎯 Near 4H SMA (≤3%) ({filterCounts.fullSma3 || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'bull_div' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('bull_div')}
+                    style={{
+                      borderColor: confluenceFilter === 'bull_div' ? '#22c55e' : undefined,
+                      color: confluenceFilter === 'bull_div' ? '#22c55e' : undefined
+                    }}
+                    title="Filter all coins with active Bullish Divergence on 4H"
+                  >
+                    🟢 Bull Div ({filterCounts.fullBullDiv || 0})
+                  </button>
+                  <button
+                    className={`wolf-filter-btn ${confluenceFilter === 'bear_div' ? 'active' : ''}`}
+                    onClick={() => setConfluenceFilter('bear_div')}
+                    style={{
+                      borderColor: confluenceFilter === 'bear_div' ? '#ef4444' : undefined,
+                      color: confluenceFilter === 'bear_div' ? '#ef4444' : undefined
+                    }}
+                    title="Filter all coins with active Bearish Divergence on 4H"
+                  >
+                    🔴 Bear Div ({filterCounts.fullBearDiv || 0})
                   </button>
                   <button
                     className={`wolf-filter-btn ${confluenceFilter === 'bull_only' ? 'active' : ''}`}
@@ -1223,30 +1300,66 @@ export default function AltsTapeReader() {
 
                         {/* 5. Confluence / Trap Grade */}
                         <td>
-                          <span style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.65rem',
-                            fontWeight: 700,
-                            padding: '2px 6px',
-                            borderRadius: 3,
-                            display: 'inline-block',
-                            background: row.grade === 'BLEED_TRAP' ? 'rgba(239, 68, 68, 0.15)' :
-                                        row.grade === 'SWEET_SPOT' || row.grade === 'SWEET_SPOT_SHORT' ? 'rgba(56, 189, 248, 0.15)' :
-                                        row.grade === 'MOMENTUM_LEADER' || row.grade === 'MOMENTUM_RUNNER' ? 'rgba(34, 197, 94, 0.15)' :
-                                        row.grade === 'SQUEEZE_TRAP' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                            color: row.grade === 'BLEED_TRAP' ? '#ef4444' :
-                                   row.grade === 'SWEET_SPOT' || row.grade === 'SWEET_SPOT_SHORT' ? '#38bdf8' :
-                                   row.grade === 'MOMENTUM_LEADER' || row.grade === 'MOMENTUM_RUNNER' ? '#22c55e' :
-                                   row.grade === 'SQUEEZE_TRAP' ? '#f59e0b' : '#aaaaaa',
-                            border: `1px solid ${
-                              row.grade === 'BLEED_TRAP' ? 'rgba(239, 68, 68, 0.35)' :
-                              row.grade === 'SWEET_SPOT' || row.grade === 'SWEET_SPOT_SHORT' ? 'rgba(56, 189, 248, 0.35)' :
-                              row.grade === 'MOMENTUM_LEADER' || row.grade === 'MOMENTUM_RUNNER' ? 'rgba(34, 197, 94, 0.35)' :
-                              row.grade === 'SQUEEZE_TRAP' ? 'rgba(245, 158, 11, 0.35)' : 'rgba(255, 255, 255, 0.1)'
-                            }`
-                          }}>
-                            {row.gradeLabel}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
+                            <span style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: 3,
+                              display: 'inline-block',
+                              background: row.grade === 'BLEED_TRAP' ? 'rgba(239, 68, 68, 0.15)' :
+                                          row.grade === 'SWEET_SPOT' || row.grade === 'SWEET_SPOT_SHORT' ? 'rgba(56, 189, 248, 0.15)' :
+                                          row.grade === 'MOMENTUM_LEADER' || row.grade === 'MOMENTUM_RUNNER' ? 'rgba(34, 197, 94, 0.15)' :
+                                          row.grade === 'SQUEEZE_TRAP' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                              color: row.grade === 'BLEED_TRAP' ? '#ef4444' :
+                                     row.grade === 'SWEET_SPOT' || row.grade === 'SWEET_SPOT_SHORT' ? '#38bdf8' :
+                                     row.grade === 'MOMENTUM_LEADER' || row.grade === 'MOMENTUM_RUNNER' ? '#22c55e' :
+                                     row.grade === 'SQUEEZE_TRAP' ? '#f59e0b' : '#aaaaaa',
+                              border: `1px solid ${
+                                row.grade === 'BLEED_TRAP' ? 'rgba(239, 68, 68, 0.35)' :
+                                row.grade === 'SWEET_SPOT' || row.grade === 'SWEET_SPOT_SHORT' ? 'rgba(56, 189, 248, 0.35)' :
+                                row.grade === 'MOMENTUM_LEADER' || row.grade === 'MOMENTUM_RUNNER' ? 'rgba(34, 197, 94, 0.35)' :
+                                row.grade === 'SQUEEZE_TRAP' ? 'rgba(245, 158, 11, 0.35)' : 'rgba(255, 255, 255, 0.1)'
+                              }`
+                            }}>
+                              {row.gradeLabel}
+                            </span>
+                            {row.hasBullishDiv && (
+                              <span
+                                style={{
+                                  background: 'rgba(34, 197, 94, 0.18)',
+                                  color: '#22c55e',
+                                  border: '1px solid rgba(34, 197, 94, 0.4)',
+                                  fontSize: '0.58rem',
+                                  padding: '1px 4px',
+                                  borderRadius: 2,
+                                  fontWeight: 800,
+                                  letterSpacing: '0.02em',
+                                }}
+                                title={`Bullish Divergence: ${row.primaryDiv?.label || 'Price LL, RSI HL'}`}
+                              >
+                                🟢 Bull Div
+                              </span>
+                            )}
+                            {row.hasBearishDiv && (
+                              <span
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.18)',
+                                  color: '#ef4444',
+                                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                                  fontSize: '0.58rem',
+                                  padding: '1px 4px',
+                                  borderRadius: 2,
+                                  fontWeight: 800,
+                                  letterSpacing: '0.02em',
+                                }}
+                                title={`Bearish Divergence: ${row.primaryDiv?.label || 'Price HH, RSI LH'}`}
+                              >
+                                🔴 Bear Div
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* 5. pY */}
