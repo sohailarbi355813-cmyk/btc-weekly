@@ -9,7 +9,6 @@ import MacroWhalesEtf from '@/components/MacroWhalesEtf';
 import WeeklyForecast from '@/components/WeeklyForecast';
 import SessionProfiler from '@/components/SessionProfiler';
 import BootIntroSequence from '@/components/BootIntroSequence';
-import CvdDivergenceScanner from '@/components/CvdDivergenceScanner';
 import {
   IconBitcoin,
   IconTrendUp,
@@ -411,89 +410,7 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
-      {/* ── Mobile Navigation Drawer ── */}
-      {mobileMenuOpen && (
-        <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
-          <div className="mobile-drawer" onClick={e => e.stopPropagation()}>
-            <div className="mobile-drawer-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div className="logo-icon">
-                  <IconBlackFlag size={20} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.95rem', fontFamily: 'var(--font-display)' }}>
-                    WOLF TAPE READER
-                  </span>
-                  <span style={{ fontSize: '0.65rem', color: '#888888' }}>Trading The Tape</span>
-                </div>
-              </div>
-              <button className="mobile-drawer-close" onClick={() => setMobileMenuOpen(false)}>
-                <IconX size={18} />
-              </button>
-            </div>
 
-            <div className="mobile-drawer-spot">
-              <span className="spot-label">BTC SPOT</span>
-              <span className="spot-val">{formatPrice(data.currentPrice)}</span>
-            </div>
-
-            <nav className="mobile-nav-list">
-              <button
-                className={`mobile-nav-item ${activeTab === 'levels' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('levels'); setMobileMenuOpen(false); }}
-              >
-                <IconWolf size={18} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : '#888888'} />
-                <span>Wolf Key Levels</span>
-              </button>
-              <button
-                className={`mobile-nav-item ${activeTab === 'alts' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('alts'); setMobileMenuOpen(false); }}
-              >
-                <IconRadar size={18} color={activeTab === 'alts' ? '#38bdf8' : '#888888'} />
-                <span>Alts Value Area (VAL/VAH)</span>
-                <span className="alts-count-chip">55</span>
-              </button>
-              <button
-                className={`mobile-nav-item ${activeTab === 'twin' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('twin'); setMobileMenuOpen(false); }}
-              >
-                <IconZap size={18} color={activeTab === 'twin' ? '#38bdf8' : '#888888'} />
-                <span>Twin Pattern Scanner</span>
-                <span style={{ marginLeft: 'auto', background: '#38bdf8', color: '#000000', fontSize: '0.62rem', fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>AI</span>
-              </button>
-              <button
-                className={`mobile-nav-item ${activeTab === 'macro' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('macro'); setMobileMenuOpen(false); }}
-              >
-                <IconBarChart size={18} color={activeTab === 'macro' ? '#38bdf8' : '#888888'} />
-                <span>Whales • MVRV • ETFs</span>
-              </button>
-              <button
-                className={`mobile-nav-item ${activeTab === 'pattern' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('pattern'); setMobileMenuOpen(false); }}
-              >
-                <IconCalendar size={18} color={activeTab === 'pattern' ? '#38bdf8' : '#888888'} />
-                <span>Weekly Forecast</span>
-              </button>
-              <button
-                className={`mobile-nav-item ${activeTab === 'session' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('session'); setMobileMenuOpen(false); }}
-              >
-                <IconClock size={18} color={activeTab === 'session' ? '#38bdf8' : '#888888'} />
-                <span>Session HOD/LOD (Asia/Lon/NY)</span>
-                <span style={{ marginLeft: 'auto', background: '#38bdf8', color: '#000000', fontSize: '0.62rem', fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>PROB</span>
-              </button>
-            </nav>
-
-            <div className="mobile-drawer-actions">
-              <button className="mobile-drawer-refresh" onClick={() => { handleRefresh(); setMobileMenuOpen(false); }}>
-                <IconRefresh size={14} className={refreshing ? 'spin-icon' : ''} />
-                <span>Refresh Live Telemetry</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Header ── */}
       <header className="header">
@@ -591,19 +508,6 @@ export default function Home() {
                 </div>
               </button>
 
-              <button
-                className={`mobile-nav-item ${activeTab === 'cvd' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('cvd');
-                  setMobileMenuOpen(false);
-                }}
-              >
-                <IconZap size={18} color={activeTab === 'cvd' ? '#f59e0b' : '#888888'} />
-                <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">CVD Divergences</span>
-                  <span className="mobile-nav-desc">Order Flow &amp; Institutional Absorptions</span>
-                </div>
-              </button>
 
               <button
                 className={`mobile-nav-item ${activeTab === 'session' ? 'active' : ''}`}
@@ -1063,10 +967,6 @@ export default function Home() {
               <IconWolf size={15} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-yellow)'} />
               <span style={{ color: activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : undefined }}>Wolf Key Levels</span>
             </button>
-            <button id="tab-cvd" className={`tab-btn ${activeTab === 'cvd' ? 'active' : ''}`} onClick={() => setActiveTab('cvd')}>
-              <IconZap size={15} color={activeTab === 'cvd' ? '#f59e0b' : undefined} />
-              <span style={{ color: activeTab === 'cvd' ? '#f59e0b' : undefined }}>CVD Divergences</span>
-            </button>
             <button id="tab-session" className={`tab-btn ${activeTab === 'session' ? 'active' : ''}`} onClick={() => setActiveTab('session')}>
               <IconClock size={15} color={activeTab === 'session' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'session' ? '#38bdf8' : undefined }}>Session HOD/LOD</span>
@@ -1086,22 +986,17 @@ export default function Home() {
             <WolfKeyLevels levelsData={wolfLevels} />
           )}
 
-          {/* ── 2. CVD DIVERGENCE SCANNER VIEW (Order Flow Telemetry) ── */}
-          {activeTab === 'cvd' && (
-            <CvdDivergenceScanner />
-          )}
-
-          {/* ── 3. SESSION PROFILER (Asia · London · NY HOD/LOD Probabilities) ── */}
+          {/* ── 2. SESSION PROFILER (Asia · London · NY HOD/LOD Probabilities) ── */}
           {activeTab === 'session' && (
             <SessionProfiler />
           )}
 
-          {/* ── 4. WEEKLY FORECAST VIEW ── */}
+          {/* ── 3. WEEKLY FORECAST VIEW ── */}
           {activeTab === 'pattern' && (
             <WeeklyForecast weekPattern={weekPattern} formatPrice={formatPrice} />
           )}
 
-          {/* ── 5. MACRO WHALES & ETF VIEW ── */}
+          {/* ── 4. MACRO WHALES & ETF VIEW ── */}
           {activeTab === 'macro' && (
             <MacroWhalesEtf />
           )}
@@ -1109,7 +1004,7 @@ export default function Home() {
         </div>
       </main>
 
-      {/* ── Mobile Sticky Bottom Bar (5 Clean Institutional Tools) ── */}
+      {/* ── Mobile Sticky Bottom Bar (4 Clean Institutional Tools) ── */}
       <div className="mobile-bottom-bar">
         <button
           className={`mobile-bottom-btn ${activeTab === 'levels' ? 'active' : ''}`}
@@ -1117,13 +1012,6 @@ export default function Home() {
         >
           <IconWolf size={18} />
           <span>Levels</span>
-        </button>
-        <button
-          className={`mobile-bottom-btn ${activeTab === 'cvd' ? 'active' : ''}`}
-          onClick={() => setActiveTab('cvd')}
-        >
-          <IconZap size={18} />
-          <span>CVD Divs</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'session' ? 'active' : ''}`}

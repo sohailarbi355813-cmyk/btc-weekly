@@ -231,17 +231,19 @@ export default function WolfKeyLevels({ levelsData }) {
           {/* Filter Bar */}
           <div className="wolf-filter-row">
             {[
-              { id: 'all', label: 'All Levels' },
-              { id: 'daily', label: 'Daily (PDH/L, DO, pPOC/VA)' },
-              { id: 'weekly', label: 'Weekly (WO, PW VAL/POC/VAH, PWH/L)' },
-              { id: 'monthly', label: 'Monthly & Yearly (MO, PM VAL/POC/VAH, PMH/L, YO)' },
+              { id: 'all', label: 'All Levels', short: 'All Levels' },
+              { id: 'daily', label: 'Daily (PDH/L, DO, pPOC/VA)', short: 'Daily' },
+              { id: 'weekly', label: 'Weekly (WO, PW VAL/POC/VAH, PWH/L)', short: 'Weekly' },
+              { id: 'monthly', label: 'Monthly & Yearly (MO, PM VAL/POC/VAH, PMH/L, YO)', short: 'Monthly/Yearly' },
             ].map(f => (
               <button
                 key={f.id}
                 className={`wolf-filter-btn ${filter === f.id ? 'active' : ''}`}
                 onClick={() => setFilter(f.id)}
+                title={f.label}
               >
-                {f.label}
+                <span className="wolf-filter-full">{f.label}</span>
+                <span className="wolf-filter-short">{f.short}</span>
               </button>
             ))}
           </div>
