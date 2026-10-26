@@ -13,6 +13,8 @@
  * Sorts all levels into a dynamic ordered price ladder with the LAST price slotted into position.
  */
 
+import { calculateSigmas } from './biasEngine';
+
 export function calculateWolfKeyLevels(candles, currentPrice) {
   if (!candles || candles.length < 5) return null;
 
@@ -21,6 +23,7 @@ export function calculateWolfKeyLevels(candles, currentPrice) {
   const prevCandle = sorted[sorted.length - 2];
 
   const spot = Number(currentPrice || lastCandle.close);
+  const sigmas = calculateSigmas(sorted, spot, 20);
 
   // 1. Daily Levels
   const DO = lastCandle.open;
@@ -140,6 +143,12 @@ export function calculateWolfKeyLevels(candles, currentPrice) {
 
     // Yearly Open
     { code: 'YO', name: 'Yearly Open', price: YO, category: 'yearly', importance: 'critical' },
+
+    // Statistical Volatility Sigmas (Daily Expected Range & Mean Reversion Limits)
+    { code: '+2σ BAND', name: '+2 Sigma Volatility Extreme (95.4% Upper Ceiling)', price: sigmas.plus2Sigma, category: 'daily', importance: 'high', isSigma: true },
+    { code: '+1σ BAND', name: '+1 Sigma Expected Daily High (68.2% Normal Top)', price: sigmas.plus1Sigma, category: 'daily', importance: 'medium', isSigma: true },
+    { code: '-1σ BAND', name: '-1 Sigma Expected Daily Low (68.2% Normal Bottom)', price: sigmas.minus1Sigma, category: 'daily', importance: 'medium', isSigma: true },
+    { code: '-2σ BAND', name: '-2 Sigma Volatility Extreme (95.4% Lower Floor)', price: sigmas.minus2Sigma, category: 'daily', importance: 'high', isSigma: true },
   ];
 
   // Calculate distances & relative metrics (relative position of price to level)
@@ -264,5 +273,6 @@ export function calculateWolfKeyLevels(candles, currentPrice) {
       pctFromMO: Math.round(((spot - MO) / MO) * 100 * 100) / 100,
       status: spot >= MO ? 'ABOVE_MO' : 'BELOW_MO',
     },
+    sigmas,
   };
 }

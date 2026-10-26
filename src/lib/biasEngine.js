@@ -245,13 +245,191 @@ export function analyzeMonthlyBias(candles) {
 }
 
 export const DEFAULT_BIAS_FILTERS = {
-  preset: 'highest_prob', // 'highest_prob' | 'bleed_guard' | 'trend_structure' | 'recent_regime' | 'raw_legacy' | 'custom'
+  preset: 'highest_prob', // 'highest_prob' | 'sigma_regime' | 'bleed_guard' | 'trend_structure' | 'recent_regime' | 'raw_legacy' | 'custom'
+  enableSigma: true,
+  enableRegime: true,
   enableTrend: true,
   enableBleedGuard: true,
   enableWeeklyOpen: true,
   enableRecentRegime: true,
   enableRawStats: true,
 };
+
+/**
+ * Calculate Rolling Standard Deviation (Sigma), Z-Scores, and Expected Volatility Bands
+ */
+export function calculateSigmas(candles, currentPrice, period = 20) {
+  if (!candles || candles.length < period) {
+    const p = Number(currentPrice || 80000);
+    return {
+      mean: Math.round(p),
+      stdDev: Math.round(p * 0.025),
+      zScore: 0,
+      zScoreText: '+0.00σ',
+      status: 'Fair Value Equilibrium (±1σ)',
+      statusShort: 'Fair Value',
+      color: '#38bdf8',
+      scoreImpact: 0,
+      dailyStdDevPct: 2.5,
+      plus1Sigma: Math.round(p * 1.025),
+      minus1Sigma: Math.round(p * 0.975),
+      plus2Sigma: Math.round(p * 1.05),
+      minus2Sigma: Math.round(p * 0.95),
+      plus3Sigma: Math.round(p * 1.075),
+      minus3Sigma: Math.round(p * 0.925),
+      bandwidthPct: 5.0,
+    };
+  }
+
+  const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
+  const recentCandles = sorted.slice(-period);
+  const closes = recentCandles.map(c => c.close);
+
+  // Mean (20 SMA)
+  const mean = closes.reduce((a, b) => a + b, 0) / period;
+
+  // Population standard deviation
+  const variance = closes.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period;
+  const stdDev = Math.sqrt(variance);
+
+  // Current price Z-score from 20-day mean
+  const zScore = stdDev > 0 ? (currentPrice - mean) / stdDev : 0;
+
+  // Calculate rolling daily returns volatility (% std dev)
+  const returns = [];
+  for (let i = 1; i < recentCandles.length; i++) {
+    const prev = recentCandles[i - 1].close;
+    if (prev > 0) {
+      returns.push(((recentCandles[i].close - prev) / prev) * 100);
+    }
+  }
+  const avgReturn = returns.length ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
+  const returnVariance = returns.length ? returns.reduce((acc, r) => acc + Math.pow(r - avgReturn, 2), 0) / returns.length : 0;
+  const dailyStdDevPct = Math.sqrt(returnVariance) || 2.5;
+
+  // Daily Open anchor (or last candle open)
+  const lastCandle = sorted[sorted.length - 1];
+  const DO = lastCandle.open || currentPrice;
+
+  // Daily expected sigma boundaries from Daily Open
+  const plus1Sigma = DO * (1 + (dailyStdDevPct / 100));
+  const minus1Sigma = DO * (1 - (dailyStdDevPct / 100));
+  const plus2Sigma = DO * (1 + (2 * dailyStdDevPct / 100));
+  const minus2Sigma = DO * (1 - (2 * dailyStdDevPct / 100));
+  const plus3Sigma = DO * (1 + (3 * dailyStdDevPct / 100));
+  const minus3Sigma = DO * (1 - (3 * dailyStdDevPct / 100));
+
+  // Bollinger Bandwidth % = (4 * stdDev / mean) * 100
+  const bandwidthPct = mean > 0 ? ((4 * stdDev) / mean) * 100 : 0;
+
+  // Determine Z-Score Status & Bias Scoring Impact
+  let status = 'Fair Value Area (±1.2σ)';
+  let statusShort = 'Fair Value';
+  let color = '#38bdf8';
+  let scoreImpact = 0;
+
+  if (zScore > 2.2) {
+    status = 'Extreme Overbought Extension (> +2.2σ) — Mean Reversion Risk';
+    statusShort = 'Extreme Exhaustion (+2.2σ)';
+    color = '#f87171'; // red warning
+    scoreImpact = -25; // penalty: buying at +2.2 sigma is a high-risk trap!
+  } else if (zScore > 1.2) {
+    status = 'Upper Expansion (+1.2σ to +2.2σ) — Bullish Momentum';
+    statusShort = 'Upper Expansion';
+    color = '#4ade80';
+    scoreImpact = 15;
+  } else if (zScore < -2.2) {
+    status = 'Extreme Oversold Capitulation (< -2.2σ) — High Bounce Edge';
+    statusShort = 'Deep Oversold (-2.2σ)';
+    color = '#4ade80'; // green buy bounce
+    scoreImpact = 25; // mean-reversion long edge
+  } else if (zScore < -1.2) {
+    status = 'Lower Discount (-1.2σ to -2.2σ) — Institutional Value Dip';
+    statusShort = 'Value Dip';
+    color = '#38bdf8';
+    scoreImpact = 15;
+  } else {
+    status = 'Inside Fair Value Equilibrium (±1.2σ) — Gaussian Distribution';
+    statusShort = 'Equilibrium';
+    color = '#94a3b8';
+    scoreImpact = 0;
+  }
+
+  return {
+    mean: Math.round(mean),
+    stdDev: Math.round(stdDev),
+    zScore: Math.round(zScore * 100) / 100,
+    zScoreText: `${zScore >= 0 ? '+' : ''}${zScore.toFixed(2)}σ`,
+    status,
+    statusShort,
+    color,
+    scoreImpact,
+    dailyStdDevPct: Math.round(dailyStdDevPct * 100) / 100,
+    plus1Sigma: Math.round(plus1Sigma),
+    minus1Sigma: Math.round(minus1Sigma),
+    plus2Sigma: Math.round(plus2Sigma),
+    minus2Sigma: Math.round(minus2Sigma),
+    plus3Sigma: Math.round(plus3Sigma),
+    minus3Sigma: Math.round(minus3Sigma),
+    bandwidthPct: Math.round(bandwidthPct * 100) / 100,
+  };
+}
+
+/**
+ * Classify Market Regime (Trend + Volatility Squeeze/Expansion)
+ */
+export function classifyMarketRegime(candles, currentPrice, ema20, ema50, sigmaData) {
+  const isBullTrend = currentPrice > ema20 && ema20 > ema50;
+  const isBearTrend = currentPrice < ema20 && ema20 < ema50;
+  const bandwidth = sigmaData?.bandwidthPct || 8;
+
+  let regimeKey = 'CHOP_MEAN_REVERTING';
+  let name = 'Mean-Reverting Range';
+  let type = 'range';
+  let color = '#fbbf24'; // amber
+  let score = 0;
+  let description = 'Price is rotating within the value area. Fade extensions past ±1.8σ back toward fair value.';
+
+  if (bandwidth < 6.5) {
+    regimeKey = 'RANGE_COMPRESSION_SQUEEZE';
+    name = 'Range Compression (Squeeze)';
+    type = 'squeeze';
+    color = '#38bdf8'; // blue
+    score = isBullTrend ? 10 : isBearTrend ? -10 : 0;
+    description = 'Volatility is heavily compressed in a coil/squeeze. Breakout traps are high; directional moves ignite suddenly.';
+  } else if (isBullTrend) {
+    regimeKey = 'BULLISH_TREND_EXPANSION';
+    name = 'Bullish Trend Expansion';
+    type = 'bull_trend';
+    color = '#4ade80'; // bright green
+    score = 25;
+    description = 'Market is in an active markup phase above 20 & 50 EMA. Pullbacks into -1σ / 20 EMA are high-probability entries.';
+  } else if (isBearTrend) {
+    regimeKey = 'BEARISH_TREND_BREAKDOWN';
+    name = 'Bearish Trend Breakdown';
+    type = 'bear_trend';
+    color = '#f87171'; // red
+    score = -25;
+    description = 'Market is in an active markdown phase below 20 & 50 EMA. Rallies into +1σ / 20 EMA are heavy resistance traps.';
+  } else {
+    regimeKey = 'TRANSITION_CHOP';
+    name = 'Rotational Transition';
+    type = 'transition';
+    color = '#fbbf24';
+    score = 0;
+    description = 'Mixed structure between 20 & 50 EMA. Focus on key support/resistance boundaries rather than trend-following.';
+  }
+
+  return {
+    key: regimeKey,
+    name,
+    type,
+    color,
+    score,
+    bandwidth,
+    description,
+  };
+}
 
 /**
  * Calculate Exponential Moving Average (EMA)
@@ -327,11 +505,15 @@ export function getTodayBias(candles, currentPrice, referenceDate = null, filter
   const recentBullish = recentSameDay.filter(c => isBullish(c)).length;
   const recentBullRate = recentSameDay.length > 0 ? (recentBullish / recentSameDay.length) * 100 : 50;
 
-  // 2. High-Probability Confluence Filters (EMA 20/50, Bleed Trap Guard, RSI, 24h Momentum)
+  // 2. High-Probability Confluence Filters (Sigmas, Market Regime, EMA 20/50, Bleed Trap Guard, RSI, 24h Momentum)
   const closes = sorted.map(c => c.close);
   const ema20 = calculateEMA(closes, 20);
   const ema50 = calculateEMA(closes, 50);
   const rsi14 = calculateRSI(closes, 14);
+
+  // 3. Quantitative Sigma Distribution & Market Regime Engines
+  const sigmaMetrics = calculateSigmas(candles, currentPrice, 20);
+  const regimeMetrics = classifyMarketRegime(candles, currentPrice, ema20, ema50, sigmaMetrics);
 
   const prevCandle = sorted.length >= 2 ? sorted[sorted.length - 2] : sorted[sorted.length - 1];
   const change24h = prevCandle && prevCandle.close > 0
@@ -346,17 +528,49 @@ export function getTodayBias(candles, currentPrice, referenceDate = null, filter
   let sumScores = 0;
   let totalWeight = 0;
 
-  // A. Trend Structure (20 EMA & 50 EMA)
+  // A. Sigma Statistical Distribution & Z-Score
+  const sigmaConfluence = {
+    id: 'sigma_zscore',
+    name: 'Sigma Position (Z-Score)',
+    weight: 25,
+    score: sigmaMetrics.scoreImpact,
+    state: sigmaMetrics.scoreImpact > 0 ? 'bullish' : sigmaMetrics.scoreImpact < 0 ? 'bearish' : 'neutral',
+    valueText: `${sigmaMetrics.zScoreText} · ${sigmaMetrics.statusShort}`,
+    detail: `Daily σ: ±${sigmaMetrics.dailyStdDevPct}% · Expected: +1σ $${sigmaMetrics.plus1Sigma.toLocaleString()} / -1σ $${sigmaMetrics.minus1Sigma.toLocaleString()}`,
+  };
+  confluences.push(sigmaConfluence);
+  if (activeFilters.enableSigma) {
+    sumScores += sigmaMetrics.scoreImpact;
+    totalWeight += 25;
+  }
+
+  // B. Macro Market Regime (Trend + Volatility Squeeze)
+  const regimeMacroConfluence = {
+    id: 'market_regime',
+    name: 'Macro Market Regime',
+    weight: 25,
+    score: regimeMetrics.score,
+    state: regimeMetrics.type === 'bull_trend' ? 'bullish' : regimeMetrics.type === 'bear_trend' ? 'bearish' : 'neutral',
+    valueText: `${regimeMetrics.name} (BW: ${sigmaMetrics.bandwidthPct}%)`,
+    detail: regimeMetrics.description,
+  };
+  confluences.push(regimeMacroConfluence);
+  if (activeFilters.enableRegime) {
+    sumScores += regimeMetrics.score;
+    totalWeight += 25;
+  }
+
+  // C. Trend Structure (20 EMA & 50 EMA)
   let trendScore = 0;
-  if (currentPrice > ema20 && ema20 > ema50) trendScore = 30; // Golden bull trend
+  if (currentPrice > ema20 && ema20 > ema50) trendScore = 25; // Golden bull trend
   else if (currentPrice > ema20) trendScore = 15; // Above 20 EMA
-  else if (currentPrice < ema20 && ema20 < ema50) trendScore = -30; // Bear trend
-  else trendScore = -20; // Under 20 EMA
+  else if (currentPrice < ema20 && ema20 < ema50) trendScore = -25; // Bear trend
+  else trendScore = -15; // Under 20 EMA
 
   const trendConfluence = {
     id: 'trend',
     name: 'Trend Structure (20 EMA)',
-    weight: 30,
+    weight: 25,
     score: trendScore,
     state: trendScore > 0 ? 'bullish' : 'bearish',
     valueText: `${priceVsEma20Pct > 0 ? '+' : ''}${priceVsEma20Pct.toFixed(2)}% vs 20 EMA ($${Math.round(ema20).toLocaleString()})`,
@@ -365,10 +579,10 @@ export function getTodayBias(candles, currentPrice, referenceDate = null, filter
   confluences.push(trendConfluence);
   if (activeFilters.enableTrend) {
     sumScores += trendScore;
-    totalWeight += 30;
+    totalWeight += 25;
   }
 
-  // B. Bleed Trap Guard (24h Net Delta & RSI 14)
+  // D. Bleed Trap Guard (24h Net Delta & RSI 14)
   let bleedScore = 0;
   const isBleeding = change24h < -0.5 || rsi14 < 44;
   const isPumping = change24h > 0.8 && rsi14 > 53;
@@ -386,7 +600,7 @@ export function getTodayBias(candles, currentPrice, referenceDate = null, filter
   const bleedConfluence = {
     id: 'bleed_guard',
     name: 'Bleed Trap Guard (RSI & Delta)',
-    weight: 25,
+    weight: 20,
     score: bleedScore,
     state: bleedScore < 0 ? 'bearish' : bleedScore > 0 ? 'bullish' : 'neutral',
     valueText: `24h: ${change24h > 0 ? '+' : ''}${change24h.toFixed(2)}% · RSI: ${rsi14.toFixed(1)}`,
@@ -401,15 +615,15 @@ export function getTodayBias(candles, currentPrice, referenceDate = null, filter
   confluences.push(bleedConfluence);
   if (activeFilters.enableBleedGuard) {
     sumScores += bleedScore;
-    totalWeight += 25;
+    totalWeight += 20;
   }
 
-  // C. Weekly Open Level
-  const woScore = weeklyBias.priceVsWeeklyOpen === 'above' ? 25 : -25;
+  // E. Weekly Open Level
+  const woScore = weeklyBias.priceVsWeeklyOpen === 'above' ? 20 : -20;
   const woConfluence = {
     id: 'weekly_open',
     name: 'Weekly Open Level',
-    weight: 25,
+    weight: 20,
     score: woScore,
     state: weeklyBias.priceVsWeeklyOpen === 'above' ? 'bullish' : 'bearish',
     valueText: `${weeklyBias.pctFromWeeklyOpen > 0 ? '+' : ''}${weeklyBias.pctFromWeeklyOpen.toFixed(2)}% ($${Math.round(weeklyBias.weeklyOpen).toLocaleString()})`,
@@ -420,20 +634,20 @@ export function getTodayBias(candles, currentPrice, referenceDate = null, filter
   confluences.push(woConfluence);
   if (activeFilters.enableWeeklyOpen) {
     sumScores += woScore;
-    totalWeight += 25;
+    totalWeight += 20;
   }
 
-  // D. Recent 8-Week Cycle Regime
-  let regimeScore = 0;
-  if (recentBullRate >= 62.5) regimeScore = 15;
-  else if (recentBullRate <= 37.5) regimeScore = -15;
-  else regimeScore = 0;
+  // F. Recent 8-Week Cycle Regime
+  let recentCycleScore = 0;
+  if (recentBullRate >= 62.5) recentCycleScore = 10;
+  else if (recentBullRate <= 37.5) recentCycleScore = -10;
+  else recentCycleScore = 0;
 
-  const regimeConfluence = {
+  const recentCycleConfluence = {
     id: 'recent_regime',
-    name: 'Recent 8-Week Regime',
-    weight: 15,
-    score: regimeScore,
+    name: 'Recent 8-Week DOW Win Rate',
+    weight: 10,
+    score: recentCycleScore,
     state: recentBullRate > 50 ? 'bullish' : recentBullRate < 50 ? 'bearish' : 'neutral',
     valueText: `${recentBullRate.toFixed(0)}% Bull win rate (last 8 ${DAY_NAMES[dow].slice(0, 3)}s)`,
     detail: recentBullRate >= 60
@@ -442,13 +656,13 @@ export function getTodayBias(candles, currentPrice, referenceDate = null, filter
       ? 'Current cycle heavily bleeds on this day'
       : 'Even distribution in recent weeks',
   };
-  confluences.push(regimeConfluence);
+  confluences.push(recentCycleConfluence);
   if (activeFilters.enableRecentRegime) {
-    sumScores += regimeScore;
-    totalWeight += 15;
+    sumScores += recentCycleScore;
+    totalWeight += 10;
   }
 
-  // E. Raw DOW Historical Rate
+  // G. Raw DOW Historical Rate
   const rawDowScore = Math.max(-10, Math.min(10, Math.round((todayDowStats.bullishRate - 50) * 0.2)));
   const rawDowConfluence = {
     id: 'raw_dow',
@@ -500,6 +714,8 @@ export function getTodayBias(candles, currentPrice, referenceDate = null, filter
     confluences,
     confluenceScore: normalizedScore,
     bleedTrap,
+    sigmaMetrics,
+    regimeMetrics,
     technicalMetrics: {
       ema20: Math.round(ema20),
       ema50: Math.round(ema50),

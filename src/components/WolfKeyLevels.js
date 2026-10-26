@@ -19,6 +19,7 @@ export default function WolfKeyLevels({ levelsData }) {
     monthlyStats,
     previousWeekStats,
     previousMonthStats,
+    sigmas,
   } = levelsData;
 
   // Filter ladder rows while always preserving the LAST row
@@ -211,8 +212,8 @@ export default function WolfKeyLevels({ levelsData }) {
               </div>
             )}
 
-            {/* Range & Anchor Context */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            {/* Range & Anchor Context + Sigma Volatility */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 16 }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Weekly Open Anchor</span>
                 <span style={{ fontFamily: 'var(--font-mono)', color: weeklyStats.status === 'ABOVE_WO' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-support)', fontWeight: 600 }}>
@@ -225,6 +226,14 @@ export default function WolfKeyLevels({ levelsData }) {
                   {monthlyStats.pctFromMO >= 0 ? '+' : ''}{monthlyStats.pctFromMO}% vs MO (${Number(monthlyStats.MO).toLocaleString('en-US', { maximumFractionDigits: 0 })})
                 </span>
               </div>
+              {sigmas && (
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', padding: '8px 10px', background: 'rgba(56, 189, 248, 0.04)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                  <span style={{ color: '#38bdf8', display: 'block', marginBottom: 2, fontWeight: 700 }}>Daily Sigma (±{sigmas.dailyStdDevPct}%)</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: '#ffffff', fontWeight: 600 }}>
+                    Z: {sigmas.zScoreText} ({sigmas.statusShort})
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -287,14 +296,16 @@ export default function WolfKeyLevels({ levelsData }) {
               const isPositive = row.pctDiff > 0;
               const isWeeklyVA = ['PW VAH', 'PW POC', 'PW VAL'].includes(row.code);
               const isMonthlyVA = ['PM VAH', 'PM POC', 'PM VAL'].includes(row.code);
+              const isSigma = row.isSigma;
 
               return (
-                <div key={row.code + idx} className={`wolf-row ${isWeeklyVA ? 'is-va-level' : ''} ${isMonthlyVA ? 'is-monthly-va' : ''}`}>
+                <div key={row.code + idx} className={`wolf-row ${isWeeklyVA ? 'is-va-level' : ''} ${isMonthlyVA ? 'is-monthly-va' : ''} ${isSigma ? 'is-sigma-level' : ''}`}>
                   <div className="wolf-row-left">
                     <div className="wolf-row-code">
                       <span>{row.code}</span>
                       {isWeeklyVA && <span className="wolf-va-pill weekly">PW VA</span>}
                       {isMonthlyVA && <span className="wolf-va-pill monthly">PM VA</span>}
+                      {isSigma && <span className="wolf-va-pill sigma">σ BAND</span>}
                     </div>
                     <span className="wolf-row-name-sub">{row.name}</span>
                   </div>

@@ -368,10 +368,15 @@
   border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
-.wolf-va-pill.monthly {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+.wolf-row.is-sigma-level {
+  background: rgba(14, 165, 233, 0.04);
+  border-left: 2px solid #0ea5e9;
+}
+
+.wolf-va-pill.sigma {
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.35);
 }
 
 .wolf-row:hover:not(.is-last) {

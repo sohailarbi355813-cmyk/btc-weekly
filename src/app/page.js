@@ -109,7 +109,9 @@ export default function Home() {
 
   // ── High-Probability Bias Filters State ──
   const [biasFilters, setBiasFilters] = useState({
-    preset: 'highest_prob', // 'highest_prob' | 'bleed_guard' | 'trend_only' | 'recent_cycle' | 'raw_legacy' | 'custom'
+    preset: 'highest_prob', // 'highest_prob' | 'sigma_regime' | 'bleed_guard' | 'trend_only' | 'recent_cycle' | 'raw_legacy' | 'custom'
+    enableSigma: true,
+    enableRegime: true,
     enableTrend: true,
     enableBleedGuard: true,
     enableWeeklyOpen: true,
@@ -123,15 +125,30 @@ export default function Home() {
     if (presetKey === 'highest_prob') {
       newFilters = {
         preset: 'highest_prob',
+        enableSigma: true,
+        enableRegime: true,
         enableTrend: true,
         enableBleedGuard: true,
         enableWeeklyOpen: true,
         enableRecentRegime: true,
         enableRawStats: true,
       };
+    } else if (presetKey === 'sigma_regime') {
+      newFilters = {
+        preset: 'sigma_regime',
+        enableSigma: true,
+        enableRegime: true,
+        enableTrend: false,
+        enableBleedGuard: true,
+        enableWeeklyOpen: true,
+        enableRecentRegime: false,
+        enableRawStats: false,
+      };
     } else if (presetKey === 'bleed_guard') {
       newFilters = {
         preset: 'bleed_guard',
+        enableSigma: false,
+        enableRegime: false,
         enableTrend: true,
         enableBleedGuard: true,
         enableWeeklyOpen: true,
@@ -141,6 +158,8 @@ export default function Home() {
     } else if (presetKey === 'trend_only') {
       newFilters = {
         preset: 'trend_only',
+        enableSigma: false,
+        enableRegime: false,
         enableTrend: true,
         enableBleedGuard: false,
         enableWeeklyOpen: true,
@@ -150,6 +169,8 @@ export default function Home() {
     } else if (presetKey === 'recent_cycle') {
       newFilters = {
         preset: 'recent_cycle',
+        enableSigma: false,
+        enableRegime: false,
         enableTrend: false,
         enableBleedGuard: true,
         enableWeeklyOpen: false,
@@ -159,6 +180,8 @@ export default function Home() {
     } else if (presetKey === 'raw_legacy') {
       newFilters = {
         preset: 'raw_legacy',
+        enableSigma: false,
+        enableRegime: false,
         enableTrend: false,
         enableBleedGuard: false,
         enableWeeklyOpen: false,
@@ -393,12 +416,14 @@ export default function Home() {
   const todayDowStats = bias.dowStats;
   let biasSummary = '';
   if (bias.isFiltered) {
+    const sigmaInfo = bias.sigmaMetrics ? `, Sigma at ${bias.sigmaMetrics.zScoreText} (${bias.sigmaMetrics.statusShort})` : '';
+    const regimeInfo = bias.regimeMetrics ? ` in ${bias.regimeMetrics.name}` : '';
     if (bias.bias === 'bearish') {
-      biasSummary = `Filtered High-Probability Bias: Bearish (${bias.confidence}% Conviction). Key confluences: ${bias.technicalMetrics ? `Trading ${bias.technicalMetrics.priceVsEma20Pct}% vs 20 EMA ($${bias.technicalMetrics.ema20.toLocaleString()}), 24h delta is ${bias.technicalMetrics.change24h}%, RSI ${bias.technicalMetrics.rsi14}` : 'Structure & weekly open confirm downside pressure'}.`;
+      biasSummary = `Filtered High-Probability Bias: Bearish (${bias.confidence}% Conviction)${regimeInfo}. Key confluences: ${bias.technicalMetrics ? `Trading ${bias.technicalMetrics.priceVsEma20Pct}% vs 20 EMA ($${bias.technicalMetrics.ema20.toLocaleString()}), 24h delta is ${bias.technicalMetrics.change24h}%, RSI ${bias.technicalMetrics.rsi14}${sigmaInfo}` : 'Structure & weekly open confirm downside pressure'}.`;
     } else if (bias.bias === 'bullish') {
-      biasSummary = `Filtered High-Probability Bias: Bullish (${bias.confidence}% Conviction). Key confluences: ${bias.technicalMetrics ? `Holding above 20 EMA ($${bias.technicalMetrics.ema20.toLocaleString()}), weekly open acceptance (+${Math.abs(bias.technicalMetrics.pctFromWeeklyOpen)}%), and positive momentum expansion` : 'Structure & weekly open confirm bullish continuation'}.`;
+      biasSummary = `Filtered High-Probability Bias: Bullish (${bias.confidence}% Conviction)${regimeInfo}. Key confluences: ${bias.technicalMetrics ? `Holding above 20 EMA ($${bias.technicalMetrics.ema20.toLocaleString()}), weekly open acceptance (+${Math.abs(bias.technicalMetrics.pctFromWeeklyOpen)}%), and positive momentum expansion${sigmaInfo}` : 'Structure & weekly open confirm bullish continuation'}.`;
     } else {
-      biasSummary = `Filtered High-Probability Bias: Neutral / Defensive (${bias.confidence}% Confidence). Mixed indicators between trend structure and orderflow delta. Avoid blind directional bets.`;
+      biasSummary = `Filtered High-Probability Bias: Neutral / Defensive (${bias.confidence}% Confidence)${regimeInfo}. Price is inside fair value (${bias.sigmaMetrics ? bias.sigmaMetrics.zScoreText : '0.00σ'}) with mixed trend structure. Focus on level-to-level rotation.`;
     }
   } else {
     biasSummary = bias.bias === 'bullish'
@@ -612,9 +637,16 @@ export default function Home() {
                 <button
                   className={`bias-filter-pill ${biasFilters.preset === 'highest_prob' ? 'active' : ''}`}
                   onClick={() => applyBiasFilterPreset('highest_prob')}
-                  title="Combines 20 EMA structure, Bleed Guard, Weekly Open & Regime to output highest probability bias"
+                  title="Combines Sigmas, Market Regime, 20 EMA structure, Bleed Guard, Weekly Open & Stats for highest probability bias"
                 >
                   🎯 Highest Probability
+                </button>
+                <button
+                  className={`bias-filter-pill ${biasFilters.preset === 'sigma_regime' ? 'active' : ''}`}
+                  onClick={() => applyBiasFilterPreset('sigma_regime')}
+                  title="Statistical Sigmas (Z-Score) & Macro Volatility/Trend Regime"
+                >
+                  📐 Sigmas &amp; Regime
                 </button>
                 <button
                   className={`bias-filter-pill ${biasFilters.preset === 'bleed_guard' ? 'active' : ''}`}
@@ -635,7 +667,7 @@ export default function Home() {
                   onClick={() => applyBiasFilterPreset('recent_cycle')}
                   title="Recent 8-Week Regime Momentum vs Stale 5-Year History"
                 >
-                  ⚡ 8-Week Regime
+                  ⚡ 8-Week DOW
                 </button>
                 <button
                   className={`bias-filter-pill ${biasFilters.preset === 'raw_legacy' ? 'active' : ''}`}
@@ -703,6 +735,18 @@ export default function Home() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
               <span style={{ fontSize: '0.68rem', color: '#666', fontFamily: 'var(--font-mono)', marginRight: 2 }}>Confluences:</span>
               <button
+                className={`confluence-chip ${biasFilters.enableSigma ? 'active' : ''}`}
+                onClick={() => toggleSingleBiasFilter('enableSigma')}
+              >
+                {biasFilters.enableSigma ? '✓ ' : '+ '}Sigmas (Z-Score)
+              </button>
+              <button
+                className={`confluence-chip ${biasFilters.enableRegime ? 'active' : ''}`}
+                onClick={() => toggleSingleBiasFilter('enableRegime')}
+              >
+                {biasFilters.enableRegime ? '✓ ' : '+ '}Market Regime
+              </button>
+              <button
                 className={`confluence-chip ${biasFilters.enableTrend ? 'active' : ''}`}
                 onClick={() => toggleSingleBiasFilter('enableTrend')}
               >
@@ -724,7 +768,7 @@ export default function Home() {
                 className={`confluence-chip ${biasFilters.enableRecentRegime ? 'active' : ''}`}
                 onClick={() => toggleSingleBiasFilter('enableRecentRegime')}
               >
-                {biasFilters.enableRecentRegime ? '✓ ' : '+ '}Recent 8W Regime
+                {biasFilters.enableRecentRegime ? '✓ ' : '+ '}Recent 8W DOW
               </button>
               <button
                 className={`confluence-chip ${biasFilters.enableRawStats ? 'active' : ''}`}
@@ -764,6 +808,44 @@ export default function Home() {
                   }}>
                     {bias.isFiltered ? `HIGHEST PROBABILITY: ${bias.confidence}% CONVICTION` : `RAW UNFILTERED: ${bias.confidence}%`}
                   </span>
+
+                  {/* Market Regime Badge */}
+                  {bias.regimeMetrics && (
+                    <span style={{
+                      fontSize: '0.66rem',
+                      fontWeight: 800,
+                      padding: '3px 8px',
+                      borderRadius: 4,
+                      fontFamily: 'var(--font-mono)',
+                      letterSpacing: '0.04em',
+                      background: `${bias.regimeMetrics.color}15`,
+                      color: bias.regimeMetrics.color,
+                      border: `1px solid ${bias.regimeMetrics.color}40`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: bias.regimeMetrics.color }} />
+                      REGIME: {bias.regimeMetrics.name.toUpperCase()}
+                    </span>
+                  )}
+
+                  {/* Sigma Z-Score Badge */}
+                  {bias.sigmaMetrics && (
+                    <span style={{
+                      fontSize: '0.66rem',
+                      fontWeight: 800,
+                      padding: '3px 8px',
+                      borderRadius: 4,
+                      fontFamily: 'var(--font-mono)',
+                      letterSpacing: '0.04em',
+                      background: `${bias.sigmaMetrics.color}15`,
+                      color: bias.sigmaMetrics.color,
+                      border: `1px solid ${bias.sigmaMetrics.color}40`,
+                    }}>
+                      σ {bias.sigmaMetrics.zScoreText} ({bias.sigmaMetrics.statusShort})
+                    </span>
+                  )}
                 </div>
                 <p className="hero-subtitle">{biasSummary}</p>
 
@@ -771,6 +853,24 @@ export default function Home() {
                 <div className="hero-signals">
                   {bias.isFiltered && bias.technicalMetrics ? (
                     <>
+                      {bias.sigmaMetrics && (
+                        <div className="signal-pill">
+                          <span className="pill-dot" style={{ background: bias.sigmaMetrics.color }} />
+                          <span className="pill-label">Sigma Position</span>
+                          <span className="pill-value" style={{ color: bias.sigmaMetrics.color }}>
+                            {bias.sigmaMetrics.zScoreText} &middot; {bias.sigmaMetrics.statusShort}
+                          </span>
+                        </div>
+                      )}
+                      {bias.regimeMetrics && (
+                        <div className="signal-pill">
+                          <span className="pill-dot" style={{ background: bias.regimeMetrics.color }} />
+                          <span className="pill-label">Macro Regime</span>
+                          <span className="pill-value" style={{ color: bias.regimeMetrics.color }}>
+                            {bias.regimeMetrics.name}
+                          </span>
+                        </div>
+                      )}
                       <div className="signal-pill">
                         <span className={`pill-dot ${bias.technicalMetrics.priceVsEma20Pct >= 0 ? 'bullish' : 'bearish'}`} />
                         <span className="pill-label">20 EMA Structure</span>
@@ -791,13 +891,6 @@ export default function Home() {
                         <span className="pill-label">Bleed Guard</span>
                         <span className={`pill-value ${bias.technicalMetrics.change24h >= 0 ? 'value-bullish' : 'value-bearish'}`}>
                           24h: {bias.technicalMetrics.change24h >= 0 ? '+' : ''}{bias.technicalMetrics.change24h}% · RSI {bias.technicalMetrics.rsi14}
-                        </span>
-                      </div>
-                      <div className="signal-pill">
-                        <span className={`pill-dot ${bias.recentBullRate > 50 ? 'bullish' : 'bearish'}`} />
-                        <span className="pill-label">Recent {DAY_SHORT[todayDow]}s</span>
-                        <span className={`pill-value ${bias.recentBullRate > 50 ? 'value-bullish' : 'value-bearish'}`}>
-                          {bias.recentBullRate}% last 8
                         </span>
                       </div>
                     </>
@@ -835,6 +928,115 @@ export default function Home() {
                     </>
                   )}
                 </div>
+
+                {/* ── QUANT STATISTICAL SIGMA VOLATILITY GAUGE & BANDS ── */}
+                {bias.sigmaMetrics && (
+                  <div style={{
+                    marginTop: 16,
+                    padding: '12px 14px',
+                    background: '#070707',
+                    border: '1px solid #1a1a1a',
+                    borderRadius: 8,
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      marginBottom: 8,
+                      fontSize: '0.72rem',
+                      fontFamily: 'var(--font-mono)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: '#38bdf8', fontWeight: 800 }}>STATISTICAL SIGMAS (&plusmn;&sigma;)</span>
+                        <span style={{ color: '#555' }}>&middot;</span>
+                        <span style={{ color: '#888' }}>Daily Volatility: <strong style={{ color: '#fff' }}>&plusmn;{bias.sigmaMetrics.dailyStdDevPct}%</strong></span>
+                      </div>
+                      <div style={{
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        background: `${bias.sigmaMetrics.color}15`,
+                        color: bias.sigmaMetrics.color,
+                        border: `1px solid ${bias.sigmaMetrics.color}35`,
+                        fontWeight: 700,
+                        fontSize: '0.68rem',
+                      }}>
+                        {bias.sigmaMetrics.zScoreText} &middot; {bias.sigmaMetrics.statusShort}
+                      </div>
+                    </div>
+
+                    {/* Horizontal Sigma Scale Gauge (-3σ to +3σ) */}
+                    <div style={{ position: 'relative', margin: '14px 4px 8px' }}>
+                      <div style={{
+                        height: 6,
+                        background: 'linear-gradient(90deg, #ef4444 0%, #38bdf8 25%, #22c55e 50%, #38bdf8 75%, #ef4444 100%)',
+                        borderRadius: 3,
+                        position: 'relative',
+                        opacity: 0.85
+                      }}>
+                        {/* Live Z-score needle marker */}
+                        <div style={{
+                          position: 'absolute',
+                          left: `${Math.min(Math.max(((bias.sigmaMetrics.zScore + 3) / 6) * 100, 2), 98)}%`,
+                          top: -6,
+                          bottom: -6,
+                          width: 4,
+                          background: '#ffffff',
+                          boxShadow: '0 0 8px #ffffff, 0 0 14px #38bdf8',
+                          borderRadius: 2,
+                          transform: 'translateX(-50%)',
+                          zIndex: 3
+                        }} />
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '0.58rem',
+                        fontFamily: 'var(--font-mono)',
+                        color: '#666',
+                        marginTop: 6
+                      }}>
+                        <span>-3&sigma; Extreme</span>
+                        <span>-2&sigma; Floor</span>
+                        <span>-1&sigma; Low</span>
+                        <span style={{ color: '#fff', fontWeight: 700 }}>0 (Mean)</span>
+                        <span>+1&sigma; High</span>
+                        <span>+2&sigma; Ceiling</span>
+                        <span>+3&sigma; Extreme</span>
+                      </div>
+                    </div>
+
+                    {/* Sigma Price Nodes Grid */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))',
+                      gap: 6,
+                      marginTop: 10
+                    }}>
+                      <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>-2&sigma; Bounce Floor</div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#4ade80', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.minus2Sigma)}</div>
+                      </div>
+                      <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>-1&sigma; Expected Low</div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.minus1Sigma)}</div>
+                      </div>
+                      <div style={{ background: '#0d0d0d', border: '1px solid #262626', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>Mean (20 SMA)</div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ffffff', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.mean)}</div>
+                      </div>
+                      <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>+1&sigma; Expected High</div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.plus1Sigma)}</div>
+                      </div>
+                      <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>+2&sigma; Mean Rev Ceiling</div>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f87171', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.plus2Sigma)}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Confidence Ring */}
