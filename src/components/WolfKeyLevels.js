@@ -264,14 +264,19 @@ export default function WolfKeyLevels({ levelsData }) {
               if (row.isLast) {
                 return (
                   <div key="last" className="wolf-row is-last">
-                    <div className="wolf-row-code">
-                      <span>LAST</span>
+                    <div className="wolf-row-left">
+                      <div className="wolf-row-code">
+                        <span>LAST SPOT</span>
+                      </div>
+                      <span className="wolf-row-name-sub">Current Market Price</span>
                     </div>
-                    <div className="wolf-row-price">
-                      {Number(row.price).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                    </div>
-                    <div className="wolf-row-pct">
-                      0.00 %
+                    <div className="wolf-row-right">
+                      <span className="wolf-row-price">
+                        ${Number(row.price).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                      </span>
+                      <span className="wolf-row-pct">
+                        0.00%
+                      </span>
                     </div>
                   </div>
                 );
@@ -283,19 +288,21 @@ export default function WolfKeyLevels({ levelsData }) {
 
               return (
                 <div key={row.code + idx} className={`wolf-row ${isWeeklyVA ? 'is-va-level' : ''} ${isMonthlyVA ? 'is-monthly-va' : ''}`}>
-                  <div>
+                  <div className="wolf-row-left">
                     <div className="wolf-row-code">
-                      {row.code}
+                      <span>{row.code}</span>
                       {isWeeklyVA && <span className="wolf-va-pill weekly">PW VA</span>}
                       {isMonthlyVA && <span className="wolf-va-pill monthly">PM VA</span>}
                     </div>
                     <span className="wolf-row-name-sub">{row.name}</span>
                   </div>
-                  <div className="wolf-row-price">
-                    {Number(row.price).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                  </div>
-                  <div className={`wolf-row-pct ${isPositive ? 'pos' : 'neg'}`}>
-                    {isPositive ? '+' : ''}{row.pctDiff.toFixed(2)} %
+                  <div className="wolf-row-right">
+                    <span className="wolf-row-price">
+                      ${Number(row.price).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                    </span>
+                    <span className={`wolf-row-pct ${isPositive ? 'pos' : 'neg'}`}>
+                      {isPositive ? '+' : ''}{row.pctDiff.toFixed(2)}%
+                    </span>
                   </div>
                 </div>
               );

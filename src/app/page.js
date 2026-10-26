@@ -5,10 +5,8 @@ import { getTodayBias } from '@/lib/biasEngine';
 import { calculateWolfKeyLevels } from '@/lib/wolfLevelsEngine';
 import { buildWeeklyProfiles, findSimilarWeeks } from '@/lib/weekPatternEngine';
 import WolfKeyLevels from '@/components/WolfKeyLevels';
-import AltsTapeReader from '@/components/AltsTapeReader';
 import MacroWhalesEtf from '@/components/MacroWhalesEtf';
 import WeeklyForecast from '@/components/WeeklyForecast';
-import TwinPatternScanner from '@/components/TwinPatternScanner';
 import SessionProfiler from '@/components/SessionProfiler';
 import BootIntroSequence from '@/components/BootIntroSequence';
 import CvdDivergenceScanner from '@/components/CvdDivergenceScanner';
@@ -507,19 +505,10 @@ export default function Home() {
               </div>
               <div className="logo-text">
                 <h1>Wolf Tape Reader</h1>
-                <span>Trading The Tape, With Precision &middot; Key Levels, Alts &amp; Forecasts</span>
+                <span>Trading The Tape, With Precision &middot; Key Levels &amp; Statistical Models</span>
               </div>
             </div>
             <div className="header-right">
-              {/* Audio Spectrum Equalizer */}
-              <div className="audio-pulse-bars" title="Real-time orderflow telemetry">
-                <span className="audio-bar" />
-                <span className="audio-bar" />
-                <span className="audio-bar" />
-                <span className="audio-bar" />
-                <span className="audio-bar" />
-              </div>
-
               {/* BTC Price Header */}
               <div className="btc-price-header">{formatPrice(data.currentPrice)}</div>
 
@@ -538,7 +527,7 @@ export default function Home() {
               <button
                 className="mobile-menu-btn"
                 onClick={() => setMobileMenuOpen(true)}
-                aria-label="Toggle menu"
+                aria-label="Toggle navigation menu"
                 title="Open menu"
               >
                 <IconMenu size={20} />
@@ -547,6 +536,120 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* ── Functional Mobile Navigation Drawer ── */}
+      {mobileMenuOpen && (
+        <div className="mobile-nav-overlay" onClick={() => setMobileMenuOpen(false)}>
+          <div className="mobile-nav-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-nav-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <IconBlackFlag size={18} color="var(--wolf-yellow-bright)" />
+                <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#fff' }}>Navigation</span>
+              </div>
+              <button
+                className="mobile-nav-close"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Close menu"
+              >
+                <IconX size={20} />
+              </button>
+            </div>
+
+            {/* Quick Live Price Card */}
+            <div className="mobile-nav-price-card">
+              <div>
+                <div style={{ fontSize: '0.68rem', color: '#888888', textTransform: 'uppercase' }}>Bitcoin Last Price</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--wolf-yellow-bright)', fontFamily: 'var(--font-mono)' }}>
+                  {formatPrice(data.currentPrice)}
+                </div>
+              </div>
+              <button
+                className="live-badge-btn"
+                onClick={() => {
+                  handleRefresh();
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <span className="live-dot" />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {/* Nav Links */}
+            <div className="mobile-nav-links">
+              <button
+                className={`mobile-nav-item ${activeTab === 'levels' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('levels');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <IconWolf size={18} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : '#888888'} />
+                <div className="mobile-nav-item-text">
+                  <span className="mobile-nav-title">Wolf Key Levels</span>
+                  <span className="mobile-nav-desc">Auction Price Ladder, VAL/VAH &amp; Anchors</span>
+                </div>
+              </button>
+
+              <button
+                className={`mobile-nav-item ${activeTab === 'cvd' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('cvd');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <IconZap size={18} color={activeTab === 'cvd' ? '#f59e0b' : '#888888'} />
+                <div className="mobile-nav-item-text">
+                  <span className="mobile-nav-title">CVD Divergences</span>
+                  <span className="mobile-nav-desc">Order Flow &amp; Institutional Absorptions</span>
+                </div>
+              </button>
+
+              <button
+                className={`mobile-nav-item ${activeTab === 'session' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('session');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <IconClock size={18} color={activeTab === 'session' ? '#38bdf8' : '#888888'} />
+                <div className="mobile-nav-item-text">
+                  <span className="mobile-nav-title">Session HOD/LOD</span>
+                  <span className="mobile-nav-desc">Asia, London &amp; NY Probabilities</span>
+                </div>
+              </button>
+
+              <button
+                className={`mobile-nav-item ${activeTab === 'pattern' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('pattern');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <IconCalendar size={18} color={activeTab === 'pattern' ? '#38bdf8' : '#888888'} />
+                <div className="mobile-nav-item-text">
+                  <span className="mobile-nav-title">Weekly Forecast</span>
+                  <span className="mobile-nav-desc">Historical Cycle Match &amp; Weekly Path</span>
+                </div>
+              </button>
+
+              <button
+                className={`mobile-nav-item ${activeTab === 'macro' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('macro');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <IconBarChart size={18} color={activeTab === 'macro' ? '#38bdf8' : '#888888'} />
+                <div className="mobile-nav-item-text">
+                  <span className="mobile-nav-title">Whales • MVRV • ETFs</span>
+                  <span className="mobile-nav-desc">Institutional On-Chain Flows</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Main ── */}
       <main className="main" style={{ flex: 1 }}>
@@ -960,33 +1063,21 @@ export default function Home() {
               <IconWolf size={15} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-yellow)'} />
               <span style={{ color: activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : undefined }}>Wolf Key Levels</span>
             </button>
-            <button id="tab-alts" className={`tab-btn ${activeTab === 'alts' ? 'active' : ''}`} onClick={() => setActiveTab('alts')}>
-              <IconRadar size={15} color={activeTab === 'alts' ? '#38bdf8' : undefined} />
-              <span style={{ color: activeTab === 'alts' ? '#38bdf8' : undefined }}>Alts Value Area (VAL/VAH)</span>
-              <span style={{ background: '#2dd4bf', color: '#000000', fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>55</span>
-            </button>
             <button id="tab-cvd" className={`tab-btn ${activeTab === 'cvd' ? 'active' : ''}`} onClick={() => setActiveTab('cvd')}>
               <IconZap size={15} color={activeTab === 'cvd' ? '#f59e0b' : undefined} />
               <span style={{ color: activeTab === 'cvd' ? '#f59e0b' : undefined }}>CVD Divergences</span>
-              <span style={{ background: '#f59e0b', color: '#000000', fontSize: '0.62rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>BTC+55</span>
             </button>
-            <button id="tab-twin" className={`tab-btn ${activeTab === 'twin' ? 'active' : ''}`} onClick={() => setActiveTab('twin')}>
-              <IconZap size={15} color={activeTab === 'twin' ? '#38bdf8' : undefined} />
-              <span style={{ color: activeTab === 'twin' ? '#38bdf8' : undefined }}>Twin Pattern Scanner</span>
-              <span style={{ background: '#38bdf8', color: '#000000', fontSize: '0.62rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>AI</span>
-            </button>
-            <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => setActiveTab('macro')}>
-              <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
-              <span style={{ color: activeTab === 'macro' ? '#38bdf8' : undefined }}>Whales • MVRV • ETFs</span>
+            <button id="tab-session" className={`tab-btn ${activeTab === 'session' ? 'active' : ''}`} onClick={() => setActiveTab('session')}>
+              <IconClock size={15} color={activeTab === 'session' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'session' ? '#38bdf8' : undefined }}>Session HOD/LOD</span>
             </button>
             <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => setActiveTab('pattern')}>
               <IconCalendar size={15} color={activeTab === 'pattern' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'pattern' ? '#38bdf8' : undefined }}>Weekly Forecast</span>
             </button>
-            <button id="tab-session" className={`tab-btn ${activeTab === 'session' ? 'active' : ''}`} onClick={() => setActiveTab('session')}>
-              <IconClock size={15} color={activeTab === 'session' ? '#38bdf8' : undefined} />
-              <span style={{ color: activeTab === 'session' ? '#38bdf8' : undefined }}>Session HOD/LOD</span>
-              <span style={{ background: '#38bdf8', color: '#000000', fontSize: '0.62rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 800, marginLeft: '0.35rem' }}>PROB</span>
+            <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => setActiveTab('macro')}>
+              <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'macro' ? '#38bdf8' : undefined }}>Whales • MVRV • ETFs</span>
             </button>
           </div>
 
@@ -995,40 +1086,30 @@ export default function Home() {
             <WolfKeyLevels levelsData={wolfLevels} />
           )}
 
-          {/* ── 2. ALTS VALUE AREA TAPE READER VIEW ── */}
-          {activeTab === 'alts' && (
-            <AltsTapeReader />
-          )}
-
-          {/* ── 2B. TWIN PATTERN SCANNER VIEW (Direct Main Tab) ── */}
-          {activeTab === 'twin' && (
-            <TwinPatternScanner />
-          )}
-
-          {/* ── 2C. CVD DIVERGENCE SCANNER VIEW (BTC + 55 Alts across 30m, 1h, 2h, 3h, 4h) ── */}
+          {/* ── 2. CVD DIVERGENCE SCANNER VIEW (Order Flow Telemetry) ── */}
           {activeTab === 'cvd' && (
             <CvdDivergenceScanner />
           )}
 
-          {/* ── 3. MACRO WHALES & ETF VIEW ── */}
-          {activeTab === 'macro' && (
-            <MacroWhalesEtf />
+          {/* ── 3. SESSION PROFILER (Asia · London · NY HOD/LOD Probabilities) ── */}
+          {activeTab === 'session' && (
+            <SessionProfiler />
           )}
 
-          {/* ── 4. WEEKLY FORECAST VIEW (Restored & Mobile Optimized) ── */}
+          {/* ── 4. WEEKLY FORECAST VIEW ── */}
           {activeTab === 'pattern' && (
             <WeeklyForecast weekPattern={weekPattern} formatPrice={formatPrice} />
           )}
 
-          {/* ── 5. SESSION PROFILER (Asia · London · NY HOD/LOD Probabilities) ── */}
-          {activeTab === 'session' && (
-            <SessionProfiler />
+          {/* ── 5. MACRO WHALES & ETF VIEW ── */}
+          {activeTab === 'macro' && (
+            <MacroWhalesEtf />
           )}
 
         </div>
       </main>
 
-      {/* ── Mobile Sticky Bottom Bar (6 Quick-Switch Tools) ── */}
+      {/* ── Mobile Sticky Bottom Bar (5 Clean Institutional Tools) ── */}
       <div className="mobile-bottom-bar">
         <button
           className={`mobile-bottom-btn ${activeTab === 'levels' ? 'active' : ''}`}
@@ -1038,25 +1119,18 @@ export default function Home() {
           <span>Levels</span>
         </button>
         <button
-          className={`mobile-bottom-btn ${activeTab === 'alts' ? 'active' : ''}`}
-          onClick={() => setActiveTab('alts')}
-        >
-          <IconRadar size={18} />
-          <span>Alts</span>
-        </button>
-        <button
-          className={`mobile-bottom-btn ${activeTab === 'twin' ? 'active' : ''}`}
-          onClick={() => setActiveTab('twin')}
+          className={`mobile-bottom-btn ${activeTab === 'cvd' ? 'active' : ''}`}
+          onClick={() => setActiveTab('cvd')}
         >
           <IconZap size={18} />
-          <span>Twin Scan</span>
+          <span>CVD Divs</span>
         </button>
         <button
-          className={`mobile-bottom-btn ${activeTab === 'macro' ? 'active' : ''}`}
-          onClick={() => setActiveTab('macro')}
+          className={`mobile-bottom-btn ${activeTab === 'session' ? 'active' : ''}`}
+          onClick={() => setActiveTab('session')}
         >
-          <IconBarChart size={18} />
-          <span>Whales</span>
+          <IconClock size={18} />
+          <span>Sessions</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'pattern' ? 'active' : ''}`}
@@ -1066,11 +1140,11 @@ export default function Home() {
           <span>Forecast</span>
         </button>
         <button
-          className={`mobile-bottom-btn ${activeTab === 'session' ? 'active' : ''}`}
-          onClick={() => setActiveTab('session')}
+          className={`mobile-bottom-btn ${activeTab === 'macro' ? 'active' : ''}`}
+          onClick={() => setActiveTab('macro')}
         >
-          <IconClock size={18} />
-          <span>Sessions</span>
+          <IconBarChart size={18} />
+          <span>Whales</span>
         </button>
       </div>
 
