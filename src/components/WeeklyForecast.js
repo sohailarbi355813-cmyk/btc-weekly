@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import WeeklyHighLowMatrix from '@/components/WeeklyHighLowMatrix';
 import {
   IconLayers,
   IconRadar,
@@ -32,7 +33,13 @@ function defaultFormatPrice(n) {
   return '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-export default function WeeklyForecast({ weekPattern, formatPrice = defaultFormatPrice }) {
+export default function WeeklyForecast({
+  weekPattern,
+  weeklyHighLowData,
+  selectedWeeklyBias = 'auto',
+  onWeeklyBiasChange,
+  formatPrice = defaultFormatPrice,
+}) {
   if (!weekPattern) {
     return (
       <div className="no-data-msg" style={{ minHeight: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
@@ -46,6 +53,14 @@ export default function WeeklyForecast({ weekPattern, formatPrice = defaultForma
 
   return (
     <div style={{ animation: 'fadeInUp 0.35s ease' }}>
+      {/* ── 0. High / Low of Week Formation Probability (HOW / LOW Proximity) ── */}
+      <WeeklyHighLowMatrix
+        probData={weeklyHighLowData}
+        selectedBias={selectedWeeklyBias}
+        onBiasChange={onWeeklyBiasChange}
+        formatPrice={formatPrice}
+      />
+
       {/* ── 1. Current Week Timeline ── */}
       <div className="section-header" style={{ marginBottom: 14 }}>
         <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

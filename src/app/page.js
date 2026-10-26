@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getTodayBias } from '@/lib/biasEngine';
 import { calculateWolfKeyLevels } from '@/lib/wolfLevelsEngine';
 import { buildWeeklyProfiles, findSimilarWeeks } from '@/lib/weekPatternEngine';
+import { calculateWeeklyHighLowProbabilities } from '@/lib/weeklyHighLowEngine';
 import WolfKeyLevels from '@/components/WolfKeyLevels';
 import MacroWhalesEtf from '@/components/MacroWhalesEtf';
 import WeeklyForecast from '@/components/WeeklyForecast';
@@ -106,6 +107,8 @@ export default function Home() {
   const [clientDate, setClientDate] = useState(null);
   const [bootDone, setBootDone] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [weeklyProbBias, setWeeklyProbBias] = useState('auto'); // 'auto' | 'bearish' | 'bullish'
+  const [weeklyHighLowData, setWeeklyHighLowData] = useState(null);
 
   // ── High-Probability Bias Filters State ──
   const [biasFilters, setBiasFilters] = useState({
@@ -237,10 +240,14 @@ export default function Home() {
       // Calculating Wolf Key Levels
       const wolfLevelsResult = calculateWolfKeyLevels(json.candles, currentPrice);
 
+      // Calculating Weekly High / Low Formation Probabilities
+      const hlProb = calculateWeeklyHighLowProbabilities(json.candles, currentPrice, now, weeklyProbBias);
+
       setData({ candles: json.candles, count: json.count, currentPrice });
       setBias(biasResult);
       setWolfLevels(wolfLevelsResult);
       setWeekPattern(patternResult);
+      setWeeklyHighLowData(hlProb);
       setLastUpdated(now);
     } catch (err) {
       setError(err.message);
@@ -248,7 +255,15 @@ export default function Home() {
       setLoading(false);
       setTimeout(() => setRefreshing(false), 500);
     }
-  }, [biasFilters]);
+  }, [biasFilters, weeklyProbBias]);
+
+  const handleWeeklyProbBiasChange = (newBias) => {
+    setWeeklyProbBias(newBias);
+    if (data?.candles) {
+      const updated = calculateWeeklyHighLowProbabilities(data.candles, data.currentPrice, clientDate || new Date(), newBias);
+      setWeeklyHighLowData(updated);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -558,8 +573,8 @@ export default function Home() {
               >
                 <IconCalendar size={18} color={activeTab === 'pattern' ? '#38bdf8' : '#888888'} />
                 <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">Weekly Forecast</span>
-                  <span className="mobile-nav-desc">Historical Cycle Match &amp; Weekly Path</span>
+                  <span className="mobile-nav-title">Weekly HOW/LOW &amp; Forecast</span>
+                  <span className="mobile-nav-desc">High/Low Formation Probability &amp; Cycle Match</span>
                 </div>
               </button>
 
@@ -894,6 +909,20 @@ export default function Home() {
                           24h: {bias.technicalMetrics.change24h >= 0 ? '+' : ''}{bias.technicalMetrics.change24h}% · RSI {bias.technicalMetrics.rsi14}
                         </span>
                       </div>
+                      {weeklyHighLowData && (
+                        <div
+                          className="signal-pill"
+                          onClick={() => setActiveTab('pattern')}
+                          style={{ cursor: 'pointer', border: '1px solid rgba(56, 189, 248, 0.35)' }}
+                          title="Click to view full Weekly High/Low Formation Probability matrix"
+                        >
+                          <span className="pill-dot" style={{ background: weeklyHighLowData.highMetrics.probabilityIsIn >= 55 ? '#f87171' : '#38bdf8' }} />
+                          <span className="pill-label">HOW Proximity</span>
+                          <span className="pill-value" style={{ color: weeklyHighLowData.highMetrics.probabilityIsIn >= 55 ? '#f87171' : '#38bdf8' }}>
+                            {weeklyHighLowData.highMetrics.probabilityIsIn}% Chance High is IN
+                          </span>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <>
@@ -1176,7 +1205,7 @@ export default function Home() {
             </button>
             <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => setActiveTab('pattern')}>
               <IconCalendar size={15} color={activeTab === 'pattern' ? '#38bdf8' : undefined} />
-              <span style={{ color: activeTab === 'pattern' ? '#38bdf8' : undefined }}>Weekly Forecast</span>
+              <span style={{ color: activeTab === 'pattern' ? '#38bdf8' : undefined }}>Weekly HOW/LOW &amp; Forecast</span>
             </button>
             <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => setActiveTab('macro')}>
               <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
@@ -1194,9 +1223,15 @@ export default function Home() {
             <SessionProfiler />
           )}
 
-          {/* ── 3. WEEKLY FORECAST VIEW ── */}
+          {/* ── 3. WEEKLY FORECAST & HOW/LOW PROBABILITY VIEW ── */}
           {activeTab === 'pattern' && (
-            <WeeklyForecast weekPattern={weekPattern} formatPrice={formatPrice} />
+            <WeeklyForecast
+              weekPattern={weekPattern}
+              weeklyHighLowData={weeklyHighLowData}
+              selectedWeeklyBias={weeklyProbBias}
+              onWeeklyBiasChange={handleWeeklyProbBiasChange}
+              formatPrice={formatPrice}
+            />
           )}
 
           {/* ── 4. MACRO WHALES & ETF VIEW ── */}
