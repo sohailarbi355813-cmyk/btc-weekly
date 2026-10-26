@@ -311,13 +311,19 @@ export function calculateSigmas(candles, currentPrice, period = 20) {
   const lastCandle = sorted[sorted.length - 1];
   const DO = lastCandle.open || currentPrice;
 
-  // Daily expected sigma boundaries from Daily Open
-  const plus1Sigma = DO * (1 + (dailyStdDevPct / 100));
-  const minus1Sigma = DO * (1 - (dailyStdDevPct / 100));
-  const plus2Sigma = DO * (1 + (2 * dailyStdDevPct / 100));
-  const minus2Sigma = DO * (1 - (2 * dailyStdDevPct / 100));
-  const plus3Sigma = DO * (1 + (3 * dailyStdDevPct / 100));
-  const minus3Sigma = DO * (1 - (3 * dailyStdDevPct / 100));
+  // 20-period Gaussian Distribution Sigma Bands (strictly aligned with Mean & Z-score)
+  const plus1Sigma = mean + stdDev;
+  const minus1Sigma = mean - stdDev;
+  const plus2Sigma = mean + (2 * stdDev);
+  const minus2Sigma = mean - (2 * stdDev);
+  const plus3Sigma = mean + (3 * stdDev);
+  const minus3Sigma = mean - (3 * stdDev);
+
+  // Expected 24h Daily Volatility Range anchored to Daily Open
+  const dailyHigh1Sigma = DO * (1 + (dailyStdDevPct / 100));
+  const dailyLow1Sigma = DO * (1 - (dailyStdDevPct / 100));
+  const dailyHigh2Sigma = DO * (1 + (2 * dailyStdDevPct / 100));
+  const dailyLow2Sigma = DO * (1 - (2 * dailyStdDevPct / 100));
 
   // Bollinger Bandwidth % = (4 * stdDev / mean) * 100
   const bandwidthPct = mean > 0 ? ((4 * stdDev) / mean) * 100 : 0;
@@ -370,7 +376,10 @@ export function calculateSigmas(candles, currentPrice, period = 20) {
     plus2Sigma: Math.round(plus2Sigma),
     minus2Sigma: Math.round(minus2Sigma),
     plus3Sigma: Math.round(plus3Sigma),
-    minus3Sigma: Math.round(minus3Sigma),
+    dailyHigh1Sigma: Math.round(dailyHigh1Sigma),
+    dailyLow1Sigma: Math.round(dailyLow1Sigma),
+    dailyHigh2Sigma: Math.round(dailyHigh2Sigma),
+    dailyLow2Sigma: Math.round(dailyLow2Sigma),
     bandwidthPct: Math.round(bandwidthPct * 100) / 100,
   };
 }

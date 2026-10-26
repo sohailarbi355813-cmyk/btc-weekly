@@ -423,7 +423,8 @@ export default function Home() {
     } else if (bias.bias === 'bullish') {
       biasSummary = `Filtered High-Probability Bias: Bullish (${bias.confidence}% Conviction)${regimeInfo}. Key confluences: ${bias.technicalMetrics ? `Holding above 20 EMA ($${bias.technicalMetrics.ema20.toLocaleString()}), weekly open acceptance (+${Math.abs(bias.technicalMetrics.pctFromWeeklyOpen)}%), and positive momentum expansion${sigmaInfo}` : 'Structure & weekly open confirm bullish continuation'}.`;
     } else {
-      biasSummary = `Filtered High-Probability Bias: Neutral / Defensive (${bias.confidence}% Confidence)${regimeInfo}. Price is inside fair value (${bias.sigmaMetrics ? bias.sigmaMetrics.zScoreText : '0.00σ'}) with mixed trend structure. Focus on level-to-level rotation.`;
+      const zStatus = bias.sigmaMetrics ? `${bias.sigmaMetrics.zScoreText} (${bias.sigmaMetrics.statusShort})` : '0.00σ (Equilibrium)';
+      biasSummary = `Filtered High-Probability Bias: Neutral / Defensive (${bias.confidence}% Confidence)${regimeInfo}. Price is at ${zStatus} with compressed range structure. Focus on level-to-level rotation.`;
     }
   } else {
     biasSummary = bias.bias === 'bullish'
