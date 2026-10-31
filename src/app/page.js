@@ -11,6 +11,7 @@ import WeeklyForecast from '@/components/WeeklyForecast';
 import SessionProfiler from '@/components/SessionProfiler';
 import BootIntroSequence from '@/components/BootIntroSequence';
 import RsiScannerWidget from '@/components/RsiScannerWidget';
+import MarketStructureTable from '@/components/MarketStructureTable';
 import {
   IconBitcoin,
   IconTrendUp,
@@ -604,6 +605,20 @@ export default function Home() {
                 <div className="mobile-nav-item-text">
                   <span className="mobile-nav-title">RSI Alerts (Discord)</span>
                   <span className="mobile-nav-desc">55 Alts • 30m, 45m, 1h, 2h, 3h Overbought/Oversold</span>
+                </div>
+              </button>
+
+              <button
+                className={`mobile-nav-item ${activeTab === 'structure' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('structure');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <IconScale size={18} color={activeTab === 'structure' ? '#38bdf8' : '#888888'} />
+                <div className="mobile-nav-item-text">
+                  <span className="mobile-nav-title">Market Structure Matrix</span>
+                  <span className="mobile-nav-desc">15M, 1H, 4H, 1D, 1W • 2-Candle BOS/MSS</span>
                 </div>
               </button>
             </div>
@@ -1242,6 +1257,10 @@ export default function Home() {
               <IconZap size={15} color={activeTab === 'rsi' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'rsi' ? '#38bdf8' : undefined }}>RSI Alerts (Discord)</span>
             </button>
+            <button id="tab-structure" className={`tab-btn ${activeTab === 'structure' ? 'active' : ''}`} onClick={() => setActiveTab('structure')}>
+              <IconScale size={15} color={activeTab === 'structure' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'structure' ? '#38bdf8' : undefined }}>Market Structure</span>
+            </button>
           </div>
 
           {/* ── 1. WOLF KEY LEVELS VIEW ── */}
@@ -1273,6 +1292,11 @@ export default function Home() {
           {/* ── 5. DISCORD RSI SCANNER VIEW ── */}
           {activeTab === 'rsi' && (
             <RsiScannerWidget />
+          )}
+
+          {/* ── 6. MARKET STRUCTURE MATRIX (15M, 1H, 4H, 1D, 1W) ── */}
+          {activeTab === 'structure' && (
+            <MarketStructureTable />
           )}
 
         </div>
@@ -1314,6 +1338,13 @@ export default function Home() {
         >
           <IconZap size={18} />
           <span>RSI</span>
+        </button>
+        <button
+          className={`mobile-bottom-btn ${activeTab === 'structure' ? 'active' : ''}`}
+          onClick={() => setActiveTab('structure')}
+        >
+          <IconScale size={18} />
+          <span>Structure</span>
         </button>
       </div>
 
