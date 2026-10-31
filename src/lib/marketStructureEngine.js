@@ -1,10 +1,9 @@
 import { ALTS_WHITELIST } from './altsData.js';
 
 export const STRUCTURE_TIMEFRAMES = [
-  { id: '15m', label: '15M', interval: '15', weight: 0.10 },
-  { id: '1h',  label: '1H',  interval: '60', weight: 0.20 },
-  { id: '4h',  label: '4H',  interval: '240', weight: 0.25 },
-  { id: '1d',  label: '1D',  interval: 'D',   weight: 0.25 },
+  { id: '1h',  label: '1H',  interval: '60',  weight: 0.15 },
+  { id: '4h',  label: '4H',  interval: '240', weight: 0.30 },
+  { id: '1d',  label: '1D',  interval: 'D',   weight: 0.35 },
   { id: '1w',  label: '1W',  interval: 'W',   weight: 0.20 },
 ];
 
@@ -50,6 +49,8 @@ export function analyzeCandleStructure(candles, swingSize = 3) {
   // 2. Track Swings and Breakouts bar by bar
   let prevHigh = null;
   let prevLow = null;
+  let highActive = false;
+  let lowActive = false;
   let lastStructureHigh = null; // 'HH' or 'LH'
   let lastStructureLow = null;  // 'HL' or 'LL'
   let currentTrend = 'neutral';
@@ -78,6 +79,7 @@ export function analyzeCandleStructure(candles, swingSize = 3) {
           }
         }
         prevHigh = newPivot.price;
+        highActive = true;
       } else {
         if (prevLow !== null) {
           if (newPivot.price >= prevLow) {
@@ -89,20 +91,24 @@ export function analyzeCandleStructure(candles, swingSize = 3) {
           }
         }
         prevLow = newPivot.price;
+        lowActive = true;
       }
     }
 
-    // 2-Candle Confirmation check
+    // 2-Candle Confirmation check on immediate next candle (Candle 2)
     if (pendingBullish) {
       if (i === pendingBullish.idx + 1) {
         if (c.close > pendingBullish.candle1High) {
-          // Confirmed Bullish Breakout!
+          // Confirmed Valid Bullish Breakout! (Next candle closed strictly above Candle 1 high)
           const isMSS = prevBreakoutDir === -1;
           currentTrend = 'bullish';
-          lastEvent = isMSS ? 'Bullish MSS / CHoCH' : 'Bullish BOS';
+          lastEvent = isMSS ? 'Bullish MSS / MSB' : 'Bullish BOS';
           prevBreakoutDir = 1;
+          highActive = false;
         } else {
-          lastEvent = 'Bullish SFP / Fakeout';
+          // Invalid Breakout! (Next candle failed to close above Candle 1 high - SFP / Fakeout)
+          lastEvent = 'Bullish SFP (Invalid Breakout)';
+          highActive = false;
         }
         pendingBullish = null;
       }
@@ -111,23 +117,26 @@ export function analyzeCandleStructure(candles, swingSize = 3) {
     if (pendingBearish) {
       if (i === pendingBearish.idx + 1) {
         if (c.close < pendingBearish.candle1Low) {
-          // Confirmed Bearish Breakout!
+          // Confirmed Valid Bearish Breakout! (Next candle closed strictly below Candle 1 low)
           const isMSS = prevBreakoutDir === 1;
           currentTrend = 'bearish';
-          lastEvent = isMSS ? 'Bearish MSS / CHoCH' : 'Bearish BOS';
+          lastEvent = isMSS ? 'Bearish MSS / MSB' : 'Bearish BOS';
           prevBreakoutDir = -1;
+          lowActive = false;
         } else {
-          lastEvent = 'Bearish SFP / Fakeout';
+          // Invalid Breakout! (Next candle failed to close below Candle 1 low - see user diagram)
+          lastEvent = 'Bearish SFP (Invalid Breakout)';
+          lowActive = false;
         }
         pendingBearish = null;
       }
     }
 
-    // Candle 1 Breakout Detection
-    if (prevHigh && c.close > prevHigh && !pendingBullish) {
+    // Candle 1 Breakout Detection (Candle closes beyond active swing point)
+    if (highActive && prevHigh !== null && c.close > prevHigh && !pendingBullish) {
       pendingBullish = { candle1High: c.high, level: prevHigh, idx: i };
     }
-    if (prevLow && c.close < prevLow && !pendingBearish) {
+    if (lowActive && prevLow !== null && c.close < prevLow && !pendingBearish) {
       pendingBearish = { candle1Low: c.low, level: prevLow, idx: i };
     }
   }
@@ -295,7 +304,8 @@ export async function scanAltsMarketStructure() {
 
       for (const tf of STRUCTURE_TIMEFRAMES) {
         const candles = await fetchCandlesForTf(coin.symbol, tf.interval, 50);
-        const analysis = analyzeCandleStructure(candles, tf.id === '15m' ? 3 : 4);
+        const swingSize = tf.id === '1w' ? 3 : 4;
+        const analysis = analyzeCandleStructure(candles, swingSize);
         tfResults[tf.id] = analysis;
 
         weightedScoreSum += analysis.score * tf.weight;
@@ -304,8 +314,7 @@ export async function scanAltsMarketStructure() {
 
       // If spotPrice is still missing from tickers, extract latest real candle close
       if (!spotPrice || spotPrice <= 0) {
-        const fallbackClose = tfResults['15m']?.lastClose ||
-                              tfResults['1h']?.lastClose ||
+        const fallbackClose = tfResults['1h']?.lastClose ||
                               tfResults['4h']?.lastClose ||
                               tfResults['1d']?.lastClose ||
                               tfResults['1w']?.lastClose;
@@ -314,9 +323,26 @@ export async function scanAltsMarketStructure() {
 
       const compositeScore = totalWeight > 0 ? Math.round(weightedScoreSum / totalWeight) : 50;
 
+      // HTF-Dominant Rating: 4H (30%), 1D (35%), 1W (20%) dictate the trend
+      const htf4h = tfResults['4h']?.trend;
+      const htf1d = tfResults['1d']?.trend;
+      const htf1w = tfResults['1w']?.trend;
+
       let overallTrend = 'neutral';
-      if (compositeScore >= 60) overallTrend = 'bullish';
-      else if (compositeScore <= 40) overallTrend = 'bearish';
+      if (compositeScore >= 58) {
+        overallTrend = 'bullish';
+      } else if (compositeScore <= 42) {
+        overallTrend = 'bearish';
+      }
+
+      // Strict HTF Dominance: Macro 1D and 1W anchor the rating
+      if (htf1d === 'bearish' && htf1w === 'bearish') {
+        if (overallTrend === 'bullish') overallTrend = 'neutral';
+        if (htf4h === 'bearish') overallTrend = 'bearish';
+      } else if (htf1d === 'bullish' && htf1w === 'bullish') {
+        if (overallTrend === 'bearish') overallTrend = 'neutral';
+        if (htf4h === 'bullish') overallTrend = 'bullish';
+      }
 
       const shortSymbol = coin.symbol.replace('1000', '').replace('USDT', '');
       const sectorTag = getSectorForSymbol(shortSymbol);

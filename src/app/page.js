@@ -618,7 +618,7 @@ export default function Home() {
                 <IconScale size={18} color={activeTab === 'structure' ? '#38bdf8' : '#888888'} />
                 <div className="mobile-nav-item-text">
                   <span className="mobile-nav-title">Market Structure Matrix</span>
-                  <span className="mobile-nav-desc">15M, 1H, 4H, 1D, 1W • 2-Candle BOS/MSS</span>
+                  <span className="mobile-nav-desc">1H, 4H, 1D, 1W • 2-Candle HTF Bias</span>
                 </div>
               </button>
             </div>
@@ -1294,7 +1294,7 @@ export default function Home() {
             <RsiScannerWidget />
           )}
 
-          {/* ── 6. MARKET STRUCTURE MATRIX (15M, 1H, 4H, 1D, 1W) ── */}
+          {/* ── 6. MARKET STRUCTURE MATRIX (1H, 4H, 1D, 1W HTF) ── */}
           {activeTab === 'structure' && (
             <MarketStructureTable />
           )}

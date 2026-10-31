@@ -128,7 +128,7 @@ export default function MarketStructureTable() {
         const tfList = Object.values(c.timeframes || {});
         const bullCount = tfList.filter((t) => t.trend === 'bullish').length;
         const bearCount = tfList.filter((t) => t.trend === 'bearish').length;
-        return bullCount >= 4 || bearCount >= 4; // 4 or 5 timeframes aligned
+        return bullCount >= 3 || bearCount >= 3; // 3 or 4 HTF timeframes aligned
       }
       return true;
     }).sort((a, b) => {
@@ -203,7 +203,7 @@ export default function MarketStructureTable() {
             </span>
           </div>
           <div style={{ fontSize: '0.72rem', color: '#777777', marginTop: 4 }}>
-            Tracks confirmed swing structural hierarchy (HH, HL, LH, LL) and break of structure across 15M, 1H, 4H, 1D, 1W.
+            Tracks confirmed swing structural hierarchy (HH, HL, LH, LL) and break of structure across HTF (1H, 4H, 1D, 1W).
           </div>
         </div>
 
@@ -267,7 +267,7 @@ export default function MarketStructureTable() {
             { id: 'all', label: `All Coins (${coins.length})` },
             { id: 'bullish', label: `Bullish Structure (${data?.bullishCount || 0})` },
             { id: 'bearish', label: `Bearish Structure (${data?.bearishCount || 0})` },
-            { id: 'confluence', label: '⚡ HTF Alignment (4+ Aligned)' },
+            { id: 'confluence', label: '⚡ HTF Alignment (3+ Aligned)' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -331,7 +331,6 @@ export default function MarketStructureTable() {
             }}>
               <th style={{ padding: '12px 14px' }}>Coin</th>
               <th style={{ padding: '12px 14px' }}>Live Price</th>
-              <th style={{ padding: '12px 14px', textAlign: 'center' }}>15M</th>
               <th style={{ padding: '12px 14px', textAlign: 'center' }}>1H</th>
               <th style={{ padding: '12px 14px', textAlign: 'center' }}>4H</th>
               <th style={{ padding: '12px 14px', textAlign: 'center' }}>1D</th>
@@ -346,21 +345,21 @@ export default function MarketStructureTable() {
                   color: '#38bdf8'
                 }}
               >
-                Score / 100 {sortBy === 'score_desc' ? '↓' : '↑'}
+                HTF Score / 100 {sortBy === 'score_desc' ? '↓' : '↑'}
               </th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
                   <IconRadar size={24} color="#38bdf8" className="spin-icon" style={{ margin: '0 auto 8px' }} />
-                  <div>Scanning 55 Altcoin structures across 15M, 1H, 4H, 1D, 1W...</div>
+                  <div>Scanning 55 Altcoin structures across HTF (1H, 4H, 1D, 1W)...</div>
                 </td>
               </tr>
             ) : filteredCoins.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: '#666' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#666' }}>
                   No coins found matching &ldquo;{search}&rdquo;
                 </td>
               </tr>
@@ -420,32 +419,27 @@ export default function MarketStructureTable() {
                         {formatPrice(coin.price)}
                       </td>
 
-                      {/* 3. 15M Trend Badge */}
-                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                        <TrendBadge tfData={coin.timeframes?.['15m']} />
-                      </td>
-
-                      {/* 4. 1H Trend Badge */}
+                      {/* 3. 1H Trend Badge */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <TrendBadge tfData={coin.timeframes?.['1h']} />
                       </td>
 
-                      {/* 5. 4H Trend Badge */}
+                      {/* 4. 4H Trend Badge */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <TrendBadge tfData={coin.timeframes?.['4h']} />
                       </td>
 
-                      {/* 6. 1D Trend Badge */}
+                      {/* 5. 1D Trend Badge */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <TrendBadge tfData={coin.timeframes?.['1d']} />
                       </td>
 
-                      {/* 7. 1W Trend Badge */}
+                      {/* 6. 1W Trend Badge */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <TrendBadge tfData={coin.timeframes?.['1w']} />
                       </td>
 
-                      {/* 8. Score / 100 Column (Matches User Screenshot with bar) */}
+                      {/* 7. Score / 100 Column (Matches User Screenshot with bar) */}
                       <td style={{ padding: '12px 14px', textAlign: 'right', minWidth: 160 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 4 }}>
                           <span style={{ fontSize: '0.84rem', fontWeight: 900, color: '#ffffff' }}>
@@ -478,7 +472,7 @@ export default function MarketStructureTable() {
                     {/* Detailed Drawer on Row Click */}
                     {isExpanded && (
                       <tr style={{ background: '#080808' }}>
-                        <td colSpan={8} style={{ padding: '14px 20px', borderBottom: '1px solid #1a1a1a' }}>
+                        <td colSpan={7} style={{ padding: '14px 20px', borderBottom: '1px solid #1a1a1a' }}>
                           <div style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -488,7 +482,7 @@ export default function MarketStructureTable() {
                             paddingBottom: 8,
                           }}>
                             <span style={{ fontSize: '0.70rem', color: '#38bdf8', fontWeight: 700 }}>
-                              {coin.displaySymbol} &middot; Detailed 2-Candle Market Structure Breakdown:
+                              {coin.displaySymbol} &middot; Detailed 2-Candle HTF Structure Breakdown:
                             </span>
                             <a
                               href={`https://www.tradingview.com/chart/?symbol=BYBIT:${coin.fullSymbol}.P`}
@@ -505,7 +499,7 @@ export default function MarketStructureTable() {
                             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
                             gap: 10,
                           }}>
-                            {['15m', '1h', '4h', '1d', '1w'].map((tfKey) => {
+                            {['1h', '4h', '1d', '1w'].map((tfKey) => {
                               const t = coin.timeframes?.[tfKey];
                               if (!t) return null;
                               return (
