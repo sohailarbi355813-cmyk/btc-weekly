@@ -10,6 +10,7 @@ import MacroWhalesEtf from '@/components/MacroWhalesEtf';
 import WeeklyForecast from '@/components/WeeklyForecast';
 import SessionProfiler from '@/components/SessionProfiler';
 import BootIntroSequence from '@/components/BootIntroSequence';
+import RsiScannerWidget from '@/components/RsiScannerWidget';
 import {
   IconBitcoin,
   IconTrendUp,
@@ -591,6 +592,20 @@ export default function Home() {
                   <span className="mobile-nav-desc">Institutional On-Chain Flows</span>
                 </div>
               </button>
+
+              <button
+                className={`mobile-nav-item ${activeTab === 'rsi' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('rsi');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <IconZap size={18} color={activeTab === 'rsi' ? '#38bdf8' : '#888888'} />
+                <div className="mobile-nav-item-text">
+                  <span className="mobile-nav-title">RSI Alerts (Discord)</span>
+                  <span className="mobile-nav-desc">55 Alts • 30m, 45m, 1h, 2h, 3h Overbought/Oversold</span>
+                </div>
+              </button>
             </div>
           </div>
         </div>
@@ -923,6 +938,18 @@ export default function Home() {
                           </span>
                         </div>
                       )}
+                      <div
+                        className="signal-pill"
+                        onClick={() => setActiveTab('rsi')}
+                        style={{ cursor: 'pointer', border: '1px solid rgba(56, 189, 248, 0.35)' }}
+                        title="Click to view live 55 Alts RSI Discord Scanner telemetry"
+                      >
+                        <span className="pill-dot" style={{ background: '#38bdf8' }} />
+                        <span className="pill-label">Discord Alerts</span>
+                        <span className="pill-value" style={{ color: '#38bdf8' }}>
+                          55 Alts &middot; 5m Loop
+                        </span>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -1211,6 +1238,10 @@ export default function Home() {
               <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'macro' ? '#38bdf8' : undefined }}>Whales • MVRV • ETFs</span>
             </button>
+            <button id="tab-rsi" className={`tab-btn ${activeTab === 'rsi' ? 'active' : ''}`} onClick={() => setActiveTab('rsi')}>
+              <IconZap size={15} color={activeTab === 'rsi' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'rsi' ? '#38bdf8' : undefined }}>RSI Alerts (Discord)</span>
+            </button>
           </div>
 
           {/* ── 1. WOLF KEY LEVELS VIEW ── */}
@@ -1237,6 +1268,11 @@ export default function Home() {
           {/* ── 4. MACRO WHALES & ETF VIEW ── */}
           {activeTab === 'macro' && (
             <MacroWhalesEtf />
+          )}
+
+          {/* ── 5. DISCORD RSI SCANNER VIEW ── */}
+          {activeTab === 'rsi' && (
+            <RsiScannerWidget />
           )}
 
         </div>
@@ -1271,6 +1307,13 @@ export default function Home() {
         >
           <IconBarChart size={18} />
           <span>Whales</span>
+        </button>
+        <button
+          className={`mobile-bottom-btn ${activeTab === 'rsi' ? 'active' : ''}`}
+          onClick={() => setActiveTab('rsi')}
+        >
+          <IconZap size={18} />
+          <span>RSI</span>
         </button>
       </div>
 
