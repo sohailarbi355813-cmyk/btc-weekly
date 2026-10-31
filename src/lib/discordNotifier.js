@@ -60,19 +60,36 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
         });
       }
 
+      if (item.sigmaMetrics) {
+        const isExtreme = item.sigmaMetrics.isExtremeGaussian;
+        const zTxt = item.sigmaMetrics.zScoreText;
+        const gPct = item.sigmaMetrics.gaussianPct;
+
+        fields.push({
+          name: isExtreme ? '📐 Statistical Volatility (Z-Score) ⚡' : '📐 Statistical Volatility (Z-Score)',
+          value: `Extension: **${zTxt}** (${gPct}% Gaussian Boundary)\n` +
+                 `Reversal Edge: **${isExtreme ? '🔥 HIGH PROBABILITY REVERSAL ZONE (>95%)' : '⚠️ Momentum Trend Extension'}**\n` +
+                 `20-Period Mean: \`${formatPrice(item.sigmaMetrics.mean)}\` (${item.sigmaMetrics.pctFromMean >= 0 ? '+' : ''}${item.sigmaMetrics.pctFromMean}% distance)`,
+          inline: false,
+        });
+      }
+
       fields.push({
         name: '🔗 Chart Quick Link',
         value: `[Open ${symbolTag} on TradingView](${tvUrl})`,
         inline: false,
       });
 
+      const sigmaTag = item.sigmaMetrics ? ` [${item.sigmaMetrics.zScoreText}]` : '';
+      const extremeTag = item.sigmaMetrics?.isExtremeGaussian ? ' ⚡' : '';
+
       return {
         title: isOB
-          ? `🔴 ${symbolTag} (${item.name}) • RSI OVERBOUGHT`
-          : `🟢 ${symbolTag} (${item.name}) • RSI OVERSOLD`,
+          ? `🔴 ${symbolTag} (${item.name}) • RSI OVERBOUGHT${sigmaTag}${extremeTag}`
+          : `🟢 ${symbolTag} (${item.name}) • RSI OVERSOLD${sigmaTag}${extremeTag}`,
         description: isOB
-          ? `**${symbolTag}** is trading in **RSI Overbought territory** on the **${item.timeframe.toUpperCase()}** timeframe.\nStatistical exhaustion / blow-off zone.`
-          : `**${symbolTag}** is trading in **RSI Oversold territory** on the **${item.timeframe.toUpperCase()}** timeframe.\nStatistical discount / capitulation bounce zone.`,
+          ? `**${symbolTag}** is trading in **RSI Overbought territory** at **${item.sigmaMetrics?.zScoreText || 'N/A'}** above 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`
+          : `**${symbolTag}** is trading in **RSI Oversold territory** at **${item.sigmaMetrics?.zScoreText || 'N/A'}** below 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion bounce probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`,
         color,
         fields,
         footer: {

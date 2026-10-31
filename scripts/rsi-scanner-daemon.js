@@ -56,7 +56,8 @@ async function runScanCycle() {
     if (alertable.length > 0) {
       console.log(`🚨 Dispatching ${alertable.length} fresh alert(s) to Discord Webhook...`);
       for (const item of alertable) {
-        console.log(`   -> [${item.territory}] ${item.displaySymbol} (${item.name}) on ${item.timeframe.toUpperCase()}: RSI ${item.rsi} (Spot: $${item.price})`);
+        const sigmaTxt = item.sigmaMetrics ? ` | σ: ${item.sigmaMetrics.zScoreText} (${item.sigmaMetrics.gaussianPct}% Gauss)` : '';
+        console.log(`   -> [${item.territory}] ${item.displaySymbol} (${item.name}) on ${item.timeframe.toUpperCase()}: RSI ${item.rsi}${sigmaTxt} (Spot: $${item.price})`);
       }
 
       const alertRes = await sendDiscordRsiAlerts(alertable);
@@ -101,3 +102,4 @@ runScanCycle();
 
 // Schedule recurring 5-minute loop
 setInterval(runScanCycle, SCAN_INTERVAL_MS);
+

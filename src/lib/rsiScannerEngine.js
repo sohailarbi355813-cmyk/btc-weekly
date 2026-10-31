@@ -52,6 +52,77 @@ export function calculateRSI(closes, period = 14) {
 }
 
 /**
+ * Calculate Rolling Standard Deviation (Sigma), Z-Score, and Gaussian Boundary %
+ */
+export function calculateZScore(closes, period = 20) {
+  if (!closes || closes.length < period) {
+    return {
+      mean: closes && closes.length ? closes[closes.length - 1] : 0,
+      stdDev: 0,
+      zScore: 0,
+      zScoreText: '+0.00σ',
+      absZ: 0,
+      gaussianPct: 0,
+      pctFromMean: 0,
+      reversalProb: 'MODERATE',
+      reversalLabel: 'Normal Distribution (<1.8σ)',
+      isExtremeGaussian: false,
+    };
+  }
+
+  const slice = closes.slice(-period);
+  const mean = slice.reduce((a, b) => a + b, 0) / period;
+  const variance = slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period;
+  const stdDev = Math.sqrt(variance);
+
+  const curPrice = closes[closes.length - 1];
+  const zScore = stdDev > 0 ? (curPrice - mean) / stdDev : 0;
+  const absZ = Math.abs(zScore);
+
+  // Accurate Gaussian Cumulative Probability using Horner's form (Abramowitz & Stegun)
+  const p = 0.3275911;
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const t = 1.0 / (1.0 + p * (absZ / Math.SQRT2));
+  const erfVal = 1.0 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t) * Math.exp(-Math.pow(absZ / Math.SQRT2, 2));
+  const gaussianPct = Math.min(Math.max(Math.round(erfVal * 1000) / 10, 0), 99.9);
+  const pctFromMean = mean > 0 ? ((curPrice - mean) / mean) * 100 : 0;
+
+  let reversalProb = 'MODERATE';
+  let reversalLabel = 'Within Normal Range (<1.8σ)';
+  let isExtremeGaussian = false;
+
+  if (absZ >= 2.5) {
+    reversalProb = 'MAXIMUM';
+    reversalLabel = `Climax Exhaustion (${absZ.toFixed(2)}σ • >98.8% Gaussian Boundary)`;
+    isExtremeGaussian = true;
+  } else if (absZ >= 2.0) {
+    reversalProb = 'HIGH';
+    reversalLabel = `Statistical Boundary (${absZ.toFixed(2)}σ • >95.4% Gaussian Boundary)`;
+    isExtremeGaussian = true;
+  } else if (absZ >= 1.6) {
+    reversalProb = 'DEVELOPING';
+    reversalLabel = `Extension Zone (${absZ.toFixed(2)}σ • >89% Gaussian Boundary)`;
+  }
+
+  return {
+    mean: Number(mean.toFixed(6)),
+    stdDev: Number(stdDev.toFixed(6)),
+    zScore: Number(zScore.toFixed(2)),
+    zScoreText: `${zScore >= 0 ? '+' : ''}${zScore.toFixed(2)}σ`,
+    absZ: Number(absZ.toFixed(2)),
+    gaussianPct,
+    pctFromMean: Number(pctFromMean.toFixed(2)),
+    reversalProb,
+    reversalLabel,
+    isExtremeGaussian, // >= 2.0σ
+  };
+}
+
+/**
  * Aggregates 15m candles into 45m candles (each 3 consecutive bars)
  */
 function aggregate45mCandles(candles15m) {
@@ -227,6 +298,11 @@ export async function scanAllAltsRSI() {
         const roundedRsi = Number(curRsi.toFixed(1));
         const lastCandle = candles[candles.length - 1];
         const divergence = checkRsiDivergence(candles, rsiSeries);
+        const sigmaMetrics = calculateZScore(closes, 20);
+
+        const isOverbought = roundedRsi >= RSI_OVERBOUGHT_THRESHOLD;
+        const isOversold = roundedRsi <= RSI_OVERSOLD_THRESHOLD;
+        const isHighProbabilityReversal = (isOverbought && sigmaMetrics.zScore >= 1.8) || (isOversold && sigmaMetrics.zScore <= -1.8);
 
         const resultItem = {
           symbol: coin.symbol,
@@ -238,8 +314,10 @@ export async function scanAllAltsRSI() {
           rsi: roundedRsi,
           timestamp: lastCandle.time,
           divergence,
-          isOverbought: roundedRsi >= RSI_OVERBOUGHT_THRESHOLD,
-          isOversold: roundedRsi <= RSI_OVERSOLD_THRESHOLD,
+          sigmaMetrics,
+          isHighProbabilityReversal,
+          isOverbought,
+          isOversold,
         };
 
         if (resultItem.isOverbought) {

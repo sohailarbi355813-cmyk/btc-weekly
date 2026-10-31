@@ -17,6 +17,7 @@ export default function RsiScannerWidget() {
   const [scanningNow, setScanningNow] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [message, setMessage] = useState(null);
+  const [filterExtremeOnly, setFilterExtremeOnly] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -338,29 +339,75 @@ export default function RsiScannerWidget() {
           padding: '10px 12px',
         }}>
           <div style={{
-            fontSize: '0.68rem',
-            fontFamily: 'var(--font-mono)',
-            color: '#888',
-            marginBottom: 8,
-            textTransform: 'uppercase'
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 10,
+            flexWrap: 'wrap',
+            gap: 8,
           }}>
-            Coins Currently in Territory ({totalTerritoryCount} active signals):
+            <div style={{
+              fontSize: '0.68rem',
+              fontFamily: 'var(--font-mono)',
+              color: '#888',
+              textTransform: 'uppercase'
+            }}>
+              Coins Currently in Territory ({totalTerritoryCount} active signals):
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                onClick={() => setFilterExtremeOnly(false)}
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  fontSize: '0.64rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  background: !filterExtremeOnly ? '#222' : 'transparent',
+                  color: !filterExtremeOnly ? '#fff' : '#666',
+                  border: '1px solid #333',
+                  cursor: 'pointer',
+                }}
+              >
+                All Signals ({totalTerritoryCount})
+              </button>
+              <button
+                onClick={() => setFilterExtremeOnly(true)}
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  fontSize: '0.64rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  background: filterExtremeOnly ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+                  color: filterExtremeOnly ? '#38bdf8' : '#666',
+                  border: filterExtremeOnly ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid #222',
+                  cursor: 'pointer',
+                }}
+              >
+                ⚡ &ge;2.0&sigma; Gaussian Boundary Only
+              </button>
+            </div>
           </div>
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
             gap: 8,
           }}>
-            {[...overboughtCoins, ...oversoldCoins].map((item, idx) => {
+            {[...overboughtCoins, ...oversoldCoins]
+              .filter(item => !filterExtremeOnly || (item.sigmaMetrics && item.sigmaMetrics.isExtremeGaussian))
+              .map((item, idx) => {
               const isOB = item.territory === 'OVERBOUGHT';
               const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${item.symbol}.P`;
+              const isExtreme = item.sigmaMetrics?.isExtremeGaussian;
               return (
                 <div
                   key={`${item.symbol}-${item.timeframe}-${idx}`}
                   style={{
                     background: '#0d0d0d',
-                    border: `1px solid ${isOB ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`,
+                    border: `1px solid ${isExtreme ? '#38bdf8' : isOB ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`,
                     borderRadius: 5,
                     padding: '8px 10px',
                     display: 'flex',
@@ -369,7 +416,7 @@ export default function RsiScannerWidget() {
                   }}
                 >
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{
                         fontSize: '0.78rem',
                         fontWeight: 800,
@@ -388,9 +435,23 @@ export default function RsiScannerWidget() {
                       }}>
                         {item.timeframe.toUpperCase()}
                       </span>
+                      {item.sigmaMetrics && (
+                        <span style={{
+                          fontSize: '0.60rem',
+                          padding: '1px 5px',
+                          borderRadius: 3,
+                          fontWeight: 800,
+                          background: isExtreme ? 'rgba(56, 189, 248, 0.25)' : '#171717',
+                          color: isExtreme ? '#38bdf8' : '#888',
+                          border: isExtreme ? '1px solid rgba(56, 189, 248, 0.5)' : '1px solid #222',
+                          fontFamily: 'var(--font-mono)'
+                        }}>
+                          {item.sigmaMetrics.zScoreText} ({item.sigmaMetrics.gaussianPct}% Gauss)
+                        </span>
+                      )}
                     </div>
-                    <div style={{ fontSize: '0.64rem', color: '#777', marginTop: 2 }}>
-                      Spot: ${Number(item.price).toFixed(item.price < 1 ? 4 : 2)} {item.divergence ? `• ${item.divergence.label}` : ''}
+                    <div style={{ fontSize: '0.64rem', color: '#777', marginTop: 3 }}>
+                      Spot: ${Number(item.price).toFixed(item.price < 1 ? 4 : 2)} &middot; Mean: ${Number(item.sigmaMetrics?.mean || 0).toFixed(item.price < 1 ? 4 : 2)} {item.divergence ? `• ${item.divergence.label}` : ''}
                     </div>
                   </div>
 
@@ -439,3 +500,4 @@ export default function RsiScannerWidget() {
     </div>
   );
 }
+
