@@ -23,6 +23,7 @@ export function analyzeCandleStructure(candles, swingSize = 3) {
       label: 'Neutral',
       score: 50,
       lastEvent: 'Insufficient Data',
+      lastClose: candles && candles.length > 0 ? candles[candles.length - 1].close : null,
       swings: { hh: 0, hl: 0, lh: 0, ll: 0 },
       prevHigh: null,
       prevLow: null,
@@ -155,6 +156,7 @@ export function analyzeCandleStructure(candles, swingSize = 3) {
     trend: currentTrend,
     label: currentTrend === 'bullish' ? 'Bullish' : currentTrend === 'bearish' ? 'Bearish' : 'Neutral',
     score: currentTrend === 'bullish' ? 100 : currentTrend === 'bearish' ? 0 : 50,
+    lastClose: candles && candles.length > 0 ? candles[candles.length - 1].close : null,
     lastEvent,
     lastStructureHigh,
     lastStructureLow,
@@ -234,7 +236,7 @@ export async function scanAltsMarketStructure() {
     return cachedStructureData;
   }
 
-  // 1. Fetch live 24h ticker prices from Bybit
+  // 1. Fetch live 24h ticker prices from Bybit Linear
   const livePriceMap = new Map();
   try {
     const tRes = await fetch('https://api.bybit.com/v5/market/tickers?category=linear', {
@@ -254,14 +256,36 @@ export async function scanAltsMarketStructure() {
     }
   } catch (e) {}
 
+  // 2. Fallback / Supplement from Binance Vision 24hr Tickers
+  try {
+    const bRes = await fetch('https://data-api.binance.vision/api/v3/ticker/24hr', {
+      headers: { 'User-Agent': 'WolfMarketStructure/1.0' },
+      signal: AbortSignal.timeout(3500),
+    });
+    if (bRes.ok) {
+      const bList = await bRes.json();
+      if (Array.isArray(bList)) {
+        bList.forEach((t) => {
+          if (!livePriceMap.has(t.symbol)) {
+            livePriceMap.set(t.symbol, {
+              price: parseFloat(t.lastPrice),
+              change24h: parseFloat(t.priceChangePercent || 0),
+            });
+          }
+        });
+      }
+    }
+  } catch (e) {}
+
   const results = [];
   const CHUNK_SIZE = 10;
 
   for (let i = 0; i < ALTS_WHITELIST.length; i += CHUNK_SIZE) {
     const chunk = ALTS_WHITELIST.slice(i, i + CHUNK_SIZE);
     const promises = chunk.map(async (coin) => {
-      const ticker = livePriceMap.get(coin.symbol);
-      const spotPrice = ticker?.price || coin.yo;
+      const ticker = livePriceMap.get(coin.symbol) ||
+                     livePriceMap.get(coin.symbol.replace('1000', ''));
+      let spotPrice = ticker?.price;
       const change24h = ticker?.change24h || 0;
 
       // Analyze each timeframe
@@ -276,6 +300,16 @@ export async function scanAltsMarketStructure() {
 
         weightedScoreSum += analysis.score * tf.weight;
         totalWeight += tf.weight;
+      }
+
+      // If spotPrice is still missing from tickers, extract latest real candle close
+      if (!spotPrice || spotPrice <= 0) {
+        const fallbackClose = tfResults['15m']?.lastClose ||
+                              tfResults['1h']?.lastClose ||
+                              tfResults['4h']?.lastClose ||
+                              tfResults['1d']?.lastClose ||
+                              tfResults['1w']?.lastClose;
+        spotPrice = fallbackClose || coin.yo;
       }
 
       const compositeScore = totalWeight > 0 ? Math.round(weightedScoreSum / totalWeight) : 50;
@@ -359,3 +393,4 @@ function getSectorForSymbol(sym) {
   };
   return map[sym] || 'Altcoin · Perpetual';
 }
+

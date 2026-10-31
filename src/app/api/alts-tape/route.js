@@ -44,10 +44,12 @@ async function get4H200SmaMap() {
               vol: parseFloat(k[5]),
             }));
             const divResult = detectDivergences(candles);
+            const lastClose = candles[candles.length - 1]?.close || null;
 
             newMap.set(sym, {
               sma: Number(sma.toFixed(6)),
               count,
+              lastClose,
               currentRsi: divResult.currentRsi,
               divergences: divResult.divergences,
               primaryDiv: divResult.divergences[0] || null,
@@ -82,10 +84,12 @@ async function get4H200SmaMap() {
               vol: parseFloat(k[5]),
             }));
             const divResult = detectDivergences(candles);
+            const lastClose = candles[candles.length - 1]?.close || null;
 
             newMap.set(sym, {
               sma: Number(sma.toFixed(6)),
               count,
+              lastClose,
               currentRsi: divResult.currentRsi,
               divergences: divResult.divergences,
               primaryDiv: divResult.divergences[0] || null,
@@ -191,8 +195,9 @@ export async function GET() {
     const allCoinsList = [];
 
     ALTS_WHITELIST.forEach((item) => {
-      const ticker = bybitMap.get(item.symbol);
-      let spot = ticker ? parseFloat(ticker.lastPrice) : item.yo;
+      const ticker = bybitMap.get(item.symbol) || bybitMap.get(item.symbol.replace('1000', ''));
+      const smaData = sma200Map.get(item.symbol);
+      let spot = ticker ? parseFloat(ticker.lastPrice) : (smaData?.lastClose || item.yo);
 
       const p = pivotsData[item.symbol];
       if (!p) return;
@@ -209,7 +214,6 @@ export async function GET() {
       const change1h = prevPrice1h ? parseFloat((((spot - prevPrice1h) / prevPrice1h) * 100).toFixed(2)) : 0;
 
       // 4H 200 SMA & RSI Divergence Calculation
-      const smaData = sma200Map.get(item.symbol);
       const sma200_4h = smaData ? smaData.sma : null;
       let distSma200_4h = null;
       let distSma200Text = '--';
