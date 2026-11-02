@@ -17,7 +17,7 @@ export const RSI_OVERSOLD_THRESHOLD = 30.0;
 // Alert Cooldown Map: prevent spamming the same alert every 5 minutes
 // key: `${symbol}:${timeframe}:${territory}` => timestamp of last alert
 const alertCooldownMap = new Map();
-const COOLDOWN_DURATION_MS = 45 * 60 * 1000; // 45 minutes cooldown per coin-timeframe-territory
+const COOLDOWN_DURATION_MS = 15 * 60 * 1000; // 15 minutes cooldown per coin-timeframe-territory
 
 /**
  * Wilder's Smoothed RSI (Standard TradingView 14-period formula)
@@ -420,6 +420,7 @@ export async function scanAllAltsRSI() {
 
 /**
  * Filter alerts through cooldown de-duplication to prevent Discord spam
+ * Allows re-alerting if RSI escalates deeper into extreme or prints a new divergence
  */
 export function filterCooldownAlerts(items) {
   const now = Date.now();
@@ -427,10 +428,17 @@ export function filterCooldownAlerts(items) {
 
   for (const item of items) {
     const key = `${item.symbol}:${item.timeframe}:${item.territory}${item.isDivergence ? ':div' : ''}`;
-    const lastAlertTime = alertCooldownMap.get(key) || 0;
+    const record = alertCooldownMap.get(key);
 
-    if (now - lastAlertTime > COOLDOWN_DURATION_MS) {
-      alertCooldownMap.set(key, now);
+    if (!record || (now - record.timestamp > COOLDOWN_DURATION_MS)) {
+      alertCooldownMap.set(key, { timestamp: now, rsi: item.rsi });
+      alertable.push(item);
+    } else if (
+      // Escalation rule: if oversold drops >=2.5 pts deeper, or overbought rises >=2.5 pts higher
+      (item.territory === 'OVERSOLD' && item.rsi <= record.rsi - 2.5) ||
+      (item.territory === 'OVERBOUGHT' && item.rsi >= record.rsi + 2.5)
+    ) {
+      alertCooldownMap.set(key, { timestamp: now, rsi: item.rsi });
       alertable.push(item);
     }
   }
@@ -443,8 +451,9 @@ export function filterCooldownAlerts(items) {
  */
 export function purgeOldCooldowns() {
   const now = Date.now();
-  for (const [key, timestamp] of alertCooldownMap.entries()) {
-    if (now - timestamp > COOLDOWN_DURATION_MS * 2) {
+  for (const [key, record] of alertCooldownMap.entries()) {
+    const ts = typeof record === 'object' ? record.timestamp : record;
+    if (now - ts > COOLDOWN_DURATION_MS * 2) {
       alertCooldownMap.delete(key);
     }
   }

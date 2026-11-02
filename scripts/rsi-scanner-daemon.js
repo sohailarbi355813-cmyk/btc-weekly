@@ -83,16 +83,30 @@ async function runScanCycle() {
     // Filter through cooldown so we don't spam Discord every 5m for unchanged coins
     const alertable = filterCooldownAlerts(targetCoins);
 
-    if (alertable.length > 0) {
-      console.log(`🚨 Dispatching ${alertable.length} fresh alert(s) to Discord Webhook...`);
-      for (const item of alertable) {
+    // Sort alertable: Majors first, then Divergences, then most extreme RSI
+    alertable.sort((a, b) => {
+      if (a.isMajor && !b.isMajor) return -1;
+      if (!a.isMajor && b.isMajor) return 1;
+      if (a.divergence && !b.divergence) return -1;
+      if (!a.divergence && b.divergence) return 1;
+      if (a.territory === 'OVERSOLD' && b.territory === 'OVERSOLD') return a.rsi - b.rsi;
+      if (a.territory === 'OVERBOUGHT' && b.territory === 'OVERBOUGHT') return b.rsi - a.rsi;
+      return 0;
+    });
+
+    const MAX_ALERTS_PER_CYCLE = 16;
+    const dispatchBatch = alertable.slice(0, MAX_ALERTS_PER_CYCLE);
+
+    if (dispatchBatch.length > 0) {
+      console.log(`🚨 Dispatching ${dispatchBatch.length} fresh alert(s) to Discord Webhook (Total alertable: ${alertable.length})...`);
+      for (const item of dispatchBatch) {
         const sigmaTxt = item.sigmaMetrics ? ` | σ: ${item.sigmaMetrics.zScoreText} (${item.sigmaMetrics.gaussianPct}% Gauss)` : '';
         const divTxt = item.divergence ? ` | ⚠️ ${item.divergence.label}` : '';
         const majorTxt = item.isMajor ? ' 👑 [MAJOR]' : '';
         console.log(`   -> [${item.territory}]${majorTxt} ${item.displaySymbol} (${item.name}) on ${item.timeframe.toUpperCase()}: RSI ${item.rsi}${divTxt}${sigmaTxt} (Spot: $${item.price})`);
       }
 
-      const alertRes = await sendDiscordRsiAlerts(alertable);
+      const alertRes = await sendDiscordRsiAlerts(dispatchBatch);
       if (alertRes.success) {
         totalAlertsSentLifetime += alertRes.count;
         console.log(`📨 Successfully delivered ${alertRes.count} alert(s) to Discord! Total lifetime: ${totalAlertsSentLifetime}`);
