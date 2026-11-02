@@ -18,6 +18,7 @@ export default function RsiScannerWidget() {
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [message, setMessage] = useState(null);
   const [filterExtremeOnly, setFilterExtremeOnly] = useState(false);
+  const [territoryFilter, setTerritoryFilter] = useState('both'); // 'both' (default) | 'overbought' | 'oversold'
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -65,13 +66,14 @@ export default function RsiScannerWidget() {
       const res = await fetch('/api/rsi-scanner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'scan_now' }),
+        body: JSON.stringify({ action: 'scan_now', territory: territoryFilter }),
       });
       const json = await res.json();
       if (json.success) {
+        const sideLabel = territoryFilter === 'overbought' ? 'Overbought' : territoryFilter === 'oversold' ? 'Oversold' : 'Both Sides';
         setMessage({
           type: 'success',
-          text: `✅ Scan complete! Found ${json.overboughtCount} Overbought, ${json.oversoldCount} Oversold. Dispatched ${json.alertsDispatched} fresh alert(s) to Discord.`,
+          text: `✅ ${sideLabel} scan complete! Found ${json.overboughtCount} Overbought, ${json.oversoldCount} Oversold. Dispatched ${json.alertsDispatched} alert(s) to Discord.`,
         });
         fetchStatus();
       } else {
@@ -262,7 +264,7 @@ export default function RsiScannerWidget() {
         </span>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards with Click-to-Filter */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -270,151 +272,211 @@ export default function RsiScannerWidget() {
         marginBottom: 14,
       }}>
         {/* Overbought Card */}
-        <div style={{
-          background: '#0d0707',
-          border: '1px solid rgba(239, 68, 68, 0.25)',
-          borderRadius: 6,
-          padding: '10px 14px',
-        }}>
+        <div
+          onClick={() => setTerritoryFilter(territoryFilter === 'overbought' ? 'both' : 'overbought')}
+          style={{
+            background: territoryFilter === 'overbought' ? 'rgba(239, 68, 68, 0.18)' : 'var(--bg-card)',
+            border: `1px solid ${territoryFilter === 'overbought' ? '#ef4444' : 'rgba(239, 68, 68, 0.3)'}`,
+            borderRadius: 8,
+            padding: '12px 14px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            boxShadow: territoryFilter === 'overbought' ? '0 0 14px rgba(239, 68, 68, 0.25)' : 'none',
+          }}
+          title="Click to filter exclusively for Overbought coins"
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.68rem', color: '#f87171', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
-              Overbought (&ge;70)
+            <span style={{ fontSize: '0.70rem', color: '#f87171', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 700 }}>
+              Overbought (&ge;70) {territoryFilter === 'overbought' ? '✓' : ''}
             </span>
-            <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#f87171', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f87171', fontFamily: 'var(--font-mono)' }}>
               {status.overboughtCount || 0}
             </span>
           </div>
-          <div style={{ fontSize: '0.62rem', color: '#777', marginTop: 4 }}>
-            Sell-side exhaustion / resistance risk
+          <div style={{ fontSize: '0.64rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+            Resistance risk &middot; Click to view only OB
           </div>
         </div>
 
         {/* Oversold Card */}
-        <div style={{
-          background: '#060d09',
-          border: '1px solid rgba(34, 197, 94, 0.25)',
-          borderRadius: 6,
-          padding: '10px 14px',
-        }}>
+        <div
+          onClick={() => setTerritoryFilter(territoryFilter === 'oversold' ? 'both' : 'oversold')}
+          style={{
+            background: territoryFilter === 'oversold' ? 'rgba(34, 197, 94, 0.18)' : 'var(--bg-card)',
+            border: `1px solid ${territoryFilter === 'oversold' ? '#22c55e' : 'rgba(34, 197, 94, 0.3)'}`,
+            borderRadius: 8,
+            padding: '12px 14px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            boxShadow: territoryFilter === 'oversold' ? '0 0 14px rgba(34, 197, 94, 0.25)' : 'none',
+          }}
+          title="Click to filter exclusively for Oversold coins"
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.68rem', color: '#4ade80', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
-              Oversold (&le;30)
+            <span style={{ fontSize: '0.70rem', color: '#4ade80', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 700 }}>
+              Oversold (&le;30) {territoryFilter === 'oversold' ? '✓' : ''}
             </span>
-            <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#4ade80', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#4ade80', fontFamily: 'var(--font-mono)' }}>
               {status.oversoldCount || 0}
             </span>
           </div>
-          <div style={{ fontSize: '0.62rem', color: '#777', marginTop: 4 }}>
-            Capitulation discount / bounce edge
+          <div style={{ fontSize: '0.64rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+            Capitulation dip &middot; Click to view only OS
           </div>
         </div>
 
         {/* Total Monitored Card */}
         <div style={{
-          background: '#0a0a0a',
-          border: '1px solid #1f1f1f',
-          borderRadius: 6,
-          padding: '10px 14px',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          padding: '12px 14px',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.68rem', color: '#aaa', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '0.70rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 600 }}>
               Lifetime Alerts Sent
             </span>
-            <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
               {status.totalAlertsSentLifetime || 0}
             </span>
           </div>
-          <div style={{ fontSize: '0.62rem', color: '#777', marginTop: 4 }}>
+          <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
             Last scan: {status.lastScanTime ? new Date(status.lastScanTime).toLocaleTimeString() : 'Pending'}
           </div>
         </div>
       </div>
 
-      {/* Detected Coins Feed Table */}
-      {totalTerritoryCount > 0 ? (
-        <div style={{
-          background: '#090909',
-          border: '1px solid #171717',
-          borderRadius: 6,
-          padding: '10px 12px',
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 10,
-            flexWrap: 'wrap',
-            gap: 8,
-          }}>
-            <div style={{
+      {/* Primary Territory Segmented Filter Controls */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginBottom: 14,
+        padding: '10px 14px',
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.70rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+            TERRITORY SCAN:
+          </span>
+          <div className="rsi-territory-selector">
+            <button
+              className={`rsi-territory-pill ${territoryFilter === 'both' ? 'active' : ''}`}
+              onClick={() => setTerritoryFilter('both')}
+            >
+              🌐 Both Sides (Default)
+            </button>
+            <button
+              className={`rsi-territory-pill ob ${territoryFilter === 'overbought' ? 'active' : ''}`}
+              onClick={() => setTerritoryFilter('overbought')}
+            >
+              🔥 Overbought Only ({status.overboughtCount || 0})
+            </button>
+            <button
+              className={`rsi-territory-pill os ${territoryFilter === 'oversold' ? 'active' : ''}`}
+              onClick={() => setTerritoryFilter('oversold')}
+            >
+              ❄️ Oversold Only ({status.oversoldCount || 0})
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            onClick={() => setFilterExtremeOnly(!filterExtremeOnly)}
+            style={{
+              padding: '5px 10px',
+              borderRadius: 6,
               fontSize: '0.68rem',
               fontFamily: 'var(--font-mono)',
-              color: '#888',
-              textTransform: 'uppercase'
-            }}>
-              Coins Currently in Territory ({totalTerritoryCount} active signals):
-            </div>
+              fontWeight: 700,
+              background: filterExtremeOnly ? 'rgba(56, 189, 248, 0.18)' : 'var(--bg-card)',
+              color: filterExtremeOnly ? '#38bdf8' : 'var(--text-secondary)',
+              border: filterExtremeOnly ? '1px solid #38bdf8' : '1px solid var(--border)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            ⚡ &ge;2.0&sigma; Gaussian Boundary Only {filterExtremeOnly ? '✓' : ''}
+          </button>
+        </div>
+      </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button
-                onClick={() => setFilterExtremeOnly(false)}
-                style={{
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                  fontSize: '0.64rem',
-                  fontFamily: 'var(--font-mono)',
-                  fontWeight: 700,
-                  background: !filterExtremeOnly ? '#222' : 'transparent',
-                  color: !filterExtremeOnly ? '#fff' : '#666',
-                  border: '1px solid #333',
-                  cursor: 'pointer',
-                }}
-              >
-                All Signals ({totalTerritoryCount})
-              </button>
-              <button
-                onClick={() => setFilterExtremeOnly(true)}
-                style={{
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                  fontSize: '0.64rem',
-                  fontFamily: 'var(--font-mono)',
-                  fontWeight: 700,
-                  background: filterExtremeOnly ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-                  color: filterExtremeOnly ? '#38bdf8' : '#666',
-                  border: filterExtremeOnly ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid #222',
-                  cursor: 'pointer',
-                }}
-              >
-                ⚡ &ge;2.0&sigma; Gaussian Boundary Only
-              </button>
-            </div>
-          </div>
+      {/* Detected Coins Feed Table */}
+      {(() => {
+        const allCoins = [...overboughtCoins, ...oversoldCoins];
+        const territoryCoins = allCoins.filter(item => {
+          if (territoryFilter === 'overbought') return item.territory === 'OVERBOUGHT';
+          if (territoryFilter === 'oversold') return item.territory === 'OVERSOLD';
+          return true; // 'both'
+        });
+        const displayedCoins = territoryCoins.filter(item => !filterExtremeOnly || (item.sigmaMetrics && item.sigmaMetrics.isExtremeGaussian));
 
+        return (
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: 8,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '12px 14px',
           }}>
-            {[...overboughtCoins, ...oversoldCoins]
-              .filter(item => !filterExtremeOnly || (item.sigmaMetrics && item.sigmaMetrics.isExtremeGaussian))
-              .map((item, idx) => {
-              const isOB = item.territory === 'OVERBOUGHT';
-              const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${item.symbol}.P`;
-              const isExtreme = item.sigmaMetrics?.isExtremeGaussian;
-              return (
-                <div
-                  key={`${item.symbol}-${item.timeframe}-${idx}`}
-                  style={{
-                    background: '#0d0d0d',
-                    border: `1px solid ${isExtreme ? '#38bdf8' : isOB ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`,
-                    borderRadius: 5,
-                    padding: '8px 10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 12,
+              flexWrap: 'wrap',
+              gap: 8,
+            }}>
+              <div style={{
+                fontSize: '0.70rem',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--text-secondary)',
+                textTransform: 'uppercase',
+                fontWeight: 600,
+              }}>
+                Active Signals: <strong style={{ color: 'var(--text-primary)' }}>{displayedCoins.length}</strong>
+                {territoryFilter === 'overbought' ? ' (Filtered: Overbought Only)' : territoryFilter === 'oversold' ? ' (Filtered: Oversold Only)' : ' (Both Sides)'}
+              </div>
+            </div>
+
+            {displayedCoins.length === 0 ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '24px',
+                color: 'var(--text-muted)',
+                fontSize: '0.78rem',
+                fontFamily: 'var(--font-mono)',
+              }}>
+                No coins currently in {territoryFilter === 'overbought' ? 'Overbought (≥70)' : territoryFilter === 'oversold' ? 'Oversold (≤30)' : 'extreme'} territory across 30m, 45m, 1h, 2h, 3h.
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: 10,
+              }}>
+                {displayedCoins.map((item, idx) => {
+                  const isOB = item.territory === 'OVERBOUGHT';
+                  const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${item.symbol}.P`;
+                  const isExtreme = item.sigmaMetrics?.isExtremeGaussian;
+                  return (
+                    <div
+                      key={`${item.symbol}-${item.timeframe}-${idx}`}
+                      style={{
+                        background: 'var(--bg-elevated)',
+                        border: `1px solid ${isExtreme ? 'var(--accent)' : isOB ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
+                        borderRadius: 6,
+                        padding: '10px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{
@@ -482,21 +544,10 @@ export default function RsiScannerWidget() {
               );
             })}
           </div>
-        </div>
-      ) : (
-        <div style={{
-          textAlign: 'center',
-          padding: '14px',
-          background: '#090909',
-          borderRadius: 6,
-          border: '1px solid #141414',
-          color: '#666',
-          fontSize: '0.72rem',
-          fontFamily: 'var(--font-mono)',
-        }}>
-          🧘 All 55 altcoins are currently inside normal RSI range (30 &lt; RSI &lt; 70). No extreme exhaustion detected.
-        </div>
-      )}
+        )}
+      </div>
+    );
+  })()}
     </div>
   );
 }

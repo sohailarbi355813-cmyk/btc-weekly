@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 
 const STATUS_FILE = path.join(process.cwd(), '.rsi-scanner-status.json');
+const CONFIG_FILE = path.join(process.cwd(), '.rsi-scanner-config.json');
 
 export async function GET(request) {
   try {
@@ -73,9 +74,21 @@ export async function POST(request) {
     }
 
     if (action === 'scan_now') {
+      const territory = body.territory || 'both';
+      try {
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify({ territory }), 'utf-8');
+      } catch (e) {}
+
       const results = await scanAllAltsRSI();
-      const allTerritory = [...results.overboughtCoins, ...results.oversoldCoins];
-      const alertable = filterCooldownAlerts(allTerritory);
+      let targetCoins = [];
+      if (territory === 'overbought') {
+        targetCoins = results.overboughtCoins;
+      } else if (territory === 'oversold') {
+        targetCoins = results.oversoldCoins;
+      } else {
+        targetCoins = [...results.overboughtCoins, ...results.oversoldCoins];
+      }
+      const alertable = filterCooldownAlerts(targetCoins);
 
       let sentAlerts = 0;
       if (alertable.length > 0) {
@@ -85,6 +98,7 @@ export async function POST(request) {
 
       return NextResponse.json({
         success: true,
+        territory,
         overboughtCount: results.overboughtCount,
         oversoldCount: results.oversoldCount,
         alertsDispatched: sentAlerts,

@@ -111,6 +111,54 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [weeklyProbBias, setWeeklyProbBias] = useState('auto'); // 'auto' | 'bearish' | 'bullish'
   const [weeklyHighLowData, setWeeklyHighLowData] = useState(null);
+  const [theme, setTheme] = useState('dark');
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('wolf-theme') || 'dark';
+      setTheme(saved);
+      document.documentElement.setAttribute('data-theme', saved);
+      if (saved === 'light') {
+        document.documentElement.classList.add('theme-light');
+        document.documentElement.classList.remove('theme-dark');
+      } else {
+        document.documentElement.classList.add('theme-dark');
+        document.documentElement.classList.remove('theme-light');
+      }
+    } catch (e) {}
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    try {
+      localStorage.setItem('wolf-theme', next);
+      document.documentElement.setAttribute('data-theme', next);
+      if (next === 'light') {
+        document.documentElement.classList.add('theme-light');
+        document.documentElement.classList.remove('theme-dark');
+      } else {
+        document.documentElement.classList.add('theme-dark');
+        document.documentElement.classList.remove('theme-light');
+      }
+    } catch (e) {}
+  };
+
+  const navigateToSection = (tabId) => {
+    setActiveTab(tabId);
+    setMobileMenuOpen(false);
+    setTimeout(() => {
+      if (tabId === 'bias') {
+        const hero = document.getElementById('todays-bias');
+        if (hero) hero.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      const el = document.getElementById('active-tab-content');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+  };
 
   // ── High-Probability Bias Filters State ──
   const [biasFilters, setBiasFilters] = useState({
@@ -452,23 +500,93 @@ export default function Home() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
-
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
 
       {/* ── Header ── */}
       <header className="header">
         <div className="container">
           <div className="header-inner">
-            <div className="logo">
+            <div className="logo" onClick={() => navigateToSection('bias')} style={{ cursor: 'pointer' }}>
               <div className="logo-icon">
                 <IconBlackFlag size={20} />
               </div>
               <div className="logo-text">
                 <h1>Wolf Tape Reader</h1>
-                <span>Trading The Tape, With Precision &middot; Key Levels &amp; Statistical Models</span>
+                <span>Trading The Tape, With Precision &middot; Key Levels &amp; Models</span>
               </div>
             </div>
+
+            {/* Desktop Navigation Links (Direct Auto-Scroll to Specific Sections) */}
+            <nav className="header-nav">
+              <button
+                className={`header-nav-link ${activeTab === 'bias' ? 'active' : ''}`}
+                onClick={() => navigateToSection('bias')}
+                title="Scroll to Today's Bias"
+              >
+                <span>Today's Bias</span>
+              </button>
+              <button
+                className={`header-nav-link ${activeTab === 'levels' ? 'active' : ''}`}
+                onClick={() => navigateToSection('levels')}
+                title="Wolf Key Levels"
+              >
+                <IconWolf size={13} color="var(--wolf-yellow-bright)" />
+                <span>Levels</span>
+              </button>
+              <button
+                className={`header-nav-link ${activeTab === 'session' ? 'active' : ''}`}
+                onClick={() => navigateToSection('session')}
+                title="Session HOD/LOD Probabilities"
+              >
+                <IconClock size={13} color="var(--neutral)" />
+                <span>Sessions</span>
+              </button>
+              <button
+                className={`header-nav-link ${activeTab === 'pattern' ? 'active' : ''}`}
+                onClick={() => navigateToSection('pattern')}
+                title="Weekly Forecast & High/Low Matrix"
+              >
+                <IconCalendar size={13} color="var(--neutral)" />
+                <span>Weekly Forecast</span>
+              </button>
+              <button
+                className={`header-nav-link ${activeTab === 'rsi' ? 'active' : ''}`}
+                onClick={() => navigateToSection('rsi')}
+                title="Discord RSI Scanner"
+              >
+                <IconZap size={13} color="var(--neutral)" />
+                <span>RSI Alerts</span>
+              </button>
+              <button
+                className={`header-nav-link ${activeTab === 'structure' ? 'active' : ''}`}
+                onClick={() => navigateToSection('structure')}
+                title="Market Structure Matrix (HTF)"
+              >
+                <IconScale size={13} color="var(--neutral)" />
+                <span>Structure</span>
+              </button>
+              <button
+                className={`header-nav-link ${activeTab === 'macro' ? 'active' : ''}`}
+                onClick={() => navigateToSection('macro')}
+                title="Whales • MVRV • ETFs"
+              >
+                <IconBarChart size={13} color="var(--neutral)" />
+                <span>Whales</span>
+              </button>
+            </nav>
+
             <div className="header-right">
+              {/* Theme Toggle Button (Dark / Light Mode) */}
+              <button
+                className="theme-toggle-btn"
+                onClick={toggleTheme}
+                title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+                aria-label="Toggle dark/light theme"
+              >
+                <span style={{ fontSize: '0.85rem' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
+                <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+              </button>
+
               {/* BTC Price Header */}
               <div className="btc-price-header">{formatPrice(data.currentPrice)}</div>
 
@@ -504,22 +622,32 @@ export default function Home() {
             <div className="mobile-nav-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <IconBlackFlag size={18} color="var(--wolf-yellow-bright)" />
-                <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#fff' }}>Navigation</span>
+                <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Navigation</span>
               </div>
-              <button
-                className="mobile-nav-close"
-                onClick={() => setMobileMenuOpen(false)}
-                aria-label="Close menu"
-              >
-                <IconX size={20} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  className="theme-toggle-btn"
+                  onClick={toggleTheme}
+                  style={{ padding: '4px 10px', fontSize: '0.70rem' }}
+                >
+                  <span>{theme === 'dark' ? '☀️' : '🌙'}</span>
+                  <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+                </button>
+                <button
+                  className="mobile-nav-close"
+                  onClick={() => setMobileMenuOpen(false)}
+                  aria-label="Close menu"
+                >
+                  <IconX size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Quick Live Price Card */}
             <div className="mobile-nav-price-card">
               <div>
-                <div style={{ fontSize: '0.68rem', color: '#888888', textTransform: 'uppercase' }}>Bitcoin Last Price</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--wolf-yellow-bright)', fontFamily: 'var(--font-mono)' }}>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bitcoin Last Price</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
                   {formatPrice(data.currentPrice)}
                 </div>
               </div>
@@ -538,28 +666,32 @@ export default function Home() {
             {/* Nav Links */}
             <div className="mobile-nav-links">
               <button
-                className={`mobile-nav-item ${activeTab === 'levels' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('levels');
-                  setMobileMenuOpen(false);
-                }}
+                className={`mobile-nav-item ${activeTab === 'bias' ? 'active' : ''}`}
+                onClick={() => navigateToSection('bias')}
               >
-                <IconWolf size={18} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : '#888888'} />
+                <IconScale size={18} color="var(--accent)" />
+                <div className="mobile-nav-item-text">
+                  <span className="mobile-nav-title">Today's Macro Bias</span>
+                  <span className="mobile-nav-desc">Statistical Edge &amp; Confluences</span>
+                </div>
+              </button>
+
+              <button
+                className={`mobile-nav-item ${activeTab === 'levels' ? 'active' : ''}`}
+                onClick={() => navigateToSection('levels')}
+              >
+                <IconWolf size={18} color="var(--wolf-yellow-bright)" />
                 <div className="mobile-nav-item-text">
                   <span className="mobile-nav-title">Wolf Key Levels</span>
                   <span className="mobile-nav-desc">Auction Price Ladder, VAL/VAH &amp; Anchors</span>
                 </div>
               </button>
 
-
               <button
                 className={`mobile-nav-item ${activeTab === 'session' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('session');
-                  setMobileMenuOpen(false);
-                }}
+                onClick={() => navigateToSection('session')}
               >
-                <IconClock size={18} color={activeTab === 'session' ? '#38bdf8' : '#888888'} />
+                <IconClock size={18} color="var(--neutral)" />
                 <div className="mobile-nav-item-text">
                   <span className="mobile-nav-title">Session HOD/LOD</span>
                   <span className="mobile-nav-desc">Asia, London &amp; NY Probabilities</span>
@@ -568,57 +700,45 @@ export default function Home() {
 
               <button
                 className={`mobile-nav-item ${activeTab === 'pattern' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('pattern');
-                  setMobileMenuOpen(false);
-                }}
+                onClick={() => navigateToSection('pattern')}
               >
-                <IconCalendar size={18} color={activeTab === 'pattern' ? '#38bdf8' : '#888888'} />
+                <IconCalendar size={18} color="var(--neutral)" />
                 <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">Weekly HOW/LOW &amp; Forecast</span>
+                  <span className="mobile-nav-title">Weekly Forecast &amp; HOW/LOW</span>
                   <span className="mobile-nav-desc">High/Low Formation Probability &amp; Cycle Match</span>
                 </div>
               </button>
 
               <button
-                className={`mobile-nav-item ${activeTab === 'macro' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('macro');
-                  setMobileMenuOpen(false);
-                }}
-              >
-                <IconBarChart size={18} color={activeTab === 'macro' ? '#38bdf8' : '#888888'} />
-                <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">Whales • MVRV • ETFs</span>
-                  <span className="mobile-nav-desc">Institutional On-Chain Flows</span>
-                </div>
-              </button>
-
-              <button
                 className={`mobile-nav-item ${activeTab === 'rsi' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('rsi');
-                  setMobileMenuOpen(false);
-                }}
+                onClick={() => navigateToSection('rsi')}
               >
-                <IconZap size={18} color={activeTab === 'rsi' ? '#38bdf8' : '#888888'} />
+                <IconZap size={18} color="var(--neutral)" />
                 <div className="mobile-nav-item-text">
                   <span className="mobile-nav-title">RSI Alerts (Discord)</span>
-                  <span className="mobile-nav-desc">55 Alts • 30m, 45m, 1h, 2h, 3h Overbought/Oversold</span>
+                  <span className="mobile-nav-desc">55 Alts • Overbought / Oversold Telemetry</span>
                 </div>
               </button>
 
               <button
                 className={`mobile-nav-item ${activeTab === 'structure' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('structure');
-                  setMobileMenuOpen(false);
-                }}
+                onClick={() => navigateToSection('structure')}
               >
-                <IconScale size={18} color={activeTab === 'structure' ? '#38bdf8' : '#888888'} />
+                <IconScale size={18} color="var(--neutral)" />
                 <div className="mobile-nav-item-text">
                   <span className="mobile-nav-title">Market Structure Matrix</span>
                   <span className="mobile-nav-desc">1H, 4H, 1D, 1W • 2-Candle HTF Bias</span>
+                </div>
+              </button>
+
+              <button
+                className={`mobile-nav-item ${activeTab === 'macro' ? 'active' : ''}`}
+                onClick={() => navigateToSection('macro')}
+              >
+                <IconBarChart size={18} color="var(--neutral)" />
+                <div className="mobile-nav-item-text">
+                  <span className="mobile-nav-title">Whales • MVRV • ETFs</span>
+                  <span className="mobile-nav-desc">Institutional On-Chain Flows</span>
                 </div>
               </button>
             </div>
@@ -677,7 +797,7 @@ export default function Home() {
                   alignItems: 'center',
                   gap: 4
                 }}>
-                  <IconZap size={12} color="#38bdf8" /> Bias Filters:
+                  <IconZap size={12} color="var(--accent)" /> Models:
                 </span>
                 
                 <button
@@ -685,7 +805,7 @@ export default function Home() {
                   onClick={() => applyBiasFilterPreset('highest_prob')}
                   title="Combines Sigmas, Market Regime, 20 EMA structure, Bleed Guard, Weekly Open & Stats for highest probability bias"
                 >
-                  🎯 Highest Probability
+                  🎯 High Probability
                 </button>
                 <button
                   className={`bias-filter-pill ${biasFilters.preset === 'sigma_regime' ? 'active' : ''}`}
@@ -697,9 +817,9 @@ export default function Home() {
                 <button
                   className={`bias-filter-pill ${biasFilters.preset === 'bleed_guard' ? 'active' : ''}`}
                   onClick={() => applyBiasFilterPreset('bleed_guard')}
-                  title="Detects intraday bleeding and prevents 67% bullish bleed traps"
+                  title="Detects intraday bleeding and prevents bullish bleed traps"
                 >
-                  🛡️ Bleed Trap Guard
+                  🛡️ Bleed Guard
                 </button>
                 <button
                   className={`bias-filter-pill ${biasFilters.preset === 'trend_only' ? 'active' : ''}`}
@@ -708,29 +828,15 @@ export default function Home() {
                 >
                   📈 Trend Structure
                 </button>
-                <button
-                  className={`bias-filter-pill ${biasFilters.preset === 'recent_cycle' ? 'active' : ''}`}
-                  onClick={() => applyBiasFilterPreset('recent_cycle')}
-                  title="Recent 8-Week Regime Momentum vs Stale 5-Year History"
-                >
-                  ⚡ 8-Week DOW
-                </button>
-                <button
-                  className={`bias-filter-pill ${biasFilters.preset === 'raw_legacy' ? 'active' : ''}`}
-                  onClick={() => applyBiasFilterPreset('raw_legacy')}
-                  title="Raw 2021-Present Unfiltered Statistics (No Technical Overlays)"
-                >
-                  📊 Raw Legacy Stats
-                </button>
               </div>
 
               <button
                 className="confluence-toggle-btn"
                 onClick={() => setShowConfluences(!showConfluences)}
                 style={{
-                  background: showConfluences ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                  border: `1px solid ${showConfluences ? '#38bdf8' : 'rgba(255, 255, 255, 0.1)'}`,
-                  color: showConfluences ? '#38bdf8' : 'var(--text-muted)',
+                  background: showConfluences ? 'var(--accent-dim)' : 'var(--bg-elevated)',
+                  border: `1px solid ${showConfluences ? 'var(--accent)' : 'var(--border)'}`,
+                  color: showConfluences ? 'var(--accent)' : 'var(--text-muted)',
                   borderRadius: 4,
                   padding: '4px 10px',
                   fontSize: '0.72rem',
@@ -777,54 +883,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* 3. Interactive Confluence Chip Toggles */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-              <span style={{ fontSize: '0.68rem', color: '#666', fontFamily: 'var(--font-mono)', marginRight: 2 }}>Confluences:</span>
-              <button
-                className={`confluence-chip ${biasFilters.enableSigma ? 'active' : ''}`}
-                onClick={() => toggleSingleBiasFilter('enableSigma')}
-              >
-                {biasFilters.enableSigma ? '✓ ' : '+ '}Sigmas (Z-Score)
-              </button>
-              <button
-                className={`confluence-chip ${biasFilters.enableRegime ? 'active' : ''}`}
-                onClick={() => toggleSingleBiasFilter('enableRegime')}
-              >
-                {biasFilters.enableRegime ? '✓ ' : '+ '}Market Regime
-              </button>
-              <button
-                className={`confluence-chip ${biasFilters.enableTrend ? 'active' : ''}`}
-                onClick={() => toggleSingleBiasFilter('enableTrend')}
-              >
-                {biasFilters.enableTrend ? '✓ ' : '+ '}Trend (20 EMA)
-              </button>
-              <button
-                className={`confluence-chip ${biasFilters.enableBleedGuard ? 'active' : ''}`}
-                onClick={() => toggleSingleBiasFilter('enableBleedGuard')}
-              >
-                {biasFilters.enableBleedGuard ? '✓ ' : '+ '}Bleed Trap Guard
-              </button>
-              <button
-                className={`confluence-chip ${biasFilters.enableWeeklyOpen ? 'active' : ''}`}
-                onClick={() => toggleSingleBiasFilter('enableWeeklyOpen')}
-              >
-                {biasFilters.enableWeeklyOpen ? '✓ ' : '+ '}Weekly Open
-              </button>
-              <button
-                className={`confluence-chip ${biasFilters.enableRecentRegime ? 'active' : ''}`}
-                onClick={() => toggleSingleBiasFilter('enableRecentRegime')}
-              >
-                {biasFilters.enableRecentRegime ? '✓ ' : '+ '}Recent 8W DOW
-              </button>
-              <button
-                className={`confluence-chip ${biasFilters.enableRawStats ? 'active' : ''}`}
-                onClick={() => toggleSingleBiasFilter('enableRawStats')}
-              >
-                {biasFilters.enableRawStats ? '✓ ' : '+ '}Historical DOW
-              </button>
-            </div>
-
-            {/* 4. Hero Main Content */}
+            {/* 3. Hero Main Content */}
             <div className="hero-content">
               <div className="hero-left">
                 <div className="hero-date">{formattedToday}</div>
@@ -942,7 +1001,7 @@ export default function Home() {
                       {weeklyHighLowData && (
                         <div
                           className="signal-pill"
-                          onClick={() => setActiveTab('pattern')}
+                          onClick={() => navigateToSection('pattern')}
                           style={{ cursor: 'pointer', border: '1px solid rgba(56, 189, 248, 0.35)' }}
                           title="Click to view full Weekly High/Low Formation Probability matrix"
                         >
@@ -955,7 +1014,7 @@ export default function Home() {
                       )}
                       <div
                         className="signal-pill"
-                        onClick={() => setActiveTab('rsi')}
+                        onClick={() => navigateToSection('rsi')}
                         style={{ cursor: 'pointer', border: '1px solid rgba(56, 189, 248, 0.35)' }}
                         title="Click to view live 55 Alts RSI Discord Scanner telemetry"
                       >
@@ -1124,70 +1183,124 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 5. Confluence Matrix Breakdown (Toggleable) */}
-            {showConfluences && bias.confluences && (
+            {/* 4. Confluence Matrix Breakdown & Interactive Toggles (Toggleable) */}
+            {showConfluences && (
               <div style={{
                 marginTop: 20,
                 paddingTop: 16,
-                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                borderTop: '1px solid var(--border)',
                 animation: 'fadeIn 0.2s ease',
               }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: 10,
-                  fontSize: '0.75rem',
-                  fontFamily: 'var(--font-mono)',
-                  color: 'var(--text-secondary)',
-                }}>
-                  <span>CONFLUENCE ALIGNMENT SCORECARD:</span>
-                  <span style={{ color: bias.bias === 'bearish' ? '#f87171' : '#4ade80', fontWeight: 700 }}>
-                    Composite Score: {bias.confluenceScore > 0 ? '+' : ''}{bias.confluenceScore}
-                  </span>
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8, letterSpacing: '0.04em' }}>
+                    ACTIVE CONFLUENCE FILTERS (CLICK TO TOGGLE):
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <button
+                      className={`confluence-chip ${biasFilters.enableSigma ? 'active' : ''}`}
+                      onClick={() => toggleSingleBiasFilter('enableSigma')}
+                    >
+                      {biasFilters.enableSigma ? '✓ ' : '+ '}Sigmas (Z-Score)
+                    </button>
+                    <button
+                      className={`confluence-chip ${biasFilters.enableRegime ? 'active' : ''}`}
+                      onClick={() => toggleSingleBiasFilter('enableRegime')}
+                    >
+                      {biasFilters.enableRegime ? '✓ ' : '+ '}Market Regime
+                    </button>
+                    <button
+                      className={`confluence-chip ${biasFilters.enableTrend ? 'active' : ''}`}
+                      onClick={() => toggleSingleBiasFilter('enableTrend')}
+                    >
+                      {biasFilters.enableTrend ? '✓ ' : '+ '}Trend (20 EMA)
+                    </button>
+                    <button
+                      className={`confluence-chip ${biasFilters.enableBleedGuard ? 'active' : ''}`}
+                      onClick={() => toggleSingleBiasFilter('enableBleedGuard')}
+                    >
+                      {biasFilters.enableBleedGuard ? '✓ ' : '+ '}Bleed Trap Guard
+                    </button>
+                    <button
+                      className={`confluence-chip ${biasFilters.enableWeeklyOpen ? 'active' : ''}`}
+                      onClick={() => toggleSingleBiasFilter('enableWeeklyOpen')}
+                    >
+                      {biasFilters.enableWeeklyOpen ? '✓ ' : '+ '}Weekly Open
+                    </button>
+                    <button
+                      className={`confluence-chip ${biasFilters.enableRecentRegime ? 'active' : ''}`}
+                      onClick={() => toggleSingleBiasFilter('enableRecentRegime')}
+                    >
+                      {biasFilters.enableRecentRegime ? '✓ ' : '+ '}Recent 8W DOW
+                    </button>
+                    <button
+                      className={`confluence-chip ${biasFilters.enableRawStats ? 'active' : ''}`}
+                      onClick={() => toggleSingleBiasFilter('enableRawStats')}
+                    >
+                      {biasFilters.enableRawStats ? '✓ ' : '+ '}Historical DOW
+                    </button>
+                  </div>
                 </div>
 
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                  gap: 10,
-                }}>
-                  {bias.confluences.map((c) => {
-                    const isBull = c.state === 'bullish';
-                    const isBear = c.state === 'bearish';
-                    return (
-                      <div
-                        key={c.id}
-                        style={{
-                          background: '#090909',
-                          border: `1px solid ${isBull ? 'rgba(34, 197, 94, 0.25)' : isBear ? 'rgba(239, 68, 68, 0.25)' : '#1f1f1f'}`,
-                          borderRadius: 6,
-                          padding: '8px 12px',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <span style={{ fontSize: '0.72rem', color: '#aaaaaa', fontFamily: 'var(--font-mono)' }}>{c.name}</span>
-                          <span style={{
-                            fontSize: '0.65rem',
-                            fontWeight: 800,
-                            padding: '1px 6px',
-                            borderRadius: 3,
-                            background: isBull ? 'rgba(34, 197, 94, 0.2)' : isBear ? 'rgba(239, 68, 68, 0.2)' : '#222222',
-                            color: isBull ? '#4ade80' : isBear ? '#f87171' : '#888888',
-                          }}>
-                            {c.state.toUpperCase()}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e5e5e5', fontFamily: 'var(--font-mono)' }}>
-                          {c.valueText}
-                        </div>
-                        <div style={{ fontSize: '0.68rem', color: '#666666', marginTop: 2 }}>
-                          {c.detail}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {bias.confluences && (
+                  <>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 10,
+                      fontSize: '0.75rem',
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-secondary)',
+                    }}>
+                      <span>CONFLUENCE ALIGNMENT SCORECARD:</span>
+                      <span style={{ color: bias.bias === 'bearish' ? 'var(--bearish)' : 'var(--bullish)', fontWeight: 700 }}>
+                        Composite Score: {bias.confluenceScore > 0 ? '+' : ''}{bias.confluenceScore}
+                      </span>
+                    </div>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                      gap: 10,
+                    }}>
+                      {bias.confluences.map((c) => {
+                        const isBull = c.state === 'bullish';
+                        const isBear = c.state === 'bearish';
+                        return (
+                          <div
+                            key={c.id}
+                            style={{
+                              background: 'var(--bg-card)',
+                              border: `1px solid ${isBull ? 'rgba(34, 197, 94, 0.25)' : isBear ? 'rgba(239, 68, 68, 0.25)' : 'var(--border)'}`,
+                              borderRadius: 6,
+                              padding: '8px 12px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{c.name}</span>
+                              <span style={{
+                                fontSize: '0.65rem',
+                                fontWeight: 800,
+                                padding: '1px 6px',
+                                borderRadius: 3,
+                                background: isBull ? 'rgba(34, 197, 94, 0.2)' : isBear ? 'rgba(239, 68, 68, 0.2)' : 'var(--bg-elevated)',
+                                color: isBull ? '#4ade80' : isBear ? '#f87171' : 'var(--text-muted)',
+                              }}>
+                                {c.state.toUpperCase()}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                              {c.valueText}
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                              {c.detail}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1237,111 +1350,114 @@ export default function Home() {
 
           {/* ── 4 PRIMARY INSTITUTIONAL TABS (Restored Weekly Forecast) ── */}
           <div className="tab-bar">
-            <button id="tab-levels" className={`tab-btn ${activeTab === 'levels' ? 'active' : ''}`} onClick={() => setActiveTab('levels')}>
+            <button id="tab-levels" className={`tab-btn ${activeTab === 'levels' ? 'active' : ''}`} onClick={() => navigateToSection('levels')}>
               <IconWolf size={15} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-yellow)'} />
               <span style={{ color: activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : undefined }}>Wolf Key Levels</span>
             </button>
-            <button id="tab-session" className={`tab-btn ${activeTab === 'session' ? 'active' : ''}`} onClick={() => setActiveTab('session')}>
+            <button id="tab-session" className={`tab-btn ${activeTab === 'session' ? 'active' : ''}`} onClick={() => navigateToSection('session')}>
               <IconClock size={15} color={activeTab === 'session' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'session' ? '#38bdf8' : undefined }}>Session HOD/LOD</span>
             </button>
-            <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => setActiveTab('pattern')}>
+            <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => navigateToSection('pattern')}>
               <IconCalendar size={15} color={activeTab === 'pattern' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'pattern' ? '#38bdf8' : undefined }}>Weekly HOW/LOW &amp; Forecast</span>
             </button>
-            <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => setActiveTab('macro')}>
+            <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => navigateToSection('macro')}>
               <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'macro' ? '#38bdf8' : undefined }}>Whales • MVRV • ETFs</span>
             </button>
-            <button id="tab-rsi" className={`tab-btn ${activeTab === 'rsi' ? 'active' : ''}`} onClick={() => setActiveTab('rsi')}>
+            <button id="tab-rsi" className={`tab-btn ${activeTab === 'rsi' ? 'active' : ''}`} onClick={() => navigateToSection('rsi')}>
               <IconZap size={15} color={activeTab === 'rsi' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'rsi' ? '#38bdf8' : undefined }}>RSI Alerts (Discord)</span>
             </button>
-            <button id="tab-structure" className={`tab-btn ${activeTab === 'structure' ? 'active' : ''}`} onClick={() => setActiveTab('structure')}>
+            <button id="tab-structure" className={`tab-btn ${activeTab === 'structure' ? 'active' : ''}`} onClick={() => navigateToSection('structure')}>
               <IconScale size={15} color={activeTab === 'structure' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'structure' ? '#38bdf8' : undefined }}>Market Structure</span>
             </button>
           </div>
 
-          {/* ── 1. WOLF KEY LEVELS VIEW ── */}
-          {activeTab === 'levels' && (
-            <WolfKeyLevels levelsData={wolfLevels} />
-          )}
+          {/* ── Active Tab Content Container (Target for Auto-Scroll) ── */}
+          <div id="active-tab-content" style={{ scrollMarginTop: '80px', minHeight: '400px' }}>
+            {/* ── 1. WOLF KEY LEVELS VIEW ── */}
+            {activeTab === 'levels' && (
+              <WolfKeyLevels levelsData={wolfLevels} />
+            )}
 
-          {/* ── 2. SESSION PROFILER (Asia · London · NY HOD/LOD Probabilities) ── */}
-          {activeTab === 'session' && (
-            <SessionProfiler />
-          )}
+            {/* ── 2. SESSION PROFILER (Asia · London · NY HOD/LOD Probabilities) ── */}
+            {activeTab === 'session' && (
+              <SessionProfiler />
+            )}
 
-          {/* ── 3. WEEKLY FORECAST & HOW/LOW PROBABILITY VIEW ── */}
-          {activeTab === 'pattern' && (
-            <WeeklyForecast
-              weekPattern={weekPattern}
-              weeklyHighLowData={weeklyHighLowData}
-              selectedWeeklyBias={weeklyProbBias}
-              onWeeklyBiasChange={handleWeeklyProbBiasChange}
-              formatPrice={formatPrice}
-            />
-          )}
+            {/* ── 3. WEEKLY FORECAST & HOW/LOW PROBABILITY VIEW ── */}
+            {activeTab === 'pattern' && (
+              <WeeklyForecast
+                weekPattern={weekPattern}
+                weeklyHighLowData={weeklyHighLowData}
+                selectedWeeklyBias={weeklyProbBias}
+                onWeeklyBiasChange={handleWeeklyProbBiasChange}
+                formatPrice={formatPrice}
+              />
+            )}
 
-          {/* ── 4. MACRO WHALES & ETF VIEW ── */}
-          {activeTab === 'macro' && (
-            <MacroWhalesEtf />
-          )}
+            {/* ── 4. MACRO WHALES & ETF VIEW ── */}
+            {activeTab === 'macro' && (
+              <MacroWhalesEtf />
+            )}
 
-          {/* ── 5. DISCORD RSI SCANNER VIEW ── */}
-          {activeTab === 'rsi' && (
-            <RsiScannerWidget />
-          )}
+            {/* ── 5. DISCORD RSI SCANNER VIEW ── */}
+            {activeTab === 'rsi' && (
+              <RsiScannerWidget />
+            )}
 
-          {/* ── 6. MARKET STRUCTURE MATRIX (1H, 4H, 1D, 1W HTF) ── */}
-          {activeTab === 'structure' && (
-            <MarketStructureTable />
-          )}
+            {/* ── 6. MARKET STRUCTURE MATRIX (1H, 4H, 1D, 1W HTF) ── */}
+            {activeTab === 'structure' && (
+              <MarketStructureTable />
+            )}
+          </div>
 
         </div>
       </main>
 
-      {/* ── Mobile Sticky Bottom Bar (4 Clean Institutional Tools) ── */}
+      {/* ── Mobile Sticky Bottom Bar (Institutional Tools) ── */}
       <div className="mobile-bottom-bar">
         <button
           className={`mobile-bottom-btn ${activeTab === 'levels' ? 'active' : ''}`}
-          onClick={() => setActiveTab('levels')}
+          onClick={() => navigateToSection('levels')}
         >
           <IconWolf size={18} />
           <span>Levels</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'session' ? 'active' : ''}`}
-          onClick={() => setActiveTab('session')}
+          onClick={() => navigateToSection('session')}
         >
           <IconClock size={18} />
           <span>Sessions</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'pattern' ? 'active' : ''}`}
-          onClick={() => setActiveTab('pattern')}
+          onClick={() => navigateToSection('pattern')}
         >
           <IconCalendar size={18} />
           <span>Forecast</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'macro' ? 'active' : ''}`}
-          onClick={() => setActiveTab('macro')}
+          onClick={() => navigateToSection('macro')}
         >
           <IconBarChart size={18} />
           <span>Whales</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'rsi' ? 'active' : ''}`}
-          onClick={() => setActiveTab('rsi')}
+          onClick={() => navigateToSection('rsi')}
         >
           <IconZap size={18} />
           <span>RSI</span>
         </button>
         <button
           className={`mobile-bottom-btn ${activeTab === 'structure' ? 'active' : ''}`}
-          onClick={() => setActiveTab('structure')}
+          onClick={() => navigateToSection('structure')}
         >
           <IconScale size={18} />
           <span>Structure</span>

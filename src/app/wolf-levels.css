@@ -16,6 +16,19 @@
   --wolf-resistance: #ef4444;
 }
 
+[data-theme="light"] {
+  --wolf-yellow: #0284c7;
+  --wolf-yellow-bright: #0369a1;
+  --wolf-yellow-dim: rgba(2, 132, 199, 0.08);
+  --wolf-yellow-glow: rgba(2, 132, 199, 0.1);
+  --wolf-yellow-border: #cbd5e1;
+  --wolf-bg: #f8fafc;
+  --wolf-card-bg: #ffffff;
+  --wolf-row-hover: #f1f5f9;
+  --wolf-support: #16a34a;
+  --wolf-resistance: #dc2626;
+}
+
 /* Container */
 .wolf-container {
   background: var(--wolf-card-bg);

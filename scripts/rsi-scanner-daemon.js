@@ -19,9 +19,20 @@ import path from 'path';
 
 const SCAN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const STATUS_FILE = path.join(process.cwd(), '.rsi-scanner-status.json');
+const CONFIG_FILE = path.join(process.cwd(), '.rsi-scanner-config.json');
 
 let scanIteration = 0;
 let totalAlertsSentLifetime = 0;
+
+function getTerritoryConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const c = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+      if (c.territory) return c.territory;
+    }
+  } catch (e) {}
+  return 'both';
+}
 
 function saveStatus(statusObj) {
   try {
@@ -48,10 +59,20 @@ async function runScanCycle() {
     console.log(`✅ Scan completed in ${durationSec}s. Analyzed ${results.totalScanned} candle series.`);
     console.log(`📊 Found: ${results.overboughtCount} Overbought | ${results.oversoldCount} Oversold`);
 
-    const allTerritoryCoins = [...results.overboughtCoins, ...results.oversoldCoins];
+    const territoryConfig = getTerritoryConfig();
+    let targetCoins = [];
+    if (territoryConfig === 'overbought') {
+      targetCoins = results.overboughtCoins;
+      console.log(`🎯 Active filter config: OVERBOUGHT ONLY`);
+    } else if (territoryConfig === 'oversold') {
+      targetCoins = results.oversoldCoins;
+      console.log(`🎯 Active filter config: OVERSOLD ONLY`);
+    } else {
+      targetCoins = [...results.overboughtCoins, ...results.oversoldCoins];
+    }
 
     // Filter through cooldown so we don't spam Discord every 5m for unchanged coins
-    const alertable = filterCooldownAlerts(allTerritoryCoins);
+    const alertable = filterCooldownAlerts(targetCoins);
 
     if (alertable.length > 0) {
       console.log(`🚨 Dispatching ${alertable.length} fresh alert(s) to Discord Webhook...`);
