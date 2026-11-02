@@ -18,7 +18,7 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
   if (!alerts || alerts.length === 0) return { success: true, count: 0 };
 
   const url = webhookUrl || DISCORD_WEBHOOK_URL;
-  const CHUNK_SIZE = 10; // Discord allows max 10 embeds per message
+  const CHUNK_SIZE = 4; // Safe chunk size to stay well under Discord's 6,000 total character payload limit
 
   let sentCount = 0;
 
@@ -27,7 +27,10 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
 
     const embeds = chunk.map((item) => {
       const isOB = item.territory === 'OVERBOUGHT';
-      const color = isOB
+      const isMajor = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].includes(item.symbol) || item.isMajor;
+      const color = item.divergence
+        ? (isOB ? 0xDC2626 : 0x16A34A)
+        : isOB
         ? (item.rsi >= 80 ? 0x991B1B : item.rsi >= 75 ? 0xDC2626 : 0xEF4444)
         : (item.rsi <= 20 ? 0x065F46 : item.rsi <= 25 ? 0x059669 : 0x10B981);
 
@@ -42,7 +45,7 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
         },
         {
           name: isOB ? '🔥 RSI (14)' : '❄️ RSI (14)',
-          value: `**${item.rsi}** (${item.severity} ${isOB ? 'OB' : 'OS'})`,
+          value: `**${item.rsi}** (${item.isDivergence ? 'Divergence' : item.severity} ${isOB ? 'OB' : 'OS'})`,
           inline: true,
         },
         {
@@ -54,8 +57,10 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
 
       if (item.divergence) {
         fields.push({
-          name: '📐 Pattern / Confluence',
-          value: `⚠️ **${item.divergence.label}** (${item.divergence.barsAgo} bars ago)`,
+          name: '🎯 RSI Divergence Structure',
+          value: `⚠️ **${item.divergence.label}** (${item.divergence.barsAgo} bars ago)\n` +
+                 (item.divergence.prevPrice ? `Swing Pivot: \`${formatPrice(item.divergence.prevPrice)}\` ➔ Current: \`${formatPrice(item.price)}\`\n` : '') +
+                 (item.divergence.prevRsi ? `Pivot RSI: \`${item.divergence.prevRsi}\` ➔ Current RSI: \`${item.rsi}\`` : ''),
           inline: false,
         });
       }
@@ -82,18 +87,29 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
 
       const sigmaTag = item.sigmaMetrics ? ` [${item.sigmaMetrics.zScoreText}]` : '';
       const extremeTag = item.sigmaMetrics?.isExtremeGaussian ? ' ⚡' : '';
+      const majorPrefix = isMajor ? '👑 [MAJOR] ' : '';
+
+      const title = item.divergence
+        ? (isOB
+            ? `🔴 ${majorPrefix}${symbolTag} (${item.name}) • RSI BEARISH DIVERGENCE${sigmaTag}${extremeTag}`
+            : `🟢 ${majorPrefix}${symbolTag} (${item.name}) • RSI BULLISH DIVERGENCE${sigmaTag}${extremeTag}`)
+        : (isOB
+            ? `🔴 ${majorPrefix}${symbolTag} (${item.name}) • RSI OVERBOUGHT${sigmaTag}${extremeTag}`
+            : `🟢 ${majorPrefix}${symbolTag} (${item.name}) • RSI OVERSOLD${sigmaTag}${extremeTag}`);
+
+      const description = item.divergence
+        ? `🎯 **${symbolTag}** has printed a **${item.divergence.label}** on the **${item.timeframe.toUpperCase()}** timeframe!\nPrice is at **${item.sigmaMetrics?.zScoreText || 'N/A'}** (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary). ${item.sigmaMetrics?.isExtremeGaussian ? '🔥 **High probability reversal confluence!**' : 'Watch for confirmation.'}`
+        : (isOB
+            ? `**${symbolTag}** is trading in **RSI Overbought territory** at **${item.sigmaMetrics?.zScoreText || 'N/A'}** above 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`
+            : `**${symbolTag}** is trading in **RSI Oversold territory** at **${item.sigmaMetrics?.zScoreText || 'N/A'}** below 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion bounce probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`);
 
       return {
-        title: isOB
-          ? `🔴 ${symbolTag} (${item.name}) • RSI OVERBOUGHT${sigmaTag}${extremeTag}`
-          : `🟢 ${symbolTag} (${item.name}) • RSI OVERSOLD${sigmaTag}${extremeTag}`,
-        description: isOB
-          ? `**${symbolTag}** is trading in **RSI Overbought territory** at **${item.sigmaMetrics?.zScoreText || 'N/A'}** above 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`
-          : `**${symbolTag}** is trading in **RSI Oversold territory** at **${item.sigmaMetrics?.zScoreText || 'N/A'}** below 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion bounce probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`,
+        title,
+        description,
         color,
         fields,
         footer: {
-          text: `Wolf Tape Reader • 55 Alts Scanner • Scan Interval: 5m`,
+          text: `Wolf Tape Reader • RSI & Divergence Scanner • 5m Loop`,
           icon_url: 'https://cdn-icons-png.flaticon.com/512/2534/2534204.png',
         },
         timestamp: new Date().toISOString(),
@@ -114,7 +130,8 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
       if (res.ok || res.status === 204) {
         sentCount += chunk.length;
       } else {
-        console.error('Discord webhook responded with error:', res.status, res.statusText);
+        const errText = await res.text().catch(() => '');
+        console.error('Discord webhook responded with error:', res.status, res.statusText, errText);
       }
     } catch (err) {
       console.error('Failed to post to Discord webhook:', err);

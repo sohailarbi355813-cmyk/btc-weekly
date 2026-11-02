@@ -88,6 +88,16 @@ export async function POST(request) {
       } else {
         targetCoins = [...results.overboughtCoins, ...results.oversoldCoins];
       }
+
+      // Always include active divergences
+      if (results.divergenceCoins && results.divergenceCoins.length > 0) {
+        for (const d of results.divergenceCoins) {
+          if (!targetCoins.some(t => t.symbol === d.symbol && t.timeframe === d.timeframe)) {
+            targetCoins.push(d);
+          }
+        }
+      }
+
       const alertable = filterCooldownAlerts(targetCoins);
 
       let sentAlerts = 0;
@@ -101,6 +111,9 @@ export async function POST(request) {
         territory,
         overboughtCount: results.overboughtCount,
         oversoldCount: results.oversoldCount,
+        divergenceCount: results.divergenceCount || 0,
+        divergenceCoins: results.divergenceCoins || [],
+        majorsTelemetry: results.majorsTelemetry || [],
         alertsDispatched: sentAlerts,
         overboughtCoins: results.overboughtCoins,
         oversoldCoins: results.oversoldCoins,

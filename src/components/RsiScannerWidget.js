@@ -18,6 +18,8 @@ export default function RsiScannerWidget() {
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [message, setMessage] = useState(null);
   const [filterExtremeOnly, setFilterExtremeOnly] = useState(false);
+  const [filterDivergenceOnly, setFilterDivergenceOnly] = useState(false);
+  const [filterMajorsOnly, setFilterMajorsOnly] = useState(false);
   const [territoryFilter, setTerritoryFilter] = useState('both'); // 'both' (default) | 'overbought' | 'oversold'
 
   const fetchStatus = useCallback(async () => {
@@ -267,7 +269,7 @@ export default function RsiScannerWidget() {
       {/* Summary Cards with Click-to-Filter */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
         gap: 10,
         marginBottom: 14,
       }}>
@@ -325,6 +327,33 @@ export default function RsiScannerWidget() {
           </div>
         </div>
 
+        {/* Divergence Counter Card */}
+        <div
+          onClick={() => setFilterDivergenceOnly(!filterDivergenceOnly)}
+          style={{
+            background: filterDivergenceOnly ? 'rgba(234, 179, 8, 0.18)' : 'var(--bg-card)',
+            border: `1px solid ${filterDivergenceOnly ? '#eab308' : 'rgba(234, 179, 8, 0.3)'}`,
+            borderRadius: 8,
+            padding: '12px 14px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            boxShadow: filterDivergenceOnly ? '0 0 14px rgba(234, 179, 8, 0.25)' : 'none',
+          }}
+          title="Click to filter exclusively for coins with confirmed RSI Divergence"
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.70rem', color: '#eab308', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 700 }}>
+              🎯 RSI Divergences {filterDivergenceOnly ? '✓' : ''}
+            </span>
+            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#eab308', fontFamily: 'var(--font-mono)' }}>
+              {status.divergenceCount || 0}
+            </span>
+          </div>
+          <div style={{ fontSize: '0.64rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+            BTC, ETH, SOL &amp; Alts &middot; Reversal Confluence
+          </div>
+        </div>
+
         {/* Total Monitored Card */}
         <div style={{
           background: 'var(--bg-card)',
@@ -334,7 +363,7 @@ export default function RsiScannerWidget() {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.70rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 600 }}>
-              Lifetime Alerts Sent
+              Lifetime Alerts
             </span>
             <span style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
               {status.totalAlertsSentLifetime || 0}
@@ -343,6 +372,140 @@ export default function RsiScannerWidget() {
           <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
             Last scan: {status.lastScanTime ? new Date(status.lastScanTime).toLocaleTimeString() : 'Pending'}
           </div>
+        </div>
+      </div>
+
+      {/* 👑 Majors Radar (BTC, ETH, SOL) RSI & Divergence Telemetry */}
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: '12px 14px',
+        marginBottom: 14,
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 10,
+          flexWrap: 'wrap',
+          gap: 6,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#eab308', fontFamily: 'var(--font-mono)' }}>
+              👑 MAJORS RSI &amp; DIVERGENCE RADAR
+            </span>
+            <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              (BTC • ETH • SOL &middot; 30m, 45m, 1h, 2h, 3h)
+            </span>
+          </div>
+          <button
+            onClick={() => setFilterMajorsOnly(!filterMajorsOnly)}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 4,
+              fontSize: '0.66rem',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 700,
+              background: filterMajorsOnly ? 'rgba(234, 179, 8, 0.2)' : 'var(--bg-elevated)',
+              color: filterMajorsOnly ? '#eab308' : 'var(--text-secondary)',
+              border: `1px solid ${filterMajorsOnly ? '#eab308' : 'var(--border)'}`,
+              cursor: 'pointer',
+            }}
+          >
+            {filterMajorsOnly ? '✓ Viewing Majors Only' : 'Filter Feed to Majors'}
+          </button>
+        </div>
+
+        {/* 3 Major Cards: BTC, ETH, SOL */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: 10,
+        }}>
+          {[
+            { sym: 'BTCUSDT', disp: 'BTCUSDT.P', name: 'Bitcoin' },
+            { sym: 'ETHUSDT', disp: 'ETHUSDT.P', name: 'Ethereum' },
+            { sym: 'SOLUSDT', disp: 'SOLUSDT.P', name: 'Solana' },
+          ].map((item) => {
+            const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${item.sym}.P`;
+            const allSignals = [...overboughtCoins, ...oversoldCoins, ...(status.divergenceCoins || [])];
+            const matchingSignals = allSignals.filter((c) => c.symbol === item.sym);
+            const divSignal = matchingSignals.find((c) => c.divergence);
+            const latestSignal = matchingSignals[0];
+
+            return (
+              <div
+                key={item.sym}
+                style={{
+                  background: 'var(--bg-elevated)',
+                  border: `1px solid ${divSignal ? (divSignal.divergence.type === 'BEARISH_DIVERGENCE' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(34, 197, 94, 0.6)') : 'var(--border)'}`,
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: '0.80rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                      {item.disp}
+                    </span>
+                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{item.name}</span>
+                  </div>
+                  <a
+                    href={tvUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: '0.62rem', color: 'var(--accent)', textDecoration: 'none', fontFamily: 'var(--font-mono)' }}
+                  >
+                    Chart &rarr;
+                  </a>
+                </div>
+
+                {divSignal ? (
+                  <div style={{
+                    margin: '6px 0',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    background: divSignal.divergence.type === 'BEARISH_DIVERGENCE' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                    border: `1px solid ${divSignal.divergence.type === 'BEARISH_DIVERGENCE' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}>
+                    <span style={{
+                      fontSize: '0.66rem',
+                      fontWeight: 800,
+                      color: divSignal.divergence.type === 'BEARISH_DIVERGENCE' ? '#f87171' : '#4ade80',
+                      fontFamily: 'var(--font-mono)',
+                    }}>
+                      ⚠️ {divSignal.divergence.label} ({divSignal.timeframe.toUpperCase()})
+                    </span>
+                    <span style={{ fontSize: '0.64rem', fontWeight: 800, color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
+                      RSI {divSignal.rsi}
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{
+                    margin: '6px 0',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    fontSize: '0.64rem',
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-mono)',
+                  }}>
+                    {latestSignal ? `${latestSignal.territory} (${latestSignal.timeframe.toUpperCase()}) · RSI ${latestSignal.rsi}` : 'No Extreme Divergence Active · Trend Normal'}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                  <span>{latestSignal ? `Spot: $${Number(latestSignal.price).toLocaleString()}` : 'Monitored 24/7'}</span>
+                  <span>{latestSignal?.sigmaMetrics ? `${latestSignal.sigmaMetrics.zScoreText} (${latestSignal.sigmaMetrics.gaussianPct}% Gauss)` : '30m-3h Timeframes'}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -385,7 +548,24 @@ export default function RsiScannerWidget() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setFilterDivergenceOnly(!filterDivergenceOnly)}
+            style={{
+              padding: '5px 10px',
+              borderRadius: 6,
+              fontSize: '0.68rem',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 700,
+              background: filterDivergenceOnly ? 'rgba(234, 179, 8, 0.2)' : 'var(--bg-card)',
+              color: filterDivergenceOnly ? '#eab308' : 'var(--text-secondary)',
+              border: filterDivergenceOnly ? '1px solid #eab308' : '1px solid var(--border)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            🎯 Divergence Only {filterDivergenceOnly ? '✓' : ''}
+          </button>
           <button
             onClick={() => setFilterExtremeOnly(!filterExtremeOnly)}
             style={{
@@ -401,7 +581,7 @@ export default function RsiScannerWidget() {
               transition: 'all 0.15s ease',
             }}
           >
-            ⚡ &ge;2.0&sigma; Gaussian Boundary Only {filterExtremeOnly ? '✓' : ''}
+            ⚡ &ge;2.0&sigma; Gaussian {filterExtremeOnly ? '✓' : ''}
           </button>
         </div>
       </div>
@@ -414,7 +594,10 @@ export default function RsiScannerWidget() {
           if (territoryFilter === 'oversold') return item.territory === 'OVERSOLD';
           return true; // 'both'
         });
-        const displayedCoins = territoryCoins.filter(item => !filterExtremeOnly || (item.sigmaMetrics && item.sigmaMetrics.isExtremeGaussian));
+        const displayedCoins = territoryCoins
+          .filter(item => !filterExtremeOnly || (item.sigmaMetrics && item.sigmaMetrics.isExtremeGaussian))
+          .filter(item => !filterDivergenceOnly || item.divergence)
+          .filter(item => !filterMajorsOnly || ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].includes(item.symbol));
 
         return (
           <div style={{
@@ -439,7 +622,9 @@ export default function RsiScannerWidget() {
                 fontWeight: 600,
               }}>
                 Active Signals: <strong style={{ color: 'var(--text-primary)' }}>{displayedCoins.length}</strong>
-                {territoryFilter === 'overbought' ? ' (Filtered: Overbought Only)' : territoryFilter === 'oversold' ? ' (Filtered: Oversold Only)' : ' (Both Sides)'}
+                {territoryFilter === 'overbought' ? ' (Overbought Only)' : territoryFilter === 'oversold' ? ' (Oversold Only)' : ' (Both Sides)'}
+                {filterDivergenceOnly ? ' • [🎯 Divergence Only]' : ''}
+                {filterMajorsOnly ? ' • [👑 Majors Only]' : ''}
               </div>
             </div>
 
@@ -451,7 +636,7 @@ export default function RsiScannerWidget() {
                 fontSize: '0.78rem',
                 fontFamily: 'var(--font-mono)',
               }}>
-                No coins currently in {territoryFilter === 'overbought' ? 'Overbought (≥70)' : territoryFilter === 'oversold' ? 'Oversold (≤30)' : 'extreme'} territory across 30m, 45m, 1h, 2h, 3h.
+                No coins currently matching filter criteria across 30m, 45m, 1h, 2h, 3h.
               </div>
             ) : (
               <div style={{
@@ -461,6 +646,7 @@ export default function RsiScannerWidget() {
               }}>
                 {displayedCoins.map((item, idx) => {
                   const isOB = item.territory === 'OVERBOUGHT';
+                  const isMajor = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].includes(item.symbol) || item.isMajor;
                   const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${item.symbol}.P`;
                   const isExtreme = item.sigmaMetrics?.isExtremeGaussian;
                   return (
@@ -468,7 +654,7 @@ export default function RsiScannerWidget() {
                       key={`${item.symbol}-${item.timeframe}-${idx}`}
                       style={{
                         background: 'var(--bg-elevated)',
-                        border: `1px solid ${isExtreme ? 'var(--accent)' : isOB ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
+                        border: `1px solid ${item.divergence ? (isOB ? 'rgba(239, 68, 68, 0.7)' : 'rgba(34, 197, 94, 0.7)') : isExtreme ? 'var(--accent)' : isOB ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
                         borderRadius: 6,
                         padding: '10px 12px',
                         display: 'flex',
@@ -482,11 +668,25 @@ export default function RsiScannerWidget() {
                       <span style={{
                         fontSize: '0.78rem',
                         fontWeight: 800,
-                        color: '#ffffff',
+                        color: isMajor ? '#eab308' : '#ffffff',
                         fontFamily: 'var(--font-mono)'
                       }}>
                         {item.displaySymbol}
                       </span>
+                      {isMajor && (
+                        <span style={{
+                          fontSize: '0.60rem',
+                          padding: '1px 5px',
+                          borderRadius: 3,
+                          background: 'rgba(234, 179, 8, 0.2)',
+                          color: '#eab308',
+                          border: '1px solid rgba(234, 179, 8, 0.5)',
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 800,
+                        }}>
+                          👑 MAJOR
+                        </span>
+                      )}
                       <span style={{
                         fontSize: '0.62rem',
                         padding: '1px 5px',
@@ -497,6 +697,20 @@ export default function RsiScannerWidget() {
                       }}>
                         {item.timeframe.toUpperCase()}
                       </span>
+                      {item.divergence && (
+                        <span style={{
+                          fontSize: '0.60rem',
+                          padding: '1px 5px',
+                          borderRadius: 3,
+                          background: item.divergence.type === 'BEARISH_DIVERGENCE' ? 'rgba(239, 68, 68, 0.25)' : 'rgba(34, 197, 94, 0.25)',
+                          color: item.divergence.type === 'BEARISH_DIVERGENCE' ? '#f87171' : '#4ade80',
+                          border: `1px solid ${item.divergence.type === 'BEARISH_DIVERGENCE' ? '#ef4444' : '#22c55e'}`,
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 800,
+                        }}>
+                          🎯 DIVERGENCE
+                        </span>
+                      )}
                       {item.sigmaMetrics && (
                         <span style={{
                           fontSize: '0.60rem',
@@ -512,9 +726,14 @@ export default function RsiScannerWidget() {
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: '0.64rem', color: '#777', marginTop: 3 }}>
-                      Spot: ${Number(item.price).toFixed(item.price < 1 ? 4 : 2)} &middot; Mean: ${Number(item.sigmaMetrics?.mean || 0).toFixed(item.price < 1 ? 4 : 2)} {item.divergence ? `• ${item.divergence.label}` : ''}
+                    <div style={{ fontSize: '0.64rem', color: '#888', marginTop: 3 }}>
+                      Spot: ${Number(item.price).toFixed(item.price < 1 ? 4 : 2)} &middot; Mean: ${Number(item.sigmaMetrics?.mean || 0).toFixed(item.price < 1 ? 4 : 2)}
                     </div>
+                    {item.divergence && (
+                      <div style={{ fontSize: '0.62rem', color: item.divergence.type === 'BEARISH_DIVERGENCE' ? '#f87171' : '#4ade80', fontWeight: 600, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
+                        ⚠️ {item.divergence.label} ({item.divergence.barsAgo} bars ago)
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ textAlign: 'right' }}>

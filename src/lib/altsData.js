@@ -1,7 +1,16 @@
 // Strict Whitelist of Altcoins from User Watchlist
 // Each coin maps to Bybit Linear Perpetual ticker and holds its verified Yearly Open (Jan 1, 2026 UTC)
 
+export const MAJOR_COINS = [
+  { symbol: 'BTCUSDT', displaySymbol: 'BTCUSDT.P', name: 'Bitcoin', yo: 93420.0, decimals: 1 },
+  { symbol: 'ETHUSDT', displaySymbol: 'ETHUSDT.P', name: 'Ethereum', yo: 2970.57, decimals: 2 },
+  { symbol: 'SOLUSDT', displaySymbol: 'SOLUSDT.P', name: 'Solana', yo: 124.64, decimals: 2 },
+];
+
+export const MAJOR_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+
 export const ALTS_WHITELIST = [
+  { symbol: 'BTCUSDT', displaySymbol: 'BTCUSDT.P', name: 'Bitcoin', yo: 93420.0, decimals: 1 },
   { symbol: 'AAVEUSDT', displaySymbol: 'AAVEUSDT.P', name: 'Aave', yo: 145.91, decimals: 2 },
   { symbol: 'ADAUSDT', displaySymbol: 'ADAUSDT.P', name: 'Cardano', yo: 0.3332, decimals: 4 },
   { symbol: 'ALGOUSDT', displaySymbol: 'ALGOUSDT.P', name: 'Algorand', yo: 0.11037, decimals: 5 },

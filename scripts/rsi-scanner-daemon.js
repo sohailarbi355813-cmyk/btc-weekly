@@ -56,8 +56,8 @@ async function runScanCycle() {
     const results = await scanAllAltsRSI();
     const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    console.log(`✅ Scan completed in ${durationSec}s. Analyzed ${results.totalScanned} candle series.`);
-    console.log(`📊 Found: ${results.overboughtCount} Overbought | ${results.oversoldCount} Oversold`);
+    console.log(`✅ Scan completed in ${durationSec}s. Analyzed ${results.totalScanned} candle series across ${results.totalCoins} assets.`);
+    console.log(`📊 Found: ${results.overboughtCount} Overbought | ${results.oversoldCount} Oversold | ${results.divergenceCount || 0} Divergences`);
 
     const territoryConfig = getTerritoryConfig();
     let targetCoins = [];
@@ -71,6 +71,15 @@ async function runScanCycle() {
       targetCoins = [...results.overboughtCoins, ...results.oversoldCoins];
     }
 
+    // Always include any active divergences on Majors (BTC, ETH, SOL)
+    if (results.divergenceCoins && results.divergenceCoins.length > 0) {
+      for (const d of results.divergenceCoins) {
+        if (!targetCoins.some(t => t.symbol === d.symbol && t.timeframe === d.timeframe)) {
+          targetCoins.push(d);
+        }
+      }
+    }
+
     // Filter through cooldown so we don't spam Discord every 5m for unchanged coins
     const alertable = filterCooldownAlerts(targetCoins);
 
@@ -78,7 +87,9 @@ async function runScanCycle() {
       console.log(`🚨 Dispatching ${alertable.length} fresh alert(s) to Discord Webhook...`);
       for (const item of alertable) {
         const sigmaTxt = item.sigmaMetrics ? ` | σ: ${item.sigmaMetrics.zScoreText} (${item.sigmaMetrics.gaussianPct}% Gauss)` : '';
-        console.log(`   -> [${item.territory}] ${item.displaySymbol} (${item.name}) on ${item.timeframe.toUpperCase()}: RSI ${item.rsi}${sigmaTxt} (Spot: $${item.price})`);
+        const divTxt = item.divergence ? ` | ⚠️ ${item.divergence.label}` : '';
+        const majorTxt = item.isMajor ? ' 👑 [MAJOR]' : '';
+        console.log(`   -> [${item.territory}]${majorTxt} ${item.displaySymbol} (${item.name}) on ${item.timeframe.toUpperCase()}: RSI ${item.rsi}${divTxt}${sigmaTxt} (Spot: $${item.price})`);
       }
 
       const alertRes = await sendDiscordRsiAlerts(alertable);
@@ -86,10 +97,10 @@ async function runScanCycle() {
         totalAlertsSentLifetime += alertRes.count;
         console.log(`📨 Successfully delivered ${alertRes.count} alert(s) to Discord! Total lifetime: ${totalAlertsSentLifetime}`);
       }
-    } else if (allTerritoryCoins.length > 0) {
-      console.log(`⏳ ${allTerritoryCoins.length} coin(s) in OB/OS territory, but suppressed by cooldown (already alerted recently).`);
+    } else if (targetCoins.length > 0) {
+      console.log(`⏳ ${targetCoins.length} signal(s) present, but suppressed by cooldown (already alerted recently).`);
     } else {
-      console.log(`🧘 No coins currently in extreme Overbought (>=70) or Oversold (<=30) territory.`);
+      console.log(`🧘 No coins currently in extreme Overbought (>=70), Oversold (<=30), or Divergence territory.`);
     }
 
     // Persist status for web app telemetry
@@ -102,6 +113,9 @@ async function runScanCycle() {
       timeframes: results.monitoredTimeframes,
       overboughtCount: results.overboughtCount,
       oversoldCount: results.oversoldCount,
+      divergenceCount: results.divergenceCount || 0,
+      divergenceCoins: results.divergenceCoins || [],
+      majorsTelemetry: results.majorsTelemetry || [],
       overboughtCoins: results.overboughtCoins,
       oversoldCoins: results.oversoldCoins,
       alertsDispatchedThisCycle: alertable.length,

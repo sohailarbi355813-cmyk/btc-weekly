@@ -1,4 +1,4 @@
-import { ALTS_WHITELIST } from './altsData.js';
+import { ALTS_WHITELIST, MAJOR_SYMBOLS } from './altsData.js';
 
 // Allowed timeframes strictly as requested: 30m, 45m, 1h, 2h, 3h
 export const SCAN_TIMEFRAMES = [
@@ -153,18 +153,19 @@ function aggregate45mCandles(candles15m) {
 
 /**
  * Check for RSI Divergence on top of Overbought / Oversold
+ * Includes high-conviction detection for BTC, ETH, SOL and all watchlist alts
  */
-export function checkRsiDivergence(candles, rsiValues) {
+export function checkRsiDivergence(candles, rsiValues, isMajor = false) {
   if (!candles || candles.length < 15 || !rsiValues || rsiValues.length < 15) return null;
   const currentIdx = candles.length - 1;
   const curPrice = candles[currentIdx].close;
   const curRsi = rsiValues[currentIdx];
 
-  // Look back up to 15 bars for local peak or trough
+  // Look back up to 20 bars for local peak or trough
   let prevPeakIdx = -1;
   let prevTroughIdx = -1;
 
-  for (let i = currentIdx - 3; i >= Math.max(0, currentIdx - 15); i--) {
+  for (let i = currentIdx - 2; i >= Math.max(0, currentIdx - 20); i--) {
     if (candles[i].high > candles[i - 1]?.high && candles[i].high > candles[i + 1]?.high) {
       if (prevPeakIdx === -1) prevPeakIdx = i;
     }
@@ -173,28 +174,45 @@ export function checkRsiDivergence(candles, rsiValues) {
     }
   }
 
-  // Bearish Divergence: Price Higher High, RSI Lower High (on Overbought)
-  if (curRsi >= 65 && prevPeakIdx !== -1) {
+  // Thresholds: Majors (BTC, ETH, SOL) use wider sensitivity (>=55 for Bear Div, <=45 for Bull Div)
+  // Standard alts use >=60 for Bear Div, <=40 for Bull Div
+  const bearThreshold = isMajor ? 55.0 : 60.0;
+  const bullThreshold = isMajor ? 45.0 : 40.0;
+
+  // Bearish Divergence: Price Higher High, RSI Lower High
+  if (curRsi >= bearThreshold && prevPeakIdx !== -1) {
     const prevPrice = candles[prevPeakIdx].high;
     const prevRsi = rsiValues[prevPeakIdx];
     if (curPrice > prevPrice && curRsi < prevRsi) {
       return {
         type: 'BEARISH_DIVERGENCE',
+        direction: 'BEAR',
         label: 'Bearish Divergence (HH Price / LH RSI)',
         barsAgo: currentIdx - prevPeakIdx,
+        curRsi: Number(curRsi.toFixed(1)),
+        prevRsi: Number(prevRsi.toFixed(1)),
+        curPrice,
+        prevPrice,
+        isMajor,
       };
     }
   }
 
-  // Bullish Divergence: Price Lower Low, RSI Higher Low (on Oversold)
-  if (curRsi <= 35 && prevTroughIdx !== -1) {
+  // Bullish Divergence: Price Lower Low, RSI Higher Low
+  if (curRsi <= bullThreshold && prevTroughIdx !== -1) {
     const prevPrice = candles[prevTroughIdx].low;
     const prevRsi = rsiValues[prevTroughIdx];
     if (curPrice < prevPrice && curRsi > prevRsi) {
       return {
         type: 'BULLISH_DIVERGENCE',
+        direction: 'BULL',
         label: 'Bullish Divergence (LL Price / HL RSI)',
         barsAgo: currentIdx - prevTroughIdx,
+        curRsi: Number(curRsi.toFixed(1)),
+        prevRsi: Number(prevRsi.toFixed(1)),
+        curPrice,
+        prevPrice,
+        isMajor,
       };
     }
   }
@@ -273,12 +291,14 @@ async function fetchCandles(symbol, tfConfig) {
 }
 
 /**
- * Scan all 55 whitelisted alts across 30m, 45m, 1h, 2h, 3h
+ * Scan all whitelisted coins (including BTC, ETH, SOL) across 30m, 45m, 1h, 2h, 3h
  */
 export async function scanAllAltsRSI() {
   const scanTime = Date.now();
   const overboughtCoins = [];
   const oversoldCoins = [];
+  const divergenceCoins = [];
+  const majorsTelemetry = [];
   const allScanned = [];
 
   const BATCH_SIZE = 12;
@@ -297,7 +317,8 @@ export async function scanAllAltsRSI() {
 
         const roundedRsi = Number(curRsi.toFixed(1));
         const lastCandle = candles[candles.length - 1];
-        const divergence = checkRsiDivergence(candles, rsiSeries);
+        const isMajor = MAJOR_SYMBOLS.includes(coin.symbol);
+        const divergence = checkRsiDivergence(candles, rsiSeries, isMajor);
         const sigmaMetrics = calculateZScore(closes, 20);
 
         const isOverbought = roundedRsi >= RSI_OVERBOUGHT_THRESHOLD;
@@ -318,9 +339,25 @@ export async function scanAllAltsRSI() {
           isHighProbabilityReversal,
           isOverbought,
           isOversold,
+          isMajor,
         };
 
-        if (resultItem.isOverbought) {
+        if (divergence) {
+          const isBearDiv = divergence.type === 'BEARISH_DIVERGENCE';
+          const divItem = {
+            ...resultItem,
+            territory: isBearDiv ? 'OVERBOUGHT' : 'OVERSOLD',
+            severity: isMajor ? 'MAJOR_DIVERGENCE' : 'DIVERGENCE',
+            isDivergence: true,
+          };
+          divergenceCoins.push(divItem);
+
+          if (isBearDiv) {
+            overboughtCoins.push(divItem);
+          } else {
+            oversoldCoins.push(divItem);
+          }
+        } else if (resultItem.isOverbought) {
           overboughtCoins.push({
             ...resultItem,
             territory: 'OVERBOUGHT',
@@ -331,6 +368,22 @@ export async function scanAllAltsRSI() {
             ...resultItem,
             territory: 'OVERSOLD',
             severity: roundedRsi <= 20 ? 'EXTREME' : roundedRsi <= 25 ? 'HIGH' : 'ELEVATED',
+          });
+        }
+
+        if (isMajor) {
+          majorsTelemetry.push({
+            symbol: coin.symbol,
+            displaySymbol: coin.displaySymbol,
+            name: coin.name,
+            timeframe: tf.id,
+            timeframeLabel: tf.label,
+            price: lastCandle.close,
+            rsi: roundedRsi,
+            divergence,
+            sigmaMetrics,
+            isOverbought,
+            isOversold,
           });
         }
 
@@ -357,6 +410,9 @@ export async function scanAllAltsRSI() {
     monitoredTimeframes: SCAN_TIMEFRAMES.map((t) => t.id),
     overboughtCount: overboughtCoins.length,
     oversoldCount: oversoldCoins.length,
+    divergenceCount: divergenceCoins.length,
+    divergenceCoins,
+    majorsTelemetry,
     overboughtCoins,
     oversoldCoins,
   };
@@ -370,7 +426,7 @@ export function filterCooldownAlerts(items) {
   const alertable = [];
 
   for (const item of items) {
-    const key = `${item.symbol}:${item.timeframe}:${item.territory}`;
+    const key = `${item.symbol}:${item.timeframe}:${item.territory}${item.isDivergence ? ':div' : ''}`;
     const lastAlertTime = alertCooldownMap.get(key) || 0;
 
     if (now - lastAlertTime > COOLDOWN_DURATION_MS) {
