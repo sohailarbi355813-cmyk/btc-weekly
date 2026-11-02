@@ -393,7 +393,6 @@ export default function Home() {
                 </div>
                 <div className="logo-text">
                   <h1>Wolf Tape Reader</h1>
-                  <span>Trading The Tape, With Precision &middot; Key Levels, Alts &amp; Forecasts</span>
                 </div>
               </div>
             </div>
@@ -440,7 +439,6 @@ export default function Home() {
                 </div>
                 <div className="logo-text">
                   <h1>Wolf Tape Reader</h1>
-                  <span>Trading The Tape, With Precision</span>
                 </div>
               </div>
             </div>
@@ -512,7 +510,6 @@ export default function Home() {
               </div>
               <div className="logo-text">
                 <h1>Wolf Tape Reader</h1>
-                <span>Trading The Tape, With Precision &middot; Key Levels &amp; Models</span>
               </div>
             </div>
 

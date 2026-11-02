@@ -193,8 +193,10 @@ body::after {
 .logo {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   text-decoration: none;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .logo-icon {
