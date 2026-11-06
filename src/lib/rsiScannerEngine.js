@@ -9,7 +9,7 @@ export const SCAN_TIMEFRAMES = [
   { id: '3h',  label: '3 Hours',     interval: '180', native: true },
 ];
 
-export const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1566011421865803948/z_9fRtjvfsl2QPDFgOOxZHr3HlMgozMQPjeAm8B5pY7biqRXp7am7i4AMjL2PbQnS_xO';
+export const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
 
 export const RSI_OVERBOUGHT_THRESHOLD = 70.0;
 export const RSI_OVERSOLD_THRESHOLD = 30.0;
