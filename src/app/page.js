@@ -62,35 +62,29 @@ function VerdictHero({ bias, data, clientDate }) {
     : 'rgba(245,158,11,0.35)';
 
   return (
-    <div style={{
-      marginBottom: 24,
-      borderRadius: 12,
+    <div className="verdict-hero-card" style={{
       border: `1px solid ${verdictBorder}`,
       background: verdictBg,
-      padding: '28px 32px',
-      position: 'relative',
-      overflow: 'hidden',
     }}>
-
       {/* Top bar: date + live price */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6b7280', fontFamily: 'var(--font-mono)' }}>
+      <div className="verdict-top-bar">
+        <div className="verdict-date">
           {formattedDate}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>
+        <div className="verdict-price-badge">
+          <div className="verdict-spot-price">
             {formatPrice(data.currentPrice)}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.72rem', color: color, fontFamily: 'var(--font-mono)', background: `${color}18`, border: `1px solid ${color}40`, padding: '2px 10px', borderRadius: 999 }}>
+          <div className="verdict-badge" style={{ color: color, background: `${color}18`, borderColor: `${color}40` }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
             {verdict}
           </div>
         </div>
       </div>
 
-      {/* Main verdict */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 32, alignItems: 'flex-start' }}>
-        <div>
+      {/* Main verdict body */}
+      <div className="verdict-hero-body">
+        <div className="verdict-hero-content">
           {/* Bleed Trap Alert */}
           {bias.isBleedTrap && verdict === 'CAUTION' && (
             <div style={{
@@ -108,56 +102,36 @@ function VerdictHero({ bias, data, clientDate }) {
           )}
 
           {/* Big verdict word */}
-          <div style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(2.2rem, 5vw, 3.5rem)',
-            fontWeight: 900,
-            letterSpacing: '-0.03em',
-            color: color,
-            lineHeight: 1,
-            marginBottom: 10,
-          }}>
+          <div className="verdict-hero-title" style={{ color: color }}>
             {verdict === 'BULLISH' ? '↑ BULLISH' : verdict === 'BEARISH' ? '↓ BEARISH' : '⚡ CAUTION'}
           </div>
 
           {/* Conviction bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <span style={{ fontSize: '0.68rem', color: '#6b7280', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
+          <div className="verdict-conviction-row">
+            <span className="verdict-conviction-label">
               Conviction:
             </span>
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div className="verdict-conviction-dots">
               {[1,2,3,4,5].map(i => (
-                <div key={i} style={{
-                  width: 24, height: 8, borderRadius: 2,
-                  background: i <= conviction ? color : 'rgba(255,255,255,0.08)',
-                  transition: 'all 0.3s ease',
-                }} />
+                <div key={i} className="conviction-dot" style={{ background: i <= conviction ? color : 'rgba(255,255,255,0.08)' }} />
               ))}
             </div>
-            <span style={{ fontSize: '0.72rem', color, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+            <span className="verdict-conviction-text" style={{ color }}>
               {convictionLabel}
             </span>
           </div>
 
           {/* Reason */}
-          <p style={{
-            fontSize: '0.88rem', color: '#9ca3af', lineHeight: 1.65,
-            maxWidth: 540, marginBottom: 20,
-          }}>
+          <p className="verdict-hero-reason">
             {bias.verdictReason}
           </p>
 
           {/* Signal pills */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div className="verdict-signals-wrap">
             {bias.signals && bias.signals.map(sig => {
               const sc = sig.state === 'bullish' ? '#22c55e' : sig.state === 'bearish' ? '#ef4444' : '#6b7280';
               return (
-                <div key={sig.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 7,
-                  padding: '6px 12px', borderRadius: 6,
-                  border: `1px solid ${sc}30`, background: `${sc}08`,
-                  fontSize: '0.76rem',
-                }}>
+                <div key={sig.id} className="verdict-signal-pill" style={{ borderColor: `${sc}30`, background: `${sc}08` }}>
                   <span style={{ width: 5, height: 5, borderRadius: '50%', background: sc, flexShrink: 0 }} />
                   <span style={{ color: '#6b7280', fontFamily: 'var(--font-mono)' }}>{sig.name}:</span>
                   <span style={{ color: sc, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{sig.value}</span>
@@ -168,30 +142,21 @@ function VerdictHero({ bias, data, clientDate }) {
         </div>
 
         {/* Score meter */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 100 }}>
-          <div style={{
-            width: 100, height: 100, borderRadius: '50%',
-            border: `3px solid ${color}`,
-            boxShadow: `0 0 20px ${color}30`,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            background: `${color}0d`,
-          }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', fontWeight: 900, color, lineHeight: 1 }}>
+        <div className="verdict-score-meter-wrap">
+          <div className="verdict-score-circle" style={{ borderColor: color, boxShadow: `0 0 20px ${color}30`, background: `${color}0d` }}>
+            <span style={{ color }}>
               {score > 0 ? '+' : ''}{score}
             </span>
-            <span style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>score</span>
+            <span>score</span>
           </div>
-          <div style={{ fontSize: '0.65rem', color: '#4b5563', textAlign: 'center', fontFamily: 'var(--font-mono)', lineHeight: 1.4 }}>
+          <div className="verdict-score-subtext">
             −100 Bear<br />+100 Bull
           </div>
         </div>
       </div>
 
       {/* Footer: Prior Week Levels + Sigma */}
-      <div style={{
-        marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)',
-        display: 'flex', flexDirection: 'column', gap: 10,
-      }}>
+      <div className="verdict-footer-bar">
         {/* Prior Week High / Low */}
         {bias.priorWeekLevels && bias.priorWeekLevels.pwh > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontSize: '0.76rem' }}>
@@ -257,20 +222,15 @@ function SignalsBreakdown({ bias }) {
           const barWidth = `${Math.round((Math.abs(sig.score) / sig.weight) * 100)}%`;
           const isBull = sig.state === 'bullish';
           return (
-            <div key={sig.id} style={{
-              display: 'grid',
-              gridTemplateColumns: '160px 1fr 90px',
-              gap: 12,
-              alignItems: 'center',
-              padding: '10px 12px',
+            <div key={sig.id} className="signals-breakdown-row" style={{
               borderBottom: i < bias.signals.length - 1 ? '1px solid #111115' : 'none',
             }}>
-              <div>
-                <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: '#9ca3af', marginBottom: 2 }}>{sig.name}</div>
-                <div style={{ fontSize: '0.68rem', color: '#4b5563', lineHeight: 1.3 }}>{sig.detail}</div>
+              <div className="signals-breakdown-info">
+                <div className="signals-breakdown-name">{sig.name}</div>
+                <div className="signals-breakdown-detail">{sig.detail}</div>
               </div>
-              <div>
-                <div style={{ height: 4, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
+              <div className="signals-breakdown-bar-col">
+                <div className="signals-breakdown-track">
                   <div style={{
                     height: '100%', width: barWidth, background: sc, borderRadius: 2,
                     marginLeft: isBull ? 0 : 'auto',
@@ -279,7 +239,7 @@ function SignalsBreakdown({ bias }) {
                 </div>
                 <div style={{ fontSize: '0.68rem', color: sc, fontFamily: 'var(--font-mono)' }}>{sig.label}</div>
               </div>
-              <div style={{ textAlign: 'right' }}>
+              <div className="signals-breakdown-score-col">
                 <span style={{
                   fontSize: '0.7rem', fontFamily: 'var(--font-mono)', fontWeight: 700,
                   color: sc,
