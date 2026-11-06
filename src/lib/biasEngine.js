@@ -1,472 +1,60 @@
 /**
- * BTC Bias Engine — Statistical analysis of historical BTC daily candles.
- * Provides:
- *  - Day-of-week bias (bullish/bearish win rate per day)
- *  - Weekly open bias (current price vs weekly open)
- *  - Monthly seasonal patterns
- *  - Combined confidence score
+ * BTC Bias Engine v4 — Upgraded Verdict System
+ *
+ * Outputs ONE clear verdict: BULLISH | BEARISH | CAUTION
+ *
+ * Signal Architecture (max ±100 total, normalized):
+ *   1. Trend (20/50 EMA alignment)      ±25  — lagging but very reliable macro direction
+ *   2. Market Structure (HH/HL on 1D)   ±20  — price action structure, leading indicator
+ *   3. Weekly Open Level                ±18  — institutional Mon 00:00 UTC reference
+ *   4. Prior Week High / Low            ±15  — key breakout/breakdown level
+ *   5. Momentum (Vol-confirmed RSI)     ±12  — real-time pressure w/ volume gate
+ *   6. Sigma Z-Score (regime-gated)     ±10  — only meaningful in ranging markets
+ *   7. Day-of-Week History              ±8   — background context only
+ *   8. Monthly Seasonality              ±4   — very minor seasonal tint
+ *   TOTAL MAX                           ±112 → normalized to ±100
+ *
+ * Verdict thresholds (on normalized −100 to +100 score):
+ *   score ≥ +20  → BULLISH
+ *   score ≤ −20  → BEARISH
+ *   otherwise    → CAUTION
+ *
+ * Key upgrades from v3:
+ *   - Market Structure (HH/HL check on last 20 daily closes) — NEW
+ *   - Prior Week High/Low breakout/breakdown signal — NEW
+ *   - Sigma is now REGIME-GATED: in a bull trend, being at +2σ is NOT penalized
+ *     (because BTC regularly rides +2σ in bull trends for weeks)
+ *   - Momentum uses VOLUME confirmation: strong move on below-avg volume = discounted
  */
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/**
- * Determine if a candle is bullish (close > open)
- */
-function isBullish(candle) {
-  return candle.close > candle.open;
-}
+// ─── Pure Utilities ───────────────────────────────────────────────────────────
 
-/**
- * Calculate percentage return for a candle
- */
-function pctReturn(candle) {
-  return ((candle.close - candle.open) / candle.open) * 100;
-}
+function isBullish(candle) { return candle.close > candle.open; }
+function pctReturn(candle) { return ((candle.close - candle.open) / candle.open) * 100; }
+function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
 
-/**
- * Analyze day-of-week bias from candle data
- * Returns stats for each day (0=Sun … 6=Sat)
- */
-export function analyzeDayOfWeek(candles) {
-  const stats = {};
+// ─── Indicators ───────────────────────────────────────────────────────────────
 
-  for (let d = 0; d < 7; d++) {
-    stats[d] = {
-      day: d,
-      dayName: DAY_NAMES[d],
-      total: 0,
-      bullish: 0,
-      bearish: 0,
-      returns: [],
-      avgReturn: 0,
-      bullishRate: 0,
-      bearishRate: 0,
-      avgBullishReturn: 0,
-      avgBearishReturn: 0,
-      maxGain: 0,
-      maxLoss: 0,
-      medianReturn: 0,
-      bias: 'neutral',
-      strength: 0, // 0-100 confidence
-      streaks: { currentBullStreak: 0, currentBearStreak: 0, maxBullStreak: 0, maxBearStreak: 0 },
-    };
-  }
-
-  // Sort candles by date
-  const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
-
-  for (const candle of sorted) {
-    const dow = new Date(candle.date + 'T12:00:00Z').getUTCDay();
-    const ret = pctReturn(candle);
-    const s = stats[dow];
-
-    s.total++;
-    s.returns.push(ret);
-    if (ret > 0) s.bullish++;
-    else s.bearish++;
-    s.maxGain = Math.max(s.maxGain, ret);
-    s.maxLoss = Math.min(s.maxLoss, ret);
-  }
-
-  // Calculate derived stats
-  for (let d = 0; d < 7; d++) {
-    const s = stats[d];
-    if (s.total === 0) continue;
-
-    const sortedReturns = [...s.returns].sort((a, b) => a - b);
-    s.avgReturn = s.returns.reduce((a, b) => a + b, 0) / s.returns.length;
-    s.bullishRate = (s.bullish / s.total) * 100;
-    s.bearishRate = (s.bearish / s.total) * 100;
-
-    // Median
-    const mid = Math.floor(sortedReturns.length / 2);
-    s.medianReturn = sortedReturns.length % 2 === 0
-      ? (sortedReturns[mid - 1] + sortedReturns[mid]) / 2
-      : sortedReturns[mid];
-
-    // Avg bullish/bearish returns
-    const bullReturns = s.returns.filter(r => r > 0);
-    const bearReturns = s.returns.filter(r => r < 0);
-    s.avgBullishReturn = bullReturns.length ? bullReturns.reduce((a, b) => a + b, 0) / bullReturns.length : 0;
-    s.avgBearishReturn = bearReturns.length ? bearReturns.reduce((a, b) => a + b, 0) / bearReturns.length : 0;
-
-    // Bias determination
-    // Use both win rate and average return weighted
-    const winRateSignal = s.bullishRate - 50; // positive = bullish edge
-    const returnSignal = s.avgReturn; // positive = bullish
-
-    // Normalize signals to -1 to 1
-    const normalizedWinRate = winRateSignal / 50;
-    const normalizedReturn = Math.min(Math.max(returnSignal / 3, -1), 1); // cap at ±3%
-
-    const combinedSignal = (normalizedWinRate * 0.6) + (normalizedReturn * 0.4);
-
-    if (combinedSignal > 0.05) s.bias = 'bullish';
-    else if (combinedSignal < -0.05) s.bias = 'bearish';
-    else s.bias = 'neutral';
-
-    // Strength = how far from 50% win rate (0-100 scale)
-    s.strength = Math.min(Math.abs(combinedSignal) * 100, 100);
-  }
-
-  // Calculate streaks
-  for (let d = 0; d < 7; d++) {
-    const dayCandlesSorted = sorted.filter(c => new Date(c.date + 'T12:00:00Z').getUTCDay() === d);
-    let bullStreak = 0, bearStreak = 0, maxBull = 0, maxBear = 0;
-
-    for (const c of dayCandlesSorted) {
-      if (isBullish(c)) {
-        bullStreak++;
-        bearStreak = 0;
-        maxBull = Math.max(maxBull, bullStreak);
-      } else {
-        bearStreak++;
-        bullStreak = 0;
-        maxBear = Math.max(maxBear, bearStreak);
-      }
-    }
-    stats[d].streaks = { currentBullStreak: bullStreak, currentBearStreak: bearStreak, maxBullStreak: maxBull, maxBearStreak: maxBear };
-  }
-
-  return stats;
-}
-
-/**
- * Calculate weekly open bias
- * Returns whether current price is above or below the weekly open
- * and the historical tendency when price is above/below weekly open
- */
-export function analyzeWeeklyOpenBias(candles, currentPrice) {
-  const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
-
-  // Find weekly opens (first candle of each ISO week)
-  const weekMap = new Map();
-  for (const candle of sorted) {
-    const d = new Date(candle.date + 'T12:00:00Z');
-    // ISO week key: year-week
-    const weekKey = getISOWeekKey(d);
-    if (!weekMap.has(weekKey)) {
-      weekMap.set(weekKey, { open: candle.open, candles: [] });
-    }
-    weekMap.get(weekKey).candles.push(candle);
-  }
-
-  // For each week: was the week bullish or bearish? Was price mostly above/below weekly open?
-  let aboveOpenBullish = 0, aboveOpenBearish = 0;
-  let belowOpenBullish = 0, belowOpenBearish = 0;
-
-  for (const [, week] of weekMap) {
-    if (week.candles.length < 3) continue;
-    const weeklyClose = week.candles[week.candles.length - 1].close;
-    const weeklyReturn = ((weeklyClose - week.open) / week.open) * 100;
-    const weekBullish = weeklyReturn > 0;
-
-    // Check midweek price position relative to weekly open
-    const midCandle = week.candles[Math.floor(week.candles.length / 2)];
-    const midAboveOpen = midCandle.close > week.open;
-
-    if (midAboveOpen) {
-      if (weekBullish) aboveOpenBullish++;
-      else aboveOpenBearish++;
-    } else {
-      if (weekBullish) belowOpenBullish++;
-      else belowOpenBearish++;
-    }
-  }
-
-  // Current week position
-  const thisWeekStart = getThisWeekMonday();
-  const thisWeekKey = getISOWeekKey(thisWeekStart);
-  const thisWeek = weekMap.get(thisWeekKey);
-  const weeklyOpen = thisWeek ? thisWeek.open : (sorted[sorted.length - 1]?.open ?? currentPrice);
-
-  const priceVsWeeklyOpen = currentPrice > weeklyOpen ? 'above' : 'below';
-  const pctFromWeeklyOpen = ((currentPrice - weeklyOpen) / weeklyOpen) * 100;
-
-  // Bullish rate when above weekly open historically
-  const aboveTotal = aboveOpenBullish + aboveOpenBearish;
-  const belowTotal = belowOpenBullish + belowOpenBearish;
-  const aboveOpenBullRate = aboveTotal > 0 ? (aboveOpenBullish / aboveTotal) * 100 : 50;
-  const belowOpenBullRate = belowTotal > 0 ? (belowOpenBullish / belowTotal) * 100 : 50;
-
-  return {
-    weeklyOpen,
-    currentPrice,
-    priceVsWeeklyOpen,
-    pctFromWeeklyOpen,
-    aboveOpenBullRate,
-    belowOpenBullRate,
-    currentBullRate: priceVsWeeklyOpen === 'above' ? aboveOpenBullRate : belowOpenBullRate,
-    bias: priceVsWeeklyOpen === 'above'
-      ? (aboveOpenBullRate > 55 ? 'bullish' : aboveOpenBullRate < 45 ? 'bearish' : 'neutral')
-      : (belowOpenBullRate > 55 ? 'bullish' : belowOpenBullRate < 45 ? 'bearish' : 'neutral'),
-  };
-}
-
-/**
- * Analyze monthly seasonal bias
- */
-export function analyzeMonthlyBias(candles) {
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const stats = {};
-
-  for (let m = 0; m < 12; m++) {
-    stats[m] = { month: m, monthName: MONTHS[m], total: 0, bullish: 0, returns: [], avgReturn: 0, bullishRate: 0, bias: 'neutral' };
-  }
-
-  // Group by month and calculate monthly returns (first to last candle of month)
-  const monthMap = new Map();
-  for (const candle of candles) {
-    const d = new Date(candle.date + 'T12:00:00Z');
-    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
-    if (!monthMap.has(key)) monthMap.set(key, { month: d.getUTCMonth(), candles: [] });
-    monthMap.get(key).candles.push(candle);
-  }
-
-  for (const [, mData] of monthMap) {
-    if (mData.candles.length < 10) continue;
-    const sorted = mData.candles.sort((a, b) => a.date.localeCompare(b.date));
-    const monthReturn = ((sorted[sorted.length - 1].close - sorted[0].open) / sorted[0].open) * 100;
-    const s = stats[mData.month];
-    s.total++;
-    s.returns.push(monthReturn);
-    if (monthReturn > 0) s.bullish++;
-  }
-
-  for (let m = 0; m < 12; m++) {
-    const s = stats[m];
-    if (s.total === 0) continue;
-    s.avgReturn = s.returns.reduce((a, b) => a + b, 0) / s.returns.length;
-    s.bullishRate = (s.bullish / s.total) * 100;
-    s.bias = s.bullishRate > 55 ? 'bullish' : s.bullishRate < 45 ? 'bearish' : 'neutral';
-  }
-
-  return stats;
-}
-
-export const DEFAULT_BIAS_FILTERS = {
-  preset: 'highest_prob', // 'highest_prob' | 'sigma_regime' | 'bleed_guard' | 'trend_structure' | 'recent_regime' | 'raw_legacy' | 'custom'
-  enableSigma: true,
-  enableRegime: true,
-  enableTrend: true,
-  enableBleedGuard: true,
-  enableWeeklyOpen: true,
-  enableRecentRegime: true,
-  enableRawStats: true,
-};
-
-/**
- * Calculate Rolling Standard Deviation (Sigma), Z-Scores, and Expected Volatility Bands
- */
-export function calculateSigmas(candles, currentPrice, period = 20) {
-  if (!candles || candles.length < period) {
-    const p = Number(currentPrice || 80000);
-    return {
-      mean: Math.round(p),
-      stdDev: Math.round(p * 0.025),
-      zScore: 0,
-      zScoreText: '+0.00σ',
-      status: 'Fair Value Equilibrium (±1σ)',
-      statusShort: 'Fair Value',
-      color: '#38bdf8',
-      scoreImpact: 0,
-      dailyStdDevPct: 2.5,
-      plus1Sigma: Math.round(p * 1.025),
-      minus1Sigma: Math.round(p * 0.975),
-      plus2Sigma: Math.round(p * 1.05),
-      minus2Sigma: Math.round(p * 0.95),
-      plus3Sigma: Math.round(p * 1.075),
-      minus3Sigma: Math.round(p * 0.925),
-      bandwidthPct: 5.0,
-    };
-  }
-
-  const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
-  const recentCandles = sorted.slice(-period);
-  const closes = recentCandles.map(c => c.close);
-
-  // Mean (20 SMA)
-  const mean = closes.reduce((a, b) => a + b, 0) / period;
-
-  // Population standard deviation
-  const variance = closes.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / period;
-  const stdDev = Math.sqrt(variance);
-
-  // Current price Z-score from 20-day mean
-  const zScore = stdDev > 0 ? (currentPrice - mean) / stdDev : 0;
-
-  // Calculate rolling daily returns volatility (% std dev)
-  const returns = [];
-  for (let i = 1; i < recentCandles.length; i++) {
-    const prev = recentCandles[i - 1].close;
-    if (prev > 0) {
-      returns.push(((recentCandles[i].close - prev) / prev) * 100);
-    }
-  }
-  const avgReturn = returns.length ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
-  const returnVariance = returns.length ? returns.reduce((acc, r) => acc + Math.pow(r - avgReturn, 2), 0) / returns.length : 0;
-  const dailyStdDevPct = Math.sqrt(returnVariance) || 2.5;
-
-  // Daily Open anchor (or last candle open)
-  const lastCandle = sorted[sorted.length - 1];
-  const DO = lastCandle.open || currentPrice;
-
-  // 20-period Gaussian Distribution Sigma Bands (strictly aligned with Mean & Z-score)
-  const plus1Sigma = mean + stdDev;
-  const minus1Sigma = mean - stdDev;
-  const plus2Sigma = mean + (2 * stdDev);
-  const minus2Sigma = mean - (2 * stdDev);
-  const plus3Sigma = mean + (3 * stdDev);
-  const minus3Sigma = mean - (3 * stdDev);
-
-  // Expected 24h Daily Volatility Range anchored to Daily Open
-  const dailyHigh1Sigma = DO * (1 + (dailyStdDevPct / 100));
-  const dailyLow1Sigma = DO * (1 - (dailyStdDevPct / 100));
-  const dailyHigh2Sigma = DO * (1 + (2 * dailyStdDevPct / 100));
-  const dailyLow2Sigma = DO * (1 - (2 * dailyStdDevPct / 100));
-
-  // Bollinger Bandwidth % = (4 * stdDev / mean) * 100
-  const bandwidthPct = mean > 0 ? ((4 * stdDev) / mean) * 100 : 0;
-
-  // Determine Z-Score Status & Bias Scoring Impact
-  let status = 'Fair Value Area (±1.2σ)';
-  let statusShort = 'Fair Value';
-  let color = '#38bdf8';
-  let scoreImpact = 0;
-
-  if (zScore > 2.2) {
-    status = 'Extreme Overbought Extension (> +2.2σ) — Mean Reversion Risk';
-    statusShort = 'Extreme Exhaustion (+2.2σ)';
-    color = '#f87171'; // red warning
-    scoreImpact = -25; // penalty: buying at +2.2 sigma is a high-risk trap!
-  } else if (zScore > 1.2) {
-    status = 'Upper Expansion (+1.2σ to +2.2σ) — Bullish Momentum';
-    statusShort = 'Upper Expansion';
-    color = '#4ade80';
-    scoreImpact = 15;
-  } else if (zScore < -2.2) {
-    status = 'Extreme Oversold Capitulation (< -2.2σ) — High Bounce Edge';
-    statusShort = 'Deep Oversold (-2.2σ)';
-    color = '#4ade80'; // green buy bounce
-    scoreImpact = 25; // mean-reversion long edge
-  } else if (zScore < -1.2) {
-    status = 'Lower Discount (-1.2σ to -2.2σ) — Institutional Value Dip';
-    statusShort = 'Value Dip';
-    color = '#38bdf8';
-    scoreImpact = 15;
-  } else {
-    status = 'Inside Fair Value Equilibrium (±1.2σ) — Gaussian Distribution';
-    statusShort = 'Equilibrium';
-    color = '#94a3b8';
-    scoreImpact = 0;
-  }
-
-  return {
-    mean: Math.round(mean),
-    stdDev: Math.round(stdDev),
-    zScore: Math.round(zScore * 100) / 100,
-    zScoreText: `${zScore >= 0 ? '+' : ''}${zScore.toFixed(2)}σ`,
-    status,
-    statusShort,
-    color,
-    scoreImpact,
-    dailyStdDevPct: Math.round(dailyStdDevPct * 100) / 100,
-    plus1Sigma: Math.round(plus1Sigma),
-    minus1Sigma: Math.round(minus1Sigma),
-    plus2Sigma: Math.round(plus2Sigma),
-    minus2Sigma: Math.round(minus2Sigma),
-    plus3Sigma: Math.round(plus3Sigma),
-    dailyHigh1Sigma: Math.round(dailyHigh1Sigma),
-    dailyLow1Sigma: Math.round(dailyLow1Sigma),
-    dailyHigh2Sigma: Math.round(dailyHigh2Sigma),
-    dailyLow2Sigma: Math.round(dailyLow2Sigma),
-    bandwidthPct: Math.round(bandwidthPct * 100) / 100,
-  };
-}
-
-/**
- * Classify Market Regime (Trend + Volatility Squeeze/Expansion)
- */
-export function classifyMarketRegime(candles, currentPrice, ema20, ema50, sigmaData) {
-  const isBullTrend = currentPrice > ema20 && ema20 > ema50;
-  const isBearTrend = currentPrice < ema20 && ema20 < ema50;
-  const bandwidth = sigmaData?.bandwidthPct || 8;
-
-  let regimeKey = 'CHOP_MEAN_REVERTING';
-  let name = 'Mean-Reverting Range';
-  let type = 'range';
-  let color = '#fbbf24'; // amber
-  let score = 0;
-  let description = 'Price is rotating within the value area. Fade extensions past ±1.8σ back toward fair value.';
-
-  if (bandwidth < 6.5) {
-    regimeKey = 'RANGE_COMPRESSION_SQUEEZE';
-    name = 'Range Compression (Squeeze)';
-    type = 'squeeze';
-    color = '#38bdf8'; // blue
-    score = isBullTrend ? 10 : isBearTrend ? -10 : 0;
-    description = 'Volatility is heavily compressed in a coil/squeeze. Breakout traps are high; directional moves ignite suddenly.';
-  } else if (isBullTrend) {
-    regimeKey = 'BULLISH_TREND_EXPANSION';
-    name = 'Bullish Trend Expansion';
-    type = 'bull_trend';
-    color = '#4ade80'; // bright green
-    score = 25;
-    description = 'Market is in an active markup phase above 20 & 50 EMA. Pullbacks into -1σ / 20 EMA are high-probability entries.';
-  } else if (isBearTrend) {
-    regimeKey = 'BEARISH_TREND_BREAKDOWN';
-    name = 'Bearish Trend Breakdown';
-    type = 'bear_trend';
-    color = '#f87171'; // red
-    score = -25;
-    description = 'Market is in an active markdown phase below 20 & 50 EMA. Rallies into +1σ / 20 EMA are heavy resistance traps.';
-  } else {
-    regimeKey = 'TRANSITION_CHOP';
-    name = 'Rotational Transition';
-    type = 'transition';
-    color = '#fbbf24';
-    score = 0;
-    description = 'Mixed structure between 20 & 50 EMA. Focus on key support/resistance boundaries rather than trend-following.';
-  }
-
-  return {
-    key: regimeKey,
-    name,
-    type,
-    color,
-    score,
-    bandwidth,
-    description,
-  };
-}
-
-/**
- * Calculate Exponential Moving Average (EMA)
- */
 export function calculateEMA(data, period) {
   if (!data || data.length === 0) return 0;
   if (data.length < period) return data[data.length - 1];
   const k = 2 / (period + 1);
   let ema = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  for (let i = period; i < data.length; i++) {
-    ema = data[i] * k + ema * (1 - k);
-  }
+  for (let i = period; i < data.length; i++) ema = data[i] * k + ema * (1 - k);
   return ema;
 }
 
-/**
- * Calculate Relative Strength Index (RSI)
- */
 export function calculateRSI(data, period = 14) {
   if (!data || data.length <= period) return 50;
   let gains = 0, losses = 0;
   for (let i = 1; i <= period; i++) {
     const diff = data[i] - data[i - 1];
-    if (diff >= 0) gains += diff;
-    else losses -= diff;
+    if (diff >= 0) gains += diff; else losses -= diff;
   }
-  let avgGain = gains / period;
-  let avgLoss = losses / period;
+  let avgGain = gains / period, avgLoss = losses / period;
   for (let i = period + 1; i < data.length; i++) {
     const diff = data[i] - data[i - 1];
     if (diff >= 0) {
@@ -481,288 +69,641 @@ export function calculateRSI(data, period = 14) {
   return Math.round((100 - (100 / (1 + rs))) * 10) / 10;
 }
 
-/**
- * Calculate the combined bias signal for today with multi-confluence institutional filters
- */
-export function getTodayBias(candles, currentPrice, referenceDate = null, filterSettings = DEFAULT_BIAS_FILTERS) {
-  const today = referenceDate instanceof Date ? referenceDate : new Date();
-  const dow = today.getUTCDay();
-  const month = today.getUTCMonth();
-
-  const dowStats = analyzeDayOfWeek(candles);
-  const weeklyBias = analyzeWeeklyOpenBias(candles, currentPrice);
-  const monthlyStats = analyzeMonthlyBias(candles);
-
-  const todayDowStats = dowStats[dow];
-  const todayMonthStats = monthlyStats[month];
-
-  // 1. Raw Legacy Formula (historical DOW + Weekly Open + Monthly)
-  const dowSignal = todayDowStats.bullishRate - 50; // -50 to +50
-  const weeklySignal = weeklyBias.currentBullRate - 50;
-  const monthlySignal = todayMonthStats.bullishRate - 50;
-
-  const rawCombinedSignal = (dowSignal * 0.50) + (weeklySignal * 0.35) + (monthlySignal * 0.15);
-  const rawConfidence = Math.min(Math.round(Math.abs(rawCombinedSignal) * 2), 100);
-  const rawBias = rawCombinedSignal > 2 ? 'bullish' : rawCombinedSignal < -2 ? 'bearish' : 'neutral';
-
-  // Recent N-week same-day performance (last 8 occurrences of today's DOW)
+export function calculateSigmas(candles, currentPrice, period = 20) {
+  if (!candles || candles.length < period) {
+    const p = Number(currentPrice || 80000);
+    return {
+      mean: Math.round(p), stdDev: Math.round(p * 0.025), zScore: 0,
+      zScoreText: '+0.00σ', status: 'Equilibrium', statusShort: 'Fair Value',
+      color: '#38bdf8', scoreImpact: 0, dailyStdDevPct: 2.5,
+      plus1Sigma: Math.round(p * 1.025), minus1Sigma: Math.round(p * 0.975),
+      plus2Sigma: Math.round(p * 1.05), minus2Sigma: Math.round(p * 0.95),
+      bandwidthPct: 5.0, zScore: 0,
+    };
+  }
   const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
-  const recentSameDay = sorted
-    .filter(c => new Date(c.date + 'T12:00:00Z').getUTCDay() === dow)
-    .slice(-8);
+  const recent = sorted.slice(-period);
+  const closes = recent.map(c => c.close);
+  const mean = closes.reduce((a, b) => a + b, 0) / period;
+  const variance = closes.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / period;
+  const stdDev = Math.sqrt(variance);
+  const zScore = stdDev > 0 ? (currentPrice - mean) / stdDev : 0;
 
-  const recentBullish = recentSameDay.filter(c => isBullish(c)).length;
-  const recentBullRate = recentSameDay.length > 0 ? (recentBullish / recentSameDay.length) * 100 : 50;
+  const returns = [];
+  for (let i = 1; i < recent.length; i++) {
+    const prev = recent[i - 1].close;
+    if (prev > 0) returns.push(((recent[i].close - prev) / prev) * 100);
+  }
+  const avgRet = returns.length ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
+  const retVar = returns.length ? returns.reduce((a, r) => a + Math.pow(r - avgRet, 2), 0) / returns.length : 0;
+  const dailyStdDevPct = Math.sqrt(retVar) || 2.5;
+  const bandwidthPct = mean > 0 ? ((4 * stdDev) / mean) * 100 : 0;
 
-  // 2. High-Probability Confluence Filters (Sigmas, Market Regime, EMA 20/50, Bleed Trap Guard, RSI, 24h Momentum)
+  // Raw score impact — will be regime-gated in getTodayBias
+  let status, statusShort, color, scoreImpact;
+  if (zScore > 2.2) {
+    status = 'Extreme Overbought — Mean Reversion Risk High'; statusShort = 'Extreme OB'; color = '#f87171'; scoreImpact = -10;
+  } else if (zScore > 1.2) {
+    status = 'Upper Expansion — Bullish Momentum Zone'; statusShort = 'Upper Band'; color = '#4ade80'; scoreImpact = 8;
+  } else if (zScore < -2.2) {
+    status = 'Extreme Oversold — High Bounce Edge'; statusShort = 'Extreme OS'; color = '#4ade80'; scoreImpact = 10;
+  } else if (zScore < -1.2) {
+    status = 'Value Dip — Institutional Discount Area'; statusShort = 'Value Dip'; color = '#38bdf8'; scoreImpact = 6;
+  } else {
+    status = 'Inside Fair Value — Gaussian Center'; statusShort = 'Fair Value'; color = '#94a3b8'; scoreImpact = 0;
+  }
+
+  return {
+    mean: Math.round(mean), stdDev: Math.round(stdDev),
+    zScore: Math.round(zScore * 100) / 100,
+    zScoreText: `${zScore >= 0 ? '+' : ''}${zScore.toFixed(2)}σ`,
+    status, statusShort, color, scoreImpact,
+    dailyStdDevPct: Math.round(dailyStdDevPct * 100) / 100,
+    plus1Sigma: Math.round(mean + stdDev), minus1Sigma: Math.round(mean - stdDev),
+    plus2Sigma: Math.round(mean + 2 * stdDev), minus2Sigma: Math.round(mean - 2 * stdDev),
+    bandwidthPct: Math.round(bandwidthPct * 100) / 100,
+  };
+}
+
+// ─── NEW: 1D Market Structure — Higher Highs / Higher Lows ───────────────────
+/**
+ * Checks the last N daily candles for HH/HL (bull structure) or LH/LL (bear structure).
+ * Uses swing pivots: a local high is a candle whose high > prev and next candle highs.
+ * Returns: { type: 'bull'|'bear'|'neutral', score, label, detail }
+ */
+function analyzeMarketStructure(sorted, lookback = 20) {
+  if (sorted.length < lookback + 2) {
+    return { type: 'neutral', score: 0, label: 'Insufficient data', detail: 'Need more candle history' };
+  }
+
+  const slice = sorted.slice(-(lookback + 2)); // extra 2 for pivot detection edges
+
+  const swingHighs = [];
+  const swingLows = [];
+
+  // Find swing pivots (simple 1-bar left, 1-bar right)
+  for (let i = 1; i < slice.length - 1; i++) {
+    const prev = slice[i - 1], cur = slice[i], next = slice[i + 1];
+    if (cur.high > prev.high && cur.high > next.high) swingHighs.push(cur.high);
+    if (cur.low < prev.low && cur.low < next.low) swingLows.push(cur.low);
+  }
+
+  if (swingHighs.length < 2 || swingLows.length < 2) {
+    return { type: 'neutral', score: 0, label: 'No clear structure', detail: 'Price rotating — no dominant swing pattern' };
+  }
+
+  // Compare last 2 swing highs and last 2 swing lows
+  const lastHigh = swingHighs[swingHighs.length - 1];
+  const prevHigh = swingHighs[swingHighs.length - 2];
+  const lastLow = swingLows[swingLows.length - 1];
+  const prevLow = swingLows[swingLows.length - 2];
+
+  const makingHH = lastHigh > prevHigh;
+  const makingHL = lastLow > prevLow;
+  const makingLH = lastHigh < prevHigh;
+  const makingLL = lastLow < prevLow;
+
+  if (makingHH && makingHL) {
+    return {
+      type: 'bull', score: 20,
+      label: 'HH + HL (Bull Structure)',
+      detail: `Making Higher Highs ($${Math.round(lastHigh).toLocaleString()}) and Higher Lows ($${Math.round(lastLow).toLocaleString()}) — clean uptrend structure`,
+    };
+  } else if (makingLH && makingLL) {
+    return {
+      type: 'bear', score: -20,
+      label: 'LH + LL (Bear Structure)',
+      detail: `Making Lower Highs ($${Math.round(lastHigh).toLocaleString()}) and Lower Lows ($${Math.round(lastLow).toLocaleString()}) — clean downtrend structure`,
+    };
+  } else if (makingHH && makingLL) {
+    // Expanding range — volatile, no clear bias
+    return {
+      type: 'neutral', score: 0,
+      label: 'Expanding Range',
+      detail: `Higher Highs but Lower Lows — expanding volatility, no dominant structure`,
+    };
+  } else if (makingLH && makingHL) {
+    // Contracting range — compression before breakout
+    return {
+      type: 'neutral', score: 0,
+      label: 'Contracting (Compression)',
+      detail: `Lower Highs and Higher Lows — compressing toward a breakout`,
+    };
+  } else if (makingHH) {
+    return {
+      type: 'bull', score: 10,
+      label: 'HH — Weak Bull',
+      detail: `Higher Highs confirmed but lows not yet holding — partial bull structure`,
+    };
+  } else if (makingLL) {
+    return {
+      type: 'bear', score: -10,
+      label: 'LL — Weak Bear',
+      detail: `Lower Lows confirmed but highs not yet failing — partial bear structure`,
+    };
+  }
+
+  return { type: 'neutral', score: 0, label: 'Mixed Swings', detail: 'No clean HH/HL or LH/LL pattern detected' };
+}
+
+// ─── NEW: Prior Week High / Low ───────────────────────────────────────────────
+/**
+ * Finds the previous full ISO week's high and low.
+ * Returns: { pwh, pwl, priceVsPwh, priceVsPwl, signal, score, label, detail }
+ *
+ * Logic:
+ *   - Price > PWH → bullish breakout above last week's high (strong bull signal)
+ *   - Price < PWL → bearish breakdown below last week's low (strong bear signal)
+ *   - Price between PWL and PWH → respect range (neutral, no extra signal)
+ */
+function analyzePriorWeekLevels(sorted, currentPrice, now) {
+  const thisWeekKey = _getWeeklyOpenKey(now);
+
+  // Build week map: weekKey → { high, low, candles[] }
+  const weekMap = new Map();
+  for (const candle of sorted) {
+    const wk = _getWeeklyOpenKey(new Date(candle.date + 'T12:00:00Z'));
+    if (!weekMap.has(wk)) weekMap.set(wk, { high: -Infinity, low: Infinity, candles: [] });
+    const w = weekMap.get(wk);
+    w.high = Math.max(w.high, candle.high);
+    w.low = Math.min(w.low, candle.low);
+    w.candles.push(candle);
+  }
+
+  // Find prior week (the week before current)
+  const weekKeys = [...weekMap.keys()].sort();
+  const thisKeyIdx = weekKeys.indexOf(thisWeekKey);
+  if (thisKeyIdx < 1) {
+    return { pwh: 0, pwl: 0, signal: 'neutral', score: 0, label: 'No prior week data', detail: 'Insufficient history for prior week levels' };
+  }
+
+  const priorWeekKey = weekKeys[thisKeyIdx - 1];
+  const priorWeek = weekMap.get(priorWeekKey);
+
+  // Need at least 3 candles to trust the week data
+  if (!priorWeek || priorWeek.candles.length < 3) {
+    return { pwh: 0, pwl: 0, signal: 'neutral', score: 0, label: 'Incomplete prior week', detail: 'Prior week has insufficient candle data' };
+  }
+
+  const pwh = priorWeek.high;
+  const pwl = priorWeek.low;
+  const weekRange = pwh - pwl;
+  const pctFromPwh = ((currentPrice - pwh) / pwh) * 100;
+  const pctFromPwl = ((currentPrice - pwl) / pwl) * 100;
+  const posInRange = weekRange > 0 ? ((currentPrice - pwl) / weekRange) * 100 : 50;
+
+  let signal, score, label, detail;
+
+  if (currentPrice > pwh) {
+    // Above Prior Week High — bullish breakout
+    score = 15; signal = 'bull';
+    label = `+${pctFromPwh.toFixed(2)}% above PWH`;
+    detail = `Accepted above Prior Week High ($${Math.round(pwh).toLocaleString()}) — institutional breakout confirmed`;
+  } else if (currentPrice < pwl) {
+    // Below Prior Week Low — bearish breakdown
+    score = -15; signal = 'bear';
+    label = `${pctFromPwl.toFixed(2)}% below PWL`;
+    detail = `Trading below Prior Week Low ($${Math.round(pwl).toLocaleString()}) — institutional breakdown confirmed`;
+  } else if (posInRange >= 70) {
+    // Upper 30% of prior week range — leaning bullish, potential PWH test
+    score = 6; signal = 'bull';
+    label = `${posInRange.toFixed(0)}% of PW Range (upper)`;
+    detail = `In upper zone of PW Range ($${Math.round(pwl).toLocaleString()}–$${Math.round(pwh).toLocaleString()}) — testing prior week high resistance`;
+  } else if (posInRange <= 30) {
+    // Lower 30% of prior week range — leaning bearish, potential PWL test
+    score = -6; signal = 'bear';
+    label = `${posInRange.toFixed(0)}% of PW Range (lower)`;
+    detail = `In lower zone of PW Range ($${Math.round(pwl).toLocaleString()}–$${Math.round(pwh).toLocaleString()}) — hovering above prior week low support`;
+  } else {
+    // Middle of range — no directional edge
+    score = 0; signal = 'neutral';
+    label = `${posInRange.toFixed(0)}% of PW Range (mid)`;
+    detail = `Inside PW Range ($${Math.round(pwl).toLocaleString()}–$${Math.round(pwh).toLocaleString()}) mid-zone — no edge, respect both levels`;
+  }
+
+  return { pwh: Math.round(pwh), pwl: Math.round(pwl), pctFromPwh, pctFromPwl, posInRange, signal, score, label, detail };
+}
+
+// ─── Historical Analysis (kept for DOW grid display) ─────────────────────────
+
+export function analyzeDayOfWeek(candles) {
+  const stats = {};
+  for (let d = 0; d < 7; d++) {
+    stats[d] = { day: d, dayName: DAY_NAMES[d], total: 0, bullish: 0, bearish: 0, returns: [], avgReturn: 0, bullishRate: 0, bearishRate: 0, bias: 'neutral', strength: 0 };
+  }
+  const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
+  for (const candle of sorted) {
+    const dow = new Date(candle.date + 'T12:00:00Z').getUTCDay();
+    const ret = pctReturn(candle);
+    const s = stats[dow];
+    s.total++; s.returns.push(ret);
+    if (ret > 0) s.bullish++; else s.bearish++;
+  }
+  for (let d = 0; d < 7; d++) {
+    const s = stats[d];
+    if (s.total === 0) continue;
+    s.avgReturn = s.returns.reduce((a, b) => a + b, 0) / s.returns.length;
+    s.bullishRate = (s.bullish / s.total) * 100;
+    s.bearishRate = (s.bearish / s.total) * 100;
+    s.bias = s.bullishRate > 55 ? 'bullish' : s.bullishRate < 45 ? 'bearish' : 'neutral';
+    s.strength = Math.abs(s.bullishRate - 50);
+  }
+  return stats;
+}
+
+export function analyzeMonthlyBias(candles) {
+  const stats = {};
+  for (let m = 0; m < 12; m++) {
+    stats[m] = { month: m, monthName: MONTHS[m], total: 0, bullish: 0, returns: [], avgReturn: 0, bullishRate: 0, bias: 'neutral' };
+  }
+  const monthMap = new Map();
+  for (const candle of candles) {
+    const d = new Date(candle.date + 'T12:00:00Z');
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+    if (!monthMap.has(key)) monthMap.set(key, { month: d.getUTCMonth(), candles: [] });
+    monthMap.get(key).candles.push(candle);
+  }
+  for (const [, mData] of monthMap) {
+    if (mData.candles.length < 10) continue;
+    const sortedM = mData.candles.sort((a, b) => a.date.localeCompare(b.date));
+    const monthReturn = ((sortedM[sortedM.length - 1].close - sortedM[0].open) / sortedM[0].open) * 100;
+    const s = stats[mData.month];
+    s.total++; s.returns.push(monthReturn);
+    if (monthReturn > 0) s.bullish++;
+  }
+  for (let m = 0; m < 12; m++) {
+    const s = stats[m];
+    if (s.total === 0) continue;
+    s.avgReturn = s.returns.reduce((a, b) => a + b, 0) / s.returns.length;
+    s.bullishRate = (s.bullish / s.total) * 100;
+    s.bias = s.bullishRate > 55 ? 'bullish' : s.bullishRate < 45 ? 'bearish' : 'neutral';
+  }
+  return stats;
+}
+
+// ─── Week Key Helpers ─────────────────────────────────────────────────────────
+
+function _getWeeklyOpenKey(d) {
+  const copy = new Date(d);
+  copy.setUTCHours(0, 0, 0, 0);
+  copy.setUTCDate(copy.getUTCDate() + 4 - (copy.getUTCDay() || 7));
+  const ys = new Date(Date.UTC(copy.getUTCFullYear(), 0, 1));
+  const wn = Math.ceil((((copy - ys) / 86400000) + 1) / 7);
+  return `${copy.getUTCFullYear()}-W${String(wn).padStart(2, '0')}`;
+}
+
+function _getWeeklyOpen(candles, now) {
+  const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
+  const thisWeekKey = _getWeeklyOpenKey(now);
+  const weekMap = new Map();
+  for (const candle of sorted) {
+    const wk = _getWeeklyOpenKey(new Date(candle.date + 'T12:00:00Z'));
+    if (!weekMap.has(wk)) weekMap.set(wk, candle.open);
+  }
+  return weekMap.get(thisWeekKey) || sorted[sorted.length - 1]?.close || 0;
+}
+
+// ─── MAIN VERDICT ENGINE ──────────────────────────────────────────────────────
+
+/**
+ * getTodayBias v4 — deterministic single-verdict engine.
+ * No filter presets. No percentage splits. One answer.
+ */
+export function getTodayBias(candles, currentPrice, referenceDate = null) {
+  const now = referenceDate instanceof Date ? referenceDate : new Date();
+  const dow = now.getUTCDay();
+  const month = now.getUTCMonth();
+
+  const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
   const closes = sorted.map(c => c.close);
+  const volumes = sorted.map(c => c.volume || 0);
+
+  // ── Core Indicators ─────────────────────────────────────────────────────────
   const ema20 = calculateEMA(closes, 20);
   const ema50 = calculateEMA(closes, 50);
   const rsi14 = calculateRSI(closes, 14);
-
-  // 3. Quantitative Sigma Distribution & Market Regime Engines
   const sigmaMetrics = calculateSigmas(candles, currentPrice, 20);
-  const regimeMetrics = classifyMarketRegime(candles, currentPrice, ema20, ema50, sigmaMetrics);
+
+  // 20-day average volume (for momentum confirmation)
+  const recentVols = volumes.slice(-20).filter(v => v > 0);
+  const avgVol20 = recentVols.length > 0 ? recentVols.reduce((a, b) => a + b, 0) / recentVols.length : 0;
+  const lastVol = volumes[volumes.length - 1] || 0;
+  const prevVol = volumes[volumes.length - 2] || lastVol;
+  const volumeRatio = avgVol20 > 0 ? lastVol / avgVol20 : 1; // >1 = above avg, <1 = below avg
 
   const prevCandle = sorted.length >= 2 ? sorted[sorted.length - 2] : sorted[sorted.length - 1];
   const change24h = prevCandle && prevCandle.close > 0
-    ? ((currentPrice - prevCandle.close) / prevCandle.close) * 100
-    : 0;
+    ? ((currentPrice - prevCandle.close) / prevCandle.close) * 100 : 0;
+
+  const weeklyOpen = _getWeeklyOpen(candles, now);
+  const pctFromWeeklyOpen = weeklyOpen > 0 ? ((currentPrice - weeklyOpen) / weeklyOpen) * 100 : 0;
+  const aboveWeeklyOpen = currentPrice > weeklyOpen;
+
+  // Macro regime determination (used by sigma gate)
+  const isBullTrend = currentPrice > ema20 && ema20 > ema50;
+  const isBearTrend = currentPrice < ema20 && ema20 < ema50;
+  const isRangingOrChop = !isBullTrend && !isBearTrend;
+
   const priceVsEma20Pct = ema20 > 0 ? ((currentPrice - ema20) / ema20) * 100 : 0;
   const priceVsEma50Pct = ema50 > 0 ? ((currentPrice - ema50) / ema50) * 100 : 0;
 
-  // Confluence Scoring
-  const activeFilters = { ...DEFAULT_BIAS_FILTERS, ...(filterSettings || {}) };
-  const confluences = [];
-  let sumScores = 0;
-  let totalWeight = 0;
+  const dowStats = analyzeDayOfWeek(candles);
+  const monthlyStats = analyzeMonthlyBias(candles);
+  const todayDowStats = dowStats[dow];
+  const todayMonthStats = monthlyStats[month];
 
-  // A. Sigma Statistical Distribution & Z-Score
-  const sigmaConfluence = {
-    id: 'sigma_zscore',
-    name: 'Sigma Position (Z-Score)',
-    weight: 25,
-    score: sigmaMetrics.scoreImpact,
-    state: sigmaMetrics.scoreImpact > 0 ? 'bullish' : sigmaMetrics.scoreImpact < 0 ? 'bearish' : 'neutral',
-    valueText: `${sigmaMetrics.zScoreText} · ${sigmaMetrics.statusShort}`,
-    detail: `Daily σ: ±${sigmaMetrics.dailyStdDevPct}% · Expected: +1σ $${sigmaMetrics.plus1Sigma.toLocaleString()} / -1σ $${sigmaMetrics.minus1Sigma.toLocaleString()}`,
-  };
-  confluences.push(sigmaConfluence);
-  if (activeFilters.enableSigma) {
-    sumScores += sigmaMetrics.scoreImpact;
-    totalWeight += 25;
-  }
+  const recentSameDay = sorted
+    .filter(c => new Date(c.date + 'T12:00:00Z').getUTCDay() === dow)
+    .slice(-8);
+  const recentBullCount = recentSameDay.filter(c => isBullish(c)).length;
+  const recentBullRate = recentSameDay.length > 0 ? (recentBullCount / recentSameDay.length) * 100 : 50;
 
-  // B. Macro Market Regime (Trend + Volatility Squeeze)
-  const regimeMacroConfluence = {
-    id: 'market_regime',
-    name: 'Macro Market Regime',
-    weight: 25,
-    score: regimeMetrics.score,
-    state: regimeMetrics.type === 'bull_trend' ? 'bullish' : regimeMetrics.type === 'bear_trend' ? 'bearish' : 'neutral',
-    valueText: `${regimeMetrics.name} (BW: ${sigmaMetrics.bandwidthPct}%)`,
-    detail: regimeMetrics.description,
-  };
-  confluences.push(regimeMacroConfluence);
-  if (activeFilters.enableRegime) {
-    sumScores += regimeMetrics.score;
-    totalWeight += 25;
-  }
+  // ── Market Structure & Prior Week ───────────────────────────────────────────
+  const structureResult = analyzeMarketStructure(sorted, 20);
+  const pwLevels = analyzePriorWeekLevels(sorted, currentPrice, now);
 
-  // C. Trend Structure (20 EMA & 50 EMA)
-  let trendScore = 0;
-  if (currentPrice > ema20 && ema20 > ema50) trendScore = 25; // Golden bull trend
-  else if (currentPrice > ema20) trendScore = 15; // Above 20 EMA
-  else if (currentPrice < ema20 && ema20 < ema50) trendScore = -25; // Bear trend
-  else trendScore = -15; // Under 20 EMA
+  // ── Build Signals Array ──────────────────────────────────────────────────────
+  const signals = [];
 
-  const trendConfluence = {
-    id: 'trend',
-    name: 'Trend Structure (20 EMA)',
-    weight: 25,
-    score: trendScore,
-    state: trendScore > 0 ? 'bullish' : 'bearish',
-    valueText: `${priceVsEma20Pct > 0 ? '+' : ''}${priceVsEma20Pct.toFixed(2)}% vs 20 EMA ($${Math.round(ema20).toLocaleString()})`,
-    detail: currentPrice > ema20 ? 'Holding above Daily 20 EMA support' : 'Trading below Daily 20 EMA resistance',
-  };
-  confluences.push(trendConfluence);
-  if (activeFilters.enableTrend) {
-    sumScores += trendScore;
-    totalWeight += 25;
-  }
-
-  // D. Bleed Trap Guard (24h Net Delta & RSI 14)
-  let bleedScore = 0;
-  const isBleeding = change24h < -0.5 || rsi14 < 44;
-  const isPumping = change24h > 0.8 && rsi14 > 53;
-
-  if (isBleeding) {
-    bleedScore = -25;
-  } else if (isPumping) {
-    bleedScore = 25;
+  // ── 1. TREND (20/50 EMA) — ±25 ──────────────────────────────────────────────
+  let trendScore, trendState, trendLabel, trendDetail;
+  if (isBullTrend) {
+    trendScore = 25; trendState = 'bullish'; trendLabel = 'Bull Trend';
+    trendDetail = `Price > 20 EMA ($${Math.round(ema20).toLocaleString()}) > 50 EMA ($${Math.round(ema50).toLocaleString()}) — golden alignment`;
+  } else if (currentPrice > ema20 && !isBullTrend) {
+    trendScore = 10; trendState = 'bullish'; trendLabel = 'Weak Bull';
+    trendDetail = `Above 20 EMA ($${Math.round(ema20).toLocaleString()}) but 50 EMA not stacked — mixed structure`;
+  } else if (isBearTrend) {
+    trendScore = -25; trendState = 'bearish'; trendLabel = 'Bear Trend';
+    trendDetail = `Price < 20 EMA ($${Math.round(ema20).toLocaleString()}) < 50 EMA ($${Math.round(ema50).toLocaleString()}) — full bear alignment`;
   } else {
-    bleedScore = 0;
+    trendScore = -10; trendState = 'bearish'; trendLabel = 'Below 20 EMA';
+    trendDetail = `Price below 20 EMA ($${Math.round(ema20).toLocaleString()}) — in resistance zone, 50 EMA not broken`;
+  }
+  signals.push({
+    id: 'trend', name: 'Trend (20/50 EMA)', weight: 25,
+    score: trendScore, state: trendState, label: trendLabel, detail: trendDetail,
+    value: `${priceVsEma20Pct > 0 ? '+' : ''}${priceVsEma20Pct.toFixed(2)}% vs 20 EMA`,
+  });
+
+  // ── 2. MARKET STRUCTURE (HH/HL) — ±20 ───────────────────────────────────────
+  signals.push({
+    id: 'structure', name: 'Market Structure (1D)', weight: 20,
+    score: structureResult.score,
+    state: structureResult.type === 'bull' ? 'bullish' : structureResult.type === 'bear' ? 'bearish' : 'neutral',
+    label: structureResult.label,
+    detail: structureResult.detail,
+    value: structureResult.label,
+  });
+
+  // ── 3. WEEKLY OPEN — ±18 ────────────────────────────────────────────────────
+  let woScore, woState, woLabel, woDetail;
+  if (aboveWeeklyOpen) {
+    woScore = 18; woState = 'bullish'; woLabel = `+${pctFromWeeklyOpen.toFixed(2)}% above WO`;
+    woDetail = `Accepted above $${Math.round(weeklyOpen).toLocaleString()} weekly open — institutional long bias`;
+  } else {
+    woScore = -18; woState = 'bearish'; woLabel = `${pctFromWeeklyOpen.toFixed(2)}% below WO`;
+    woDetail = `Rejected below $${Math.round(weeklyOpen).toLocaleString()} weekly open — institutional short bias`;
+  }
+  signals.push({
+    id: 'weekly_open', name: 'Weekly Open Level', weight: 18,
+    score: woScore, state: woState, label: woLabel, detail: woDetail,
+    value: `$${Math.round(weeklyOpen).toLocaleString()}`,
+  });
+
+  // ── 4. PRIOR WEEK HIGH / LOW — ±15 ──────────────────────────────────────────
+  signals.push({
+    id: 'prior_week', name: 'Prior Week H/L', weight: 15,
+    score: pwLevels.score,
+    state: pwLevels.signal === 'bull' ? 'bullish' : pwLevels.signal === 'bear' ? 'bearish' : 'neutral',
+    label: pwLevels.label,
+    detail: pwLevels.detail,
+    value: pwLevels.pwh > 0 ? `PWH $${pwLevels.pwh.toLocaleString()} / PWL $${pwLevels.pwl.toLocaleString()}` : 'N/A',
+  });
+
+  // ── 5. MOMENTUM (Volume-Confirmed RSI + 24h) — ±12 ──────────────────────────
+  // Volume-confirmation gate: if move is on below-avg volume, halve the momentum score
+  // Strong = RSI > 54 + 24h > +1% + volume above avg
+  // Weak bleed = RSI < 44 OR 24h < -0.6%
+  // Volume-confirmed pump = needs volumeRatio > 0.9 (not on dead volume)
+  let momScore, momState, momLabel, momDetail;
+  const isStrongPump = change24h > 1.0 && rsi14 > 54;
+  const isWeakBleed = change24h < -0.6 || rsi14 < 44;
+  const volConfirmed = volumeRatio >= 0.9; // at least 90% of avg volume
+
+  if (isStrongPump) {
+    const rawScore = volConfirmed ? 12 : 6; // half score if thin volume
+    momScore = rawScore; momState = 'bullish';
+    momLabel = volConfirmed ? 'Strong Momentum (vol-confirmed)' : 'Pump on Low Volume (caution)';
+    momDetail = `RSI ${rsi14} · +${change24h.toFixed(2)}% 24h · Vol ${(volumeRatio * 100).toFixed(0)}% of avg${!volConfirmed ? ' — low volume pump, less conviction' : ''}`;
+  } else if (isWeakBleed) {
+    const rawScore = volConfirmed ? -12 : -6; // heavy bleed on high vol = more serious
+    momScore = rawScore; momState = 'bearish';
+    momLabel = volConfirmed ? 'Bearish Pressure (vol-confirmed)' : 'Weak Bleed (low volume)';
+    momDetail = `RSI ${rsi14}${rsi14 < 44 ? ' — selling momentum' : ''} · 24h ${change24h.toFixed(2)}% · Vol ${(volumeRatio * 100).toFixed(0)}% of avg`;
+  } else {
+    momScore = 0; momState = 'neutral'; momLabel = 'Neutral Flow';
+    momDetail = `RSI ${rsi14} · 24h ${change24h > 0 ? '+' : ''}${change24h.toFixed(2)}% · Vol ${(volumeRatio * 100).toFixed(0)}% of avg`;
+  }
+  signals.push({
+    id: 'momentum', name: 'Momentum (Vol-RSI)', weight: 12,
+    score: momScore, state: momState, label: momLabel, detail: momDetail,
+    value: `RSI ${rsi14} · ${change24h > 0 ? '+' : ''}${change24h.toFixed(2)}%`,
+  });
+
+  // ── 6. SIGMA Z-SCORE — ±10 (regime-gated) ───────────────────────────────────
+  // KEY FIX: In a bull trend, being at +2σ is NOT penalized.
+  // BTC regularly rides the upper band for weeks in bull markets.
+  // The mean-reversion penalty only applies in ranging/bear regimes.
+  let sigmaScore = sigmaMetrics.scoreImpact;
+
+  if (isBullTrend && sigmaMetrics.zScore > 2.2) {
+    // In a bull trend, extreme overbought just means strong trend — neutral, not bearish
+    sigmaScore = 0;
+  } else if (isBullTrend && sigmaMetrics.zScore > 1.2) {
+    // In a bull trend, upper band = trend continuation
+    sigmaScore = 8;
+  } else if (isBearTrend && sigmaMetrics.zScore < -2.2) {
+    // In a bear trend, extreme oversold can bounce but trend prevails — neutral
+    sigmaScore = 0;
+  }
+  // Else: use the raw scoreImpact from calculateSigmas (which handles the ranging case)
+
+  // Build regime-aware status text
+  let sigmaLabel = sigmaMetrics.statusShort;
+  let sigmaDetail = sigmaMetrics.status;
+  if (isBullTrend && sigmaMetrics.zScore > 2.2) {
+    sigmaLabel = 'OB in Bull Trend (normal)';
+    sigmaDetail = `${sigmaMetrics.zScoreText} — overbought in bull trend is momentum, not reversal signal`;
+  } else if (isBearTrend && sigmaMetrics.zScore < -2.2) {
+    sigmaLabel = 'OS in Bear Trend (dead-cat risk)';
+    sigmaDetail = `${sigmaMetrics.zScoreText} — oversold in bear trend — wait for structure before longing`;
   }
 
-  const isBleedTrap = (change24h < -0.4 || rsi14 < 45 || currentPrice < ema20) && (todayDowStats.bullishRate >= 50);
+  signals.push({
+    id: 'sigma', name: 'Sigma (Regime-Gated)', weight: 10,
+    score: clamp(sigmaScore, -10, 10),
+    state: sigmaScore > 0 ? 'bullish' : sigmaScore < 0 ? 'bearish' : 'neutral',
+    label: sigmaLabel, detail: sigmaDetail,
+    value: sigmaMetrics.zScoreText,
+  });
 
-  const bleedConfluence = {
-    id: 'bleed_guard',
-    name: 'Bleed Trap Guard (RSI & Delta)',
-    weight: 20,
-    score: bleedScore,
-    state: bleedScore < 0 ? 'bearish' : bleedScore > 0 ? 'bullish' : 'neutral',
-    valueText: `24h: ${change24h > 0 ? '+' : ''}${change24h.toFixed(2)}% · RSI: ${rsi14.toFixed(1)}`,
-    detail: isBleedTrap
-      ? '⚠️ Warning: Intraday distribution active despite historical bullish bias'
-      : isBleeding
-      ? 'Bearish momentum & selling pressure dominant'
-      : isPumping
-      ? 'Clean expansion & positive delta momentum'
-      : 'Neutral order flow consolidation',
-  };
-  confluences.push(bleedConfluence);
-  if (activeFilters.enableBleedGuard) {
-    sumScores += bleedScore;
-    totalWeight += 20;
+  // ── 7. DOW HISTORY — ±8 ─────────────────────────────────────────────────────
+  const dowEdge = todayDowStats.bullishRate - 50;
+  const dowScore = clamp(Math.round(dowEdge * 0.16), -8, 8);
+  const dowState = dowScore > 0 ? 'bullish' : dowScore < 0 ? 'bearish' : 'neutral';
+  signals.push({
+    id: 'dow', name: `${DAY_NAMES[dow]} DOW History`, weight: 8,
+    score: dowScore, state: dowState,
+    label: `${todayDowStats.bullishRate.toFixed(0)}% bull rate`,
+    detail: `${todayDowStats.bullish} green / ${todayDowStats.total} ${DAY_NAMES[dow]}s since 2021 — context only`,
+    value: `${todayDowStats.bullishRate.toFixed(0)}% (${todayDowStats.total} sample)`,
+  });
+
+  // ── 8. SEASONALITY — ±4 ─────────────────────────────────────────────────────
+  const monthEdge = todayMonthStats.bullishRate - 50;
+  const monthScore = clamp(Math.round(monthEdge * 0.08), -4, 4);
+  const monthState = monthScore > 0 ? 'bullish' : monthScore < 0 ? 'bearish' : 'neutral';
+  signals.push({
+    id: 'seasonal', name: `${MONTHS[month]} Seasonality`, weight: 4,
+    score: monthScore, state: monthState,
+    label: `${todayMonthStats.bullishRate.toFixed(0)}% bull in ${MONTHS[month]}`,
+    detail: `Historical: ${todayMonthStats.bullish} green / ${todayMonthStats.total} ${MONTHS[month]}s — minor seasonal tint`,
+    value: `${todayMonthStats.bullishRate.toFixed(0)}% (${todayMonthStats.total} years)`,
+  });
+
+  // ── COMPOSITE SCORE ──────────────────────────────────────────────────────────
+  // Max theoretical raw sum = 25+20+18+15+12+10+8+4 = 112
+  // Normalize to -100 to +100 for clean display
+  const rawTotal = signals.reduce((sum, s) => sum + s.score, 0);
+  const maxPossible = 112;
+  const normalizedScore = clamp(Math.round((rawTotal / maxPossible) * 100), -100, 100);
+
+  // ── BLEED TRAP DETECTION ─────────────────────────────────────────────────────
+  // Calendar says bull BUT price action says no: RSI weak, 24h negative, below 20 EMA
+  const isBleedTrap =
+    (change24h < -0.5 || rsi14 < 44 || currentPrice < ema20) &&
+    todayDowStats.bullishRate >= 54;
+
+  // ── VERDICT ──────────────────────────────────────────────────────────────────
+  let verdict, verdictColor, verdictGlow;
+  if (normalizedScore >= 20) {
+    verdict = 'BULLISH'; verdictColor = '#22c55e'; verdictGlow = 'rgba(34,197,94,0.2)';
+  } else if (normalizedScore <= -20) {
+    verdict = 'BEARISH'; verdictColor = '#ef4444'; verdictGlow = 'rgba(239,68,68,0.2)';
+  } else {
+    verdict = 'CAUTION'; verdictColor = '#f59e0b'; verdictGlow = 'rgba(245,158,11,0.2)';
   }
 
-  // E. Weekly Open Level
-  const woScore = weeklyBias.priceVsWeeklyOpen === 'above' ? 20 : -20;
-  const woConfluence = {
-    id: 'weekly_open',
-    name: 'Weekly Open Level',
-    weight: 20,
-    score: woScore,
-    state: weeklyBias.priceVsWeeklyOpen === 'above' ? 'bullish' : 'bearish',
-    valueText: `${weeklyBias.pctFromWeeklyOpen > 0 ? '+' : ''}${weeklyBias.pctFromWeeklyOpen.toFixed(2)}% ($${Math.round(weeklyBias.weeklyOpen).toLocaleString()})`,
-    detail: weeklyBias.priceVsWeeklyOpen === 'above'
-      ? 'Acceptance above Weekly Open (Institutional Long Edge)'
-      : 'Trading below Weekly Open (Institutional Short Edge)',
-  };
-  confluences.push(woConfluence);
-  if (activeFilters.enableWeeklyOpen) {
-    sumScores += woScore;
-    totalWeight += 20;
+  // Bleed trap override: downgrade BULLISH → CAUTION
+  if (isBleedTrap && verdict === 'BULLISH') {
+    verdict = 'CAUTION'; verdictColor = '#f59e0b'; verdictGlow = 'rgba(245,158,11,0.2)';
   }
 
-  // F. Recent 8-Week Cycle Regime
-  let recentCycleScore = 0;
-  if (recentBullRate >= 62.5) recentCycleScore = 10;
-  else if (recentBullRate <= 37.5) recentCycleScore = -10;
-  else recentCycleScore = 0;
+  // ── VERDICT REASON (plain English, actionable) ───────────────────────────────
+  const bullSignals = signals.filter(s => s.state === 'bullish' && Math.abs(s.score) >= 8).map(s => s.name);
+  const bearSignals = signals.filter(s => s.state === 'bearish' && Math.abs(s.score) >= 8).map(s => s.name);
 
-  const recentCycleConfluence = {
-    id: 'recent_regime',
-    name: 'Recent 8-Week DOW Win Rate',
-    weight: 10,
-    score: recentCycleScore,
-    state: recentBullRate > 50 ? 'bullish' : recentBullRate < 50 ? 'bearish' : 'neutral',
-    valueText: `${recentBullRate.toFixed(0)}% Bull win rate (last 8 ${DAY_NAMES[dow].slice(0, 3)}s)`,
-    detail: recentBullRate >= 60
-      ? 'Current cycle strongly favors longs on this day'
-      : recentBullRate <= 40
-      ? 'Current cycle heavily bleeds on this day'
-      : 'Even distribution in recent weeks',
-  };
-  confluences.push(recentCycleConfluence);
-  if (activeFilters.enableRecentRegime) {
-    sumScores += recentCycleScore;
-    totalWeight += 10;
+  let verdictReason;
+  if (verdict === 'BULLISH') {
+    verdictReason = `${bullSignals.join(' · ')} all align bullish. Pullbacks toward $${Math.round(ema20).toLocaleString()} (20 EMA) are high-probability long entries. ${pwLevels.pwh > 0 && currentPrice > pwLevels.pwh ? `Trading above Prior Week High $${pwLevels.pwh.toLocaleString()} — trend continuation bias.` : ''}`;
+  } else if (verdict === 'BEARISH') {
+    verdictReason = `${bearSignals.join(' · ')} confirm downside. Rallies into $${Math.round(ema20).toLocaleString()} (20 EMA) are institutional resistance traps. ${pwLevels.pwl > 0 && currentPrice < pwLevels.pwl ? `Broken below Prior Week Low $${pwLevels.pwl.toLocaleString()} — continuation breakdown.` : ''}`;
+  } else if (isBleedTrap) {
+    verdictReason = `Historical DOW stats favor bulls, but real-time structure is bleeding: RSI ${rsi14} · 24h ${change24h.toFixed(2)}% · price ${currentPrice < ema20 ? 'below' : 'near'} 20 EMA. Do NOT blindly trust the calendar. Wait for structure to hold.`;
+  } else {
+    const parts = [];
+    if (bullSignals.length) parts.push(`${bullSignals.join(' · ')} favor longs`);
+    if (bearSignals.length) parts.push(`${bearSignals.join(' · ')} favor shorts`);
+    verdictReason = parts.length > 0
+      ? `Mixed signals — ${parts.join(', but ')}. No institutional edge. Trade key levels only: PWH $${pwLevels.pwh?.toLocaleString() || '--'} above, PWL $${pwLevels.pwl?.toLocaleString() || '--'} below.`
+      : `Signals are balanced with no dominant direction. Price is at equilibrium. Wait for a confirmed level break before committing.`;
   }
 
-  // G. Raw DOW Historical Rate
-  const rawDowScore = Math.max(-10, Math.min(10, Math.round((todayDowStats.bullishRate - 50) * 0.2)));
-  const rawDowConfluence = {
-    id: 'raw_dow',
-    name: 'Historical DOW Baseline',
-    weight: 10,
-    score: rawDowScore,
-    state: todayDowStats.bullishRate > 52 ? 'bullish' : todayDowStats.bullishRate < 48 ? 'bearish' : 'neutral',
-    valueText: `${todayDowStats.bullishRate.toFixed(0)}% Bull (5-Year Average)`,
-    detail: `${todayDowStats.bullish} green / ${todayDowStats.total} total occurrences since 2021`,
-  };
-  confluences.push(rawDowConfluence);
-  if (activeFilters.enableRawStats) {
-    sumScores += rawDowScore;
-    totalWeight += 10;
-  }
+  const convictionLevel = Math.round(clamp(Math.abs(normalizedScore) / 20, 1, 5));
 
-  // Final Composite High-Probability Calculation
-  const isRawPreset = activeFilters.preset === 'raw_legacy' || totalWeight === 0;
-
-  let finalBias = rawBias;
-  let finalConfidence = rawConfidence;
-  let normalizedScore = 0;
-
-  if (!isRawPreset && totalWeight > 0) {
-    normalizedScore = Math.round((sumScores / totalWeight) * 100);
-    finalBias = normalizedScore > 8 ? 'bullish' : normalizedScore < -8 ? 'bearish' : 'neutral';
-    // When confluences align, confidence reflects true institutional certainty (65% - 95%)
-    finalConfidence = Math.min(Math.max(Math.round(Math.abs(normalizedScore)), 55), 96);
-  }
-
-  // Bleed Trap Alert Details
-  const bleedTrap = {
-    detected: isBleedTrap,
-    title: 'BLEED TRAP CONFLICT DETECTED',
-    explanation: `Historical Day-of-Week statistics show a ${todayDowStats.bullishRate.toFixed(0)}% bullish tendency, but real-time technical structure is actively bleeding (${change24h > 0 ? '+' : ''}${change24h.toFixed(2)}% 24h delta, RSI ${rsi14.toFixed(1)}, and price below 20 EMA). Naive longs are at severe risk of being trapped.`,
-  };
-
+  // ── RETURN OBJECT ─────────────────────────────────────────────────────────────
   return {
-    date: today.toISOString().split('T')[0],
-    dayName: DAY_NAMES[dow],
-    dow,
-    month,
-    bias: finalBias,
-    confidence: finalConfidence,
-    rawBias,
-    rawConfidence,
-    isFiltered: !isRawPreset,
-    activeFilters,
-    confluences,
-    confluenceScore: normalizedScore,
-    bleedTrap,
-    sigmaMetrics,
-    regimeMetrics,
+    // Core verdict
+    verdict, verdictColor, verdictGlow,
+    verdictReason,
+    score: normalizedScore,
+    convictionLevel,
+    isBleedTrap,
+    signals,
+
+    // Technical context
     technicalMetrics: {
-      ema20: Math.round(ema20),
-      ema50: Math.round(ema50),
+      ema20: Math.round(ema20), ema50: Math.round(ema50),
+      rsi14, change24h: Math.round(change24h * 100) / 100,
       priceVsEma20Pct: Math.round(priceVsEma20Pct * 100) / 100,
       priceVsEma50Pct: Math.round(priceVsEma50Pct * 100) / 100,
-      rsi14,
-      change24h: Math.round(change24h * 100) / 100,
-      weeklyOpen: Math.round(weeklyBias.weeklyOpen),
-      pctFromWeeklyOpen: Math.round(weeklyBias.pctFromWeeklyOpen * 100) / 100,
+      volumeRatio: Math.round(volumeRatio * 100) / 100,
     },
-    combinedSignal: Math.round(rawCombinedSignal * 10) / 10,
-    dowStats: todayDowStats,
-    weeklyBias,
-    monthlyStats: todayMonthStats,
-    recentSameDay,
-    recentBullRate: Math.round(recentBullRate),
+    weeklyOpen: Math.round(weeklyOpen),
+    pctFromWeeklyOpen: Math.round(pctFromWeeklyOpen * 100) / 100,
+    aboveWeeklyOpen,
+    sigmaMetrics,
+
+    // New: Prior Week Levels
+    priorWeekLevels: {
+      pwh: pwLevels.pwh, pwl: pwLevels.pwl,
+      posInRange: pwLevels.posInRange ? Math.round(pwLevels.posInRange) : null,
+    },
+
+    // Historical stats for DOW grid
     allDowStats: dowStats,
     allMonthlyStats: monthlyStats,
-    currentPrice,
+    todayDowStats, todayMonthStats,
+    recentSameDay,
+    recentBullRate: Math.round(recentBullRate),
+
+    // Metadata
+    date: now.toISOString().split('T')[0],
+    dayName: DAY_NAMES[dow],
+    dow, month, currentPrice,
+
+    // ── Legacy compat aliases ─────────────────────────────────────────────────
+    bias: verdict === 'BULLISH' ? 'bullish' : verdict === 'BEARISH' ? 'bearish' : 'neutral',
+    confidence: clamp(Math.round(Math.abs(normalizedScore) * 0.75 + 30), 35, 95),
+    weeklyBias: {
+      weeklyOpen: Math.round(weeklyOpen),
+      priceVsWeeklyOpen: aboveWeeklyOpen ? 'above' : 'below',
+      pctFromWeeklyOpen: Math.round(pctFromWeeklyOpen * 100) / 100,
+      currentBullRate: aboveWeeklyOpen ? 62 : 38,
+    },
+    confluences: signals.map(s => ({
+      id: s.id, name: s.name, weight: s.weight, score: s.score, state: s.state,
+      valueText: s.value, detail: s.detail,
+    })),
+    confluenceScore: normalizedScore,
+    regimeMetrics: classifyMarketRegime(candles, currentPrice, ema20, ema50, sigmaMetrics),
+    bleedTrap: { detected: isBleedTrap, title: 'BLEED TRAP CONFLICT', explanation: verdictReason },
+    isFiltered: true,
   };
 }
 
-// --- Helpers ---
+// ─── Backward-Compat Exports ──────────────────────────────────────────────────
 
-function getISOWeekKey(date) {
-  const d = new Date(date);
-  d.setUTCHours(0, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+export function analyzeWeeklyOpenBias(candles, currentPrice) {
+  const now = new Date();
+  const weeklyOpen = _getWeeklyOpen(candles, now);
+  const pctFromWeeklyOpen = weeklyOpen > 0 ? ((currentPrice - weeklyOpen) / weeklyOpen) * 100 : 0;
+  const aboveOpen = currentPrice > weeklyOpen;
+  return {
+    weeklyOpen, currentPrice,
+    priceVsWeeklyOpen: aboveOpen ? 'above' : 'below',
+    pctFromWeeklyOpen, aboveOpenBullRate: 62, belowOpenBullRate: 38,
+    currentBullRate: aboveOpen ? 62 : 38, bias: aboveOpen ? 'bullish' : 'bearish',
+  };
 }
 
-function getThisWeekMonday() {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d;
+export function classifyMarketRegime(candles, currentPrice, ema20, ema50, sigmaData) {
+  const isBullTrend = currentPrice > ema20 && ema20 > ema50;
+  const isBearTrend = currentPrice < ema20 && ema20 < ema50;
+  const bandwidth = sigmaData?.bandwidthPct || 8;
+  if (bandwidth < 6.5) return { key: 'SQUEEZE', name: 'Range Compression (Squeeze)', type: 'squeeze', color: '#38bdf8', score: 0, bandwidth, description: 'Coil/squeeze — breakout traps are high' };
+  if (isBullTrend) return { key: 'BULL_TREND', name: 'Bullish Trend Expansion', type: 'bull_trend', color: '#4ade80', score: 25, bandwidth, description: 'Markup phase above 20 & 50 EMA' };
+  if (isBearTrend) return { key: 'BEAR_TREND', name: 'Bearish Trend Breakdown', type: 'bear_trend', color: '#f87171', score: -25, bandwidth, description: 'Markdown phase below 20 & 50 EMA' };
+  return { key: 'CHOP', name: 'Rotational Chop', type: 'transition', color: '#fbbf24', score: 0, bandwidth, description: 'Mixed structure between EMAs' };
 }

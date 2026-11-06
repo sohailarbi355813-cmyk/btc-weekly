@@ -2370,3 +2370,39 @@ body::after {
   border-color: var(--border) !important;
 }
 
+
+/* ═══════════════════════════════════════════
+   VERDICT HERO v3 — New DOW bias badge fix
+═══════════════════════════════════════════ */
+.dow-bias-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dow-bias-badge.bullish {
+  background: var(--bullish-dim);
+  color: var(--bullish);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.dow-bias-badge.bearish {
+  background: var(--bearish-dim);
+  color: var(--bearish);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.dow-bias-badge.neutral {
+  background: var(--neutral-dim);
+  color: var(--neutral);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+/* Wolf yellow var */
+.wolf-yellow-text { color: var(--wolf-yellow-bright, #fbbf24); }

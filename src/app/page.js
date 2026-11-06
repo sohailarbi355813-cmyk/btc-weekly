@@ -13,31 +13,14 @@ import BootIntroSequence from '@/components/BootIntroSequence';
 import RsiScannerWidget from '@/components/RsiScannerWidget';
 import MarketStructureTable from '@/components/MarketStructureTable';
 import {
-  IconBitcoin,
-  IconTrendUp,
-  IconTrendDown,
-  IconScale,
-  IconRadar,
-  IconBarChart,
-  IconRefresh,
-  IconZap,
-  IconPin,
-  IconAlertTriangle,
-  IconShield,
-  IconCheck,
-  IconDatabase,
-  IconWolf,
-  IconBlackFlag,
-  IconMenu,
-  IconX,
-  IconCalendar,
-  IconClock,
+  IconBitcoin, IconTrendUp, IconTrendDown, IconScale, IconRadar,
+  IconBarChart, IconRefresh, IconZap, IconPin, IconAlertTriangle,
+  IconShield, IconCheck, IconDatabase, IconWolf, IconBlackFlag,
+  IconMenu, IconX, IconCalendar, IconClock,
 } from '@/components/Icons';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-// ─── Format Helpers ─────────────────────────────────────────────────────────
 
 function formatPrice(n) {
   if (!n) return '--';
@@ -50,44 +33,265 @@ function formatPct(n, decimals = 1) {
   return `${sign}${Number(n).toFixed(decimals)}%`;
 }
 
-function biasColor(bias) {
-  return bias === 'bullish' ? 'bullish' : bias === 'bearish' ? 'bearish' : 'neutral';
-}
+// ─── Verdict Hero Component ────────────────────────────────────────────────────
 
-// ─── Confidence Ring Component ────────────────────────────────────────────────
+function VerdictHero({ bias, data, clientDate }) {
+  if (!bias || !data) return null;
 
-function ConfidenceRing({ confidence, bias }) {
-  const radius = 54;
-  const circ = 2 * Math.PI * radius;
-  const [dashOffset, setDashOffset] = useState(circ);
+  const verdict = bias.verdict; // 'BULLISH' | 'BEARISH' | 'CAUTION'
+  const color = bias.verdictColor;
+  const score = bias.score;
+  const conviction = bias.convictionLevel; // 1-5
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDashOffset(circ - (confidence / 100) * circ);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [confidence, circ]);
+  const formattedDate = clientDate
+    ? clientDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    : bias.date || '';
 
-  const color = biasColor(bias);
+  const convictionLabel = ['', 'Very Low', 'Low', 'Moderate', 'High', 'Very High'][conviction] || 'Moderate';
+
+  const verdictBg = verdict === 'BULLISH'
+    ? 'rgba(34,197,94,0.07)'
+    : verdict === 'BEARISH'
+    ? 'rgba(239,68,68,0.07)'
+    : 'rgba(245,158,11,0.07)';
+
+  const verdictBorder = verdict === 'BULLISH'
+    ? 'rgba(34,197,94,0.35)'
+    : verdict === 'BEARISH'
+    ? 'rgba(239,68,68,0.35)'
+    : 'rgba(245,158,11,0.35)';
 
   return (
-    <div className="confidence-ring">
-      <svg width="140" height="140" viewBox="0 0 140 140">
-        <circle className="confidence-ring-track" cx="70" cy="70" r={radius} />
-        <circle
-          className={`confidence-ring-fill ring-${color}`}
-          cx="70"
-          cy="70"
-          r={radius}
-          strokeDasharray={circ}
-          strokeDashoffset={dashOffset}
-        />
-      </svg>
-      <div className="confidence-value">
-        <span className={`confidence-pct ${bias === 'bullish' ? 'value-bullish' : bias === 'bearish' ? 'value-bearish' : 'value-neutral'}`}>
-          {confidence}%
+    <div style={{
+      marginBottom: 24,
+      borderRadius: 12,
+      border: `1px solid ${verdictBorder}`,
+      background: verdictBg,
+      padding: '28px 32px',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+
+      {/* Top bar: date + live price */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6b7280', fontFamily: 'var(--font-mono)' }}>
+          {formattedDate}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>
+            {formatPrice(data.currentPrice)}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.72rem', color: color, fontFamily: 'var(--font-mono)', background: `${color}18`, border: `1px solid ${color}40`, padding: '2px 10px', borderRadius: 999 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
+            {verdict}
+          </div>
+        </div>
+      </div>
+
+      {/* Main verdict */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 32, alignItems: 'flex-start' }}>
+        <div>
+          {/* Bleed Trap Alert */}
+          {bias.isBleedTrap && verdict === 'CAUTION' && (
+            <div style={{
+              background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)',
+              borderRadius: 8, padding: '8px 14px', marginBottom: 14,
+              display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.78rem',
+            }}>
+              <span style={{ background: '#f59e0b', color: '#000', fontWeight: 900, fontSize: '0.65rem', padding: '2px 7px', borderRadius: 3, flexShrink: 0, fontFamily: 'var(--font-mono)', marginTop: 1 }}>
+                ⚠ BLEED TRAP
+              </span>
+              <span style={{ color: '#fcd34d', lineHeight: 1.5 }}>
+                Historical stats say bull, but real-time structure is bleeding. Do not trust the calendar stats right now.
+              </span>
+            </div>
+          )}
+
+          {/* Big verdict word */}
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(2.2rem, 5vw, 3.5rem)',
+            fontWeight: 900,
+            letterSpacing: '-0.03em',
+            color: color,
+            lineHeight: 1,
+            marginBottom: 10,
+          }}>
+            {verdict === 'BULLISH' ? '↑ BULLISH' : verdict === 'BEARISH' ? '↓ BEARISH' : '⚡ CAUTION'}
+          </div>
+
+          {/* Conviction bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <span style={{ fontSize: '0.68rem', color: '#6b7280', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
+              Conviction:
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{
+                  width: 24, height: 8, borderRadius: 2,
+                  background: i <= conviction ? color : 'rgba(255,255,255,0.08)',
+                  transition: 'all 0.3s ease',
+                }} />
+              ))}
+            </div>
+            <span style={{ fontSize: '0.72rem', color, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+              {convictionLabel}
+            </span>
+          </div>
+
+          {/* Reason */}
+          <p style={{
+            fontSize: '0.88rem', color: '#9ca3af', lineHeight: 1.65,
+            maxWidth: 540, marginBottom: 20,
+          }}>
+            {bias.verdictReason}
+          </p>
+
+          {/* Signal pills */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {bias.signals && bias.signals.map(sig => {
+              const sc = sig.state === 'bullish' ? '#22c55e' : sig.state === 'bearish' ? '#ef4444' : '#6b7280';
+              return (
+                <div key={sig.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '6px 12px', borderRadius: 6,
+                  border: `1px solid ${sc}30`, background: `${sc}08`,
+                  fontSize: '0.76rem',
+                }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: sc, flexShrink: 0 }} />
+                  <span style={{ color: '#6b7280', fontFamily: 'var(--font-mono)' }}>{sig.name}:</span>
+                  <span style={{ color: sc, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{sig.value}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Score meter */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 100 }}>
+          <div style={{
+            width: 100, height: 100, borderRadius: '50%',
+            border: `3px solid ${color}`,
+            boxShadow: `0 0 20px ${color}30`,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            background: `${color}0d`,
+          }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', fontWeight: 900, color, lineHeight: 1 }}>
+              {score > 0 ? '+' : ''}{score}
+            </span>
+            <span style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>score</span>
+          </div>
+          <div style={{ fontSize: '0.65rem', color: '#4b5563', textAlign: 'center', fontFamily: 'var(--font-mono)', lineHeight: 1.4 }}>
+            −100 Bear<br />+100 Bull
+          </div>
+        </div>
+      </div>
+
+      {/* Footer: Prior Week Levels + Sigma */}
+      <div style={{
+        marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+        {/* Prior Week High / Low */}
+        {bias.priorWeekLevels && bias.priorWeekLevels.pwh > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontSize: '0.76rem' }}>
+            <span style={{ color: '#4b5563', fontFamily: 'var(--font-mono)' }}>Prior Week:</span>
+            <span style={{ color: '#f87171', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+              PWH {formatPrice(bias.priorWeekLevels.pwh)}
+            </span>
+            <span style={{ color: '#374151' }}>·</span>
+            <span style={{ color: '#4ade80', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+              PWL {formatPrice(bias.priorWeekLevels.pwl)}
+            </span>
+            {bias.priorWeekLevels.posInRange !== null && (
+              <span style={{
+                fontSize: '0.68rem', fontFamily: 'var(--font-mono)',
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                padding: '1px 7px', borderRadius: 3, color: '#6b7280',
+              }}>
+                {bias.priorWeekLevels.posInRange}% of range
+              </span>
+            )}
+          </div>
+        )}
+        {/* Sigma levels */}
+        {bias.sigmaMetrics && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.76rem', flexWrap: 'wrap' }}>
+            <span style={{ color: '#4b5563', fontFamily: 'var(--font-mono)' }}>
+              Sigma {bias.sigmaMetrics.zScoreText}:
+            </span>
+            {[
+              { label: '-2σ', val: bias.sigmaMetrics.minus2Sigma, c: '#4ade80' },
+              { label: '-1σ', val: bias.sigmaMetrics.minus1Sigma, c: '#38bdf8' },
+              { label: 'Mean', val: bias.sigmaMetrics.mean, c: '#888' },
+              { label: '+1σ', val: bias.sigmaMetrics.plus1Sigma, c: '#38bdf8' },
+              { label: '+2σ', val: bias.sigmaMetrics.plus2Sigma, c: '#f87171' },
+            ].map(({ label, val, c }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ color: '#374151', fontSize: '0.6rem', fontFamily: 'var(--font-mono)' }}>{label}</span>
+                <span style={{ color: c, fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.74rem' }}>{formatPrice(val)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Signals Breakdown Table ───────────────────────────────────────────────────
+
+function SignalsBreakdown({ bias }) {
+  if (!bias?.signals) return null;
+  return (
+    <div style={{ marginBottom: 24, background: '#0c0c0f', border: '1px solid #1e1e24', borderRadius: 10, overflow: 'hidden' }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #1e1e24', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <IconRadar size={14} color="#38bdf8" />
+        <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6b7280' }}>
+          Confluence Breakdown · Score: {bias.score > 0 ? '+' : ''}{bias.score}/100
         </span>
-        <span className="confidence-label">Confidence</span>
+      </div>
+      <div style={{ padding: '0 4px' }}>
+        {bias.signals.map((sig, i) => {
+          const sc = sig.state === 'bullish' ? '#22c55e' : sig.state === 'bearish' ? '#ef4444' : '#6b7280';
+          const barWidth = `${Math.round((Math.abs(sig.score) / sig.weight) * 100)}%`;
+          const isBull = sig.state === 'bullish';
+          return (
+            <div key={sig.id} style={{
+              display: 'grid',
+              gridTemplateColumns: '160px 1fr 90px',
+              gap: 12,
+              alignItems: 'center',
+              padding: '10px 12px',
+              borderBottom: i < bias.signals.length - 1 ? '1px solid #111115' : 'none',
+            }}>
+              <div>
+                <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: '#9ca3af', marginBottom: 2 }}>{sig.name}</div>
+                <div style={{ fontSize: '0.68rem', color: '#4b5563', lineHeight: 1.3 }}>{sig.detail}</div>
+              </div>
+              <div>
+                <div style={{ height: 4, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
+                  <div style={{
+                    height: '100%', width: barWidth, background: sc, borderRadius: 2,
+                    marginLeft: isBull ? 0 : 'auto',
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
+                <div style={{ fontSize: '0.68rem', color: sc, fontFamily: 'var(--font-mono)' }}>{sig.label}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{
+                  fontSize: '0.7rem', fontFamily: 'var(--font-mono)', fontWeight: 700,
+                  color: sc,
+                  background: `${sc}15`, border: `1px solid ${sc}30`,
+                  padding: '2px 7px', borderRadius: 3,
+                }}>
+                  {sig.score > 0 ? '+' : ''}{sig.score}
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -104,27 +308,23 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [loadStep, setLoadStep] = useState(1);
-  const [activeTab, setActiveTab] = useState('levels'); // 'levels' | 'alts' | 'macro' | 'pattern'
+  const [activeTab, setActiveTab] = useState('levels');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [clientDate, setClientDate] = useState(null);
   const [bootDone, setBootDone] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [weeklyProbBias, setWeeklyProbBias] = useState('auto'); // 'auto' | 'bearish' | 'bullish'
+  const [weeklyProbBias, setWeeklyProbBias] = useState('auto');
   const [weeklyHighLowData, setWeeklyHighLowData] = useState(null);
   const [theme, setTheme] = useState('dark');
+  const [showSignals, setShowSignals] = useState(false);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('wolf-theme') || 'dark';
       setTheme(saved);
       document.documentElement.setAttribute('data-theme', saved);
-      if (saved === 'light') {
-        document.documentElement.classList.add('theme-light');
-        document.documentElement.classList.remove('theme-dark');
-      } else {
-        document.documentElement.classList.add('theme-dark');
-        document.documentElement.classList.remove('theme-light');
-      }
+      document.documentElement.classList.toggle('theme-light', saved === 'light');
+      document.documentElement.classList.toggle('theme-dark', saved !== 'light');
     } catch (e) {}
   }, []);
 
@@ -134,13 +334,8 @@ export default function Home() {
     try {
       localStorage.setItem('wolf-theme', next);
       document.documentElement.setAttribute('data-theme', next);
-      if (next === 'light') {
-        document.documentElement.classList.add('theme-light');
-        document.documentElement.classList.remove('theme-dark');
-      } else {
-        document.documentElement.classList.add('theme-dark');
-        document.documentElement.classList.remove('theme-light');
-      }
+      document.documentElement.classList.toggle('theme-light', next === 'light');
+      document.documentElement.classList.toggle('theme-dark', next !== 'light');
     } catch (e) {}
   };
 
@@ -154,112 +349,8 @@ export default function Home() {
         return;
       }
       const el = document.getElementById('active-tab-content');
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 50);
-  };
-
-  // ── High-Probability Bias Filters State ──
-  const [biasFilters, setBiasFilters] = useState({
-    preset: 'highest_prob', // 'highest_prob' | 'sigma_regime' | 'bleed_guard' | 'trend_only' | 'recent_cycle' | 'raw_legacy' | 'custom'
-    enableSigma: true,
-    enableRegime: true,
-    enableTrend: true,
-    enableBleedGuard: true,
-    enableWeeklyOpen: true,
-    enableRecentRegime: true,
-    enableRawStats: true,
-  });
-  const [showConfluences, setShowConfluences] = useState(false);
-
-  const applyBiasFilterPreset = (presetKey) => {
-    let newFilters = { ...biasFilters, preset: presetKey };
-    if (presetKey === 'highest_prob') {
-      newFilters = {
-        preset: 'highest_prob',
-        enableSigma: true,
-        enableRegime: true,
-        enableTrend: true,
-        enableBleedGuard: true,
-        enableWeeklyOpen: true,
-        enableRecentRegime: true,
-        enableRawStats: true,
-      };
-    } else if (presetKey === 'sigma_regime') {
-      newFilters = {
-        preset: 'sigma_regime',
-        enableSigma: true,
-        enableRegime: true,
-        enableTrend: false,
-        enableBleedGuard: true,
-        enableWeeklyOpen: true,
-        enableRecentRegime: false,
-        enableRawStats: false,
-      };
-    } else if (presetKey === 'bleed_guard') {
-      newFilters = {
-        preset: 'bleed_guard',
-        enableSigma: false,
-        enableRegime: false,
-        enableTrend: true,
-        enableBleedGuard: true,
-        enableWeeklyOpen: true,
-        enableRecentRegime: false,
-        enableRawStats: false,
-      };
-    } else if (presetKey === 'trend_only') {
-      newFilters = {
-        preset: 'trend_only',
-        enableSigma: false,
-        enableRegime: false,
-        enableTrend: true,
-        enableBleedGuard: false,
-        enableWeeklyOpen: true,
-        enableRecentRegime: false,
-        enableRawStats: false,
-      };
-    } else if (presetKey === 'recent_cycle') {
-      newFilters = {
-        preset: 'recent_cycle',
-        enableSigma: false,
-        enableRegime: false,
-        enableTrend: false,
-        enableBleedGuard: true,
-        enableWeeklyOpen: false,
-        enableRecentRegime: true,
-        enableRawStats: false,
-      };
-    } else if (presetKey === 'raw_legacy') {
-      newFilters = {
-        preset: 'raw_legacy',
-        enableSigma: false,
-        enableRegime: false,
-        enableTrend: false,
-        enableBleedGuard: false,
-        enableWeeklyOpen: false,
-        enableRecentRegime: false,
-        enableRawStats: true,
-      };
-    }
-    setBiasFilters(newFilters);
-    if (data?.candles) {
-      const updatedBias = getTodayBias(data.candles, data.currentPrice, clientDate, newFilters);
-      setBias(updatedBias);
-    }
-  };
-
-  const toggleSingleBiasFilter = (filterKey) => {
-    const newFilters = {
-      ...biasFilters,
-      preset: 'custom',
-      [filterKey]: !biasFilters[filterKey],
-    };
-    setBiasFilters(newFilters);
-    if (data?.candles) {
-      const updatedBias = getTodayBias(data.candles, data.currentPrice, clientDate, newFilters);
-      setBias(updatedBias);
-    }
   };
 
   const loadData = useCallback(async (isSilent = false) => {
@@ -269,28 +360,25 @@ export default function Home() {
     setLoadStep(1);
 
     try {
-      setLoadStep(1); // Fetching data
       const res = await fetch('/api/btc-data');
       if (!res.ok) throw new Error('Failed to fetch BTC price history. Please try again.');
       const json = await res.json();
       if (json.error) throw new Error(json.error);
 
-      setLoadStep(2); // Analyzing latest live candle
-      let currentPrice = json.currentPrice || json.candles[json.candles.length - 1]?.close || 0;
+      setLoadStep(2);
+      const currentPrice = json.currentPrice || json.candles[json.candles.length - 1]?.close || 0;
 
-      setLoadStep(3); // Calculating statistical bias & weekly profiles
+      setLoadStep(3);
       const now = new Date();
       setClientDate(now);
-      const biasResult = getTodayBias(json.candles, currentPrice, now, biasFilters);
 
-      setLoadStep(4); // Week pattern matching and predictive sequence forecasts
+      // Single call to getTodayBias — no filter presets, deterministic
+      const biasResult = getTodayBias(json.candles, currentPrice, now);
+
+      setLoadStep(4);
       const weeklyProfiles = buildWeeklyProfiles(json.candles);
       const patternResult = findSimilarWeeks(weeklyProfiles, 25, now);
-
-      // Calculating Wolf Key Levels
       const wolfLevelsResult = calculateWolfKeyLevels(json.candles, currentPrice);
-
-      // Calculating Weekly High / Low Formation Probabilities
       const hlProb = calculateWeeklyHighLowProbabilities(json.candles, currentPrice, now, weeklyProbBias);
 
       setData({ candles: json.candles, count: json.count, currentPrice });
@@ -305,7 +393,7 @@ export default function Home() {
       setLoading(false);
       setTimeout(() => setRefreshing(false), 500);
     }
-  }, [biasFilters, weeklyProbBias]);
+  }, [weeklyProbBias]);
 
   const handleWeeklyProbBiasChange = (newBias) => {
     setWeeklyProbBias(newBias);
@@ -315,11 +403,9 @@ export default function Home() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  // Real-time live price ticker (every 4 seconds for sub-second precision)
+  // Live price ticker every 5s
   useEffect(() => {
     let isMounted = true;
     const pollLivePrice = async () => {
@@ -328,73 +414,38 @@ export default function Home() {
         if (!res.ok) return;
         const pData = await res.json();
         if (pData?.success && pData.price > 0 && isMounted) {
-          setData((prev) => {
-            if (!prev) return prev;
-            if (prev.currentPrice === pData.price) return prev;
-            return {
-              ...prev,
-              currentPrice: pData.price,
-            };
+          setData(prev => {
+            if (!prev || prev.currentPrice === pData.price) return prev;
+            return { ...prev, currentPrice: pData.price };
           });
-
-          setWolfLevels((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              spot: pData.price,
-            };
-          });
+          setWolfLevels(prev => prev ? { ...prev, spot: pData.price } : prev);
         }
-      } catch (err) {
-        // Silent ticker error
-      }
+      } catch (e) {}
     };
-
-    const interval = setInterval(pollLivePrice, 4000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+    const interval = setInterval(pollLivePrice, 5000);
+    return () => { isMounted = false; clearInterval(interval); };
   }, []);
 
-  const handleRefresh = () => {
-    loadData(true);
-  };
+  const handleRefresh = () => loadData(true);
 
-  // Safe date derivation for rendering
-  const todayDow = bias?.dow ?? (clientDate ? clientDate.getUTCDay() : 5);
-  const todayMonth = bias?.month ?? (clientDate ? clientDate.getUTCMonth() : 9);
-  const formattedToday = clientDate
-    ? clientDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-    : (bias?.date ? `Date: ${bias.date}` : '');
+  // Boot intro
+  if (!bootDone) return <BootIntroSequence onComplete={() => setBootDone(true)} />;
 
-  // ── Render: Hyper-Animated Boot Intro Animation on Initial Load ──
-  if (!bootDone) {
-    return <BootIntroSequence onComplete={() => setBootDone(true)} />;
-  }
-
-  // ── Render: Loading (if user bypassed intro before data sync) ─────────────
+  // Loading
   if (loading && !data) {
     const steps = [
       { label: 'Connecting to market data feed...', Icon: IconDatabase },
       { label: 'Ingesting daily BTC candles (2021 → today)...', Icon: IconBitcoin },
-      { label: 'Computing day-of-week & seasonal distributions...', Icon: IconBarChart },
+      { label: 'Computing statistical bias & seasonal distributions...', Icon: IconBarChart },
       { label: 'Deriving historical sequence & weekly forecasts...', Icon: IconRadar },
       { label: 'Calculating Wolf Key Levels auction price ladder...', Icon: IconWolf },
     ];
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000' }}>
         <header className="header">
           <div className="container">
             <div className="header-inner">
-              <div className="logo">
-                <div className="logo-icon">
-                  <IconBlackFlag size={20} />
-                </div>
-                <div className="logo-text">
-                  <h1>Wolf Tape Reader</h1>
-                </div>
-              </div>
+              <div className="logo"><div className="logo-icon"><IconBlackFlag size={20} /></div><div className="logo-text"><h1>Wolf Tape Reader</h1></div></div>
             </div>
           </div>
         </header>
@@ -402,19 +453,14 @@ export default function Home() {
           <div className="container">
             <div className="loading-screen">
               <div className="loading-spinner" />
-              <div className="loading-text" style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>
-                CALIBRATING WOLF TAPE TELEMETRY...
-              </div>
+              <div className="loading-text" style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>CALIBRATING WOLF TAPE TELEMETRY...</div>
               <div className="loading-steps">
                 {steps.map((s, i) => (
                   <div key={i} className={`loading-step ${i < loadStep ? 'done' : i === loadStep ? 'active' : ''}`}>
                     <span className="step-indicator">
                       {i < loadStep ? <IconCheck size={13} color="var(--bullish)" /> : i === loadStep ? <IconRefresh size={13} className="spin-icon" color="var(--accent)" /> : <span className="step-circle" />}
                     </span>
-                    <span className="step-label">
-                      <s.Icon size={14} className="step-icon" />
-                      {s.label}
-                    </span>
+                    <span className="step-label"><s.Icon size={14} className="step-icon" />{s.label}</span>
                   </div>
                 ))}
               </div>
@@ -425,77 +471,28 @@ export default function Home() {
     );
   }
 
-  // ── Render: Error ──────────────────────────────────────────────────────────
-
+  // Error
   if (error && !data) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
-        <header className="header">
-          <div className="container">
-            <div className="header-inner">
-              <div className="logo">
-                <div className="logo-icon">
-                  <IconBlackFlag size={20} />
-                </div>
-                <div className="logo-text">
-                  <h1>Wolf Tape Reader</h1>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-        <main className="main" style={{ flex: 1 }}>
-          <div className="container">
-            <div className="error-screen">
-              <div className="error-icon-box">
-                <IconAlertTriangle size={36} color="var(--bearish)" />
-              </div>
-              <h2>Market Data Sync Error</h2>
-              <p>{error}</p>
-              <button id="retry-btn" className="retry-btn" onClick={() => loadData()}>
-                <IconRefresh size={14} />
-                <span>Retry Sync</span>
-              </button>
-            </div>
-          </div>
-        </main>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000' }}>
+        <header className="header"><div className="container"><div className="header-inner"><div className="logo"><div className="logo-icon"><IconBlackFlag size={20} /></div><div className="logo-text"><h1>Wolf Tape Reader</h1></div></div></div></div></header>
+        <main className="main" style={{ flex: 1 }}><div className="container"><div className="error-screen">
+          <div className="error-icon-box"><IconAlertTriangle size={36} color="var(--bearish)" /></div>
+          <h2>Market Data Sync Error</h2><p>{error}</p>
+          <button id="retry-btn" className="retry-btn" onClick={() => loadData()}><IconRefresh size={14} /><span>Retry Sync</span></button>
+        </div></div></main>
       </div>
     );
   }
 
   if (!bias || !data) return null;
 
-  const bColor = biasColor(bias.bias);
   const dowStatsArr = Object.values(bias.allDowStats);
-
-  // Quick stats
   const totalCandles = data.count;
   const totalBullish = data.candles.filter(c => c.close > c.open).length;
   const overallBullRate = ((totalBullish / totalCandles) * 100).toFixed(1);
-  const best = bias.allDowStats[dowStatsArr.reduce((a, b) => a.bullishRate > b.bullishRate ? a : b, dowStatsArr[0]).day];
-  const worst = bias.allDowStats[dowStatsArr.reduce((a, b) => a.bullishRate < b.bullishRate ? a : b, dowStatsArr[0]).day];
-
-  // Today's description
-  const todayDowStats = bias.dowStats;
-  let biasSummary = '';
-  if (bias.isFiltered) {
-    const sigmaInfo = bias.sigmaMetrics ? `, Sigma at ${bias.sigmaMetrics.zScoreText} (${bias.sigmaMetrics.statusShort})` : '';
-    const regimeInfo = bias.regimeMetrics ? ` in ${bias.regimeMetrics.name}` : '';
-    if (bias.bias === 'bearish') {
-      biasSummary = `Filtered High-Probability Bias: Bearish (${bias.confidence}% Conviction)${regimeInfo}. Key confluences: ${bias.technicalMetrics ? `Trading ${bias.technicalMetrics.priceVsEma20Pct}% vs 20 EMA ($${bias.technicalMetrics.ema20.toLocaleString()}), 24h delta is ${bias.technicalMetrics.change24h}%, RSI ${bias.technicalMetrics.rsi14}${sigmaInfo}` : 'Structure & weekly open confirm downside pressure'}.`;
-    } else if (bias.bias === 'bullish') {
-      biasSummary = `Filtered High-Probability Bias: Bullish (${bias.confidence}% Conviction)${regimeInfo}. Key confluences: ${bias.technicalMetrics ? `Holding above 20 EMA ($${bias.technicalMetrics.ema20.toLocaleString()}), weekly open acceptance (+${Math.abs(bias.technicalMetrics.pctFromWeeklyOpen)}%), and positive momentum expansion${sigmaInfo}` : 'Structure & weekly open confirm bullish continuation'}.`;
-    } else {
-      const zStatus = bias.sigmaMetrics ? `${bias.sigmaMetrics.zScoreText} (${bias.sigmaMetrics.statusShort})` : '0.00σ (Equilibrium)';
-      biasSummary = `Filtered High-Probability Bias: Neutral / Defensive (${bias.confidence}% Confidence)${regimeInfo}. Price is at ${zStatus} with compressed range structure. Focus on level-to-level rotation.`;
-    }
-  } else {
-    biasSummary = bias.bias === 'bullish'
-      ? `${bias.dayName}s have been bullish ${todayDowStats.bullishRate.toFixed(0)}% of the time historically (Raw 5-Year Average). Current week is trading ${bias.weeklyBias.priceVsWeeklyOpen} the weekly open by ${Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%.`
-      : bias.bias === 'bearish'
-      ? `${bias.dayName}s have been bearish ${todayDowStats.bearishRate.toFixed(0)}% of the time historically (Raw 5-Year Average). Current week is trading ${bias.weeklyBias.priceVsWeeklyOpen} the weekly open by ${Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%.`
-      : `${bias.dayName}s show no strong directional edge historically. Mixed signals from day-of-week and weekly open analysis.`;
-  }
+  const best = dowStatsArr.reduce((a, b) => a.bullishRate > b.bullishRate ? a : b, dowStatsArr[0]);
+  const worst = dowStatsArr.reduce((a, b) => a.bullishRate < b.bullishRate ? a : b, dowStatsArr[0]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
@@ -505,239 +502,87 @@ export default function Home() {
         <div className="container">
           <div className="header-inner">
             <div className="logo" onClick={() => navigateToSection('bias')} style={{ cursor: 'pointer' }}>
-              <div className="logo-icon">
-                <IconBlackFlag size={20} />
-              </div>
-              <div className="logo-text">
-                <h1>Wolf Tape Reader</h1>
-              </div>
+              <div className="logo-icon"><IconBlackFlag size={20} /></div>
+              <div className="logo-text"><h1>Wolf Tape Reader</h1></div>
             </div>
 
-            {/* Desktop Navigation Links (Direct Auto-Scroll to Specific Sections) */}
             <nav className="header-nav">
-              <button
-                className={`header-nav-link ${activeTab === 'bias' ? 'active' : ''}`}
-                onClick={() => navigateToSection('bias')}
-                title="Scroll to Today's Bias"
-              >
-                <span>Today's Bias</span>
-              </button>
-              <button
-                className={`header-nav-link ${activeTab === 'levels' ? 'active' : ''}`}
-                onClick={() => navigateToSection('levels')}
-                title="Wolf Key Levels"
-              >
-                <IconWolf size={13} color="var(--wolf-yellow-bright)" />
-                <span>Levels</span>
-              </button>
-              <button
-                className={`header-nav-link ${activeTab === 'session' ? 'active' : ''}`}
-                onClick={() => navigateToSection('session')}
-                title="Session HOD/LOD Probabilities"
-              >
-                <IconClock size={13} color="var(--neutral)" />
-                <span>Sessions</span>
-              </button>
-              <button
-                className={`header-nav-link ${activeTab === 'pattern' ? 'active' : ''}`}
-                onClick={() => navigateToSection('pattern')}
-                title="Weekly Forecast & High/Low Matrix"
-              >
-                <IconCalendar size={13} color="var(--neutral)" />
-                <span>Weekly Forecast</span>
-              </button>
-              <button
-                className={`header-nav-link ${activeTab === 'rsi' ? 'active' : ''}`}
-                onClick={() => navigateToSection('rsi')}
-                title="Discord RSI Scanner"
-              >
-                <IconZap size={13} color="var(--neutral)" />
-                <span>RSI Alerts</span>
-              </button>
-              <button
-                className={`header-nav-link ${activeTab === 'structure' ? 'active' : ''}`}
-                onClick={() => navigateToSection('structure')}
-                title="Market Structure Matrix (HTF)"
-              >
-                <IconScale size={13} color="var(--neutral)" />
-                <span>Structure</span>
-              </button>
-              <button
-                className={`header-nav-link ${activeTab === 'macro' ? 'active' : ''}`}
-                onClick={() => navigateToSection('macro')}
-                title="Whales • MVRV • ETFs"
-              >
-                <IconBarChart size={13} color="var(--neutral)" />
-                <span>Whales</span>
-              </button>
+              {[
+                { id: 'bias', label: "Today's Bias" },
+                { id: 'levels', label: 'Key Levels', Icon: IconWolf, iconColor: 'var(--wolf-yellow-bright)' },
+                { id: 'session', label: 'Sessions', Icon: IconClock },
+                { id: 'pattern', label: 'Weekly Forecast', Icon: IconCalendar },
+                { id: 'rsi', label: 'RSI Alerts', Icon: IconZap },
+                { id: 'structure', label: 'Structure', Icon: IconScale },
+                { id: 'macro', label: 'Whales', Icon: IconBarChart },
+              ].map(({ id, label, Icon, iconColor }) => (
+                <button key={id} className={`header-nav-link ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
+                  {Icon && <Icon size={13} color={activeTab === id ? (iconColor || 'var(--accent)') : 'var(--neutral)'} />}
+                  <span>{label}</span>
+                </button>
+              ))}
             </nav>
 
             <div className="header-right">
-              {/* Theme Toggle Button (Dark / Light Mode) */}
-              <button
-                className="theme-toggle-btn"
-                onClick={toggleTheme}
-                title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-                aria-label="Toggle dark/light theme"
-              >
+              <button className="theme-toggle-btn" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}>
                 <span style={{ fontSize: '0.85rem' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
                 <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
               </button>
-
-              {/* BTC Price Header */}
               <div className="btc-price-header">{formatPrice(data.currentPrice)}</div>
-
-              {/* Interactive Live Feed Button */}
-              <button
-                className="live-badge-btn"
-                onClick={handleRefresh}
-                title="Click to refresh live feed"
-              >
+              <button className="live-badge-btn" onClick={handleRefresh} title="Click to refresh live feed">
                 <span className="live-dot" />
                 <span>Live Feed</span>
                 <IconRefresh size={12} className={refreshing ? 'spin-icon' : ''} style={{ opacity: refreshing ? 1 : 0.6 }} />
               </button>
-
-              {/* Mobile Hamburger Button */}
-              <button
-                className="mobile-menu-btn"
-                onClick={() => setMobileMenuOpen(true)}
-                aria-label="Toggle navigation menu"
-                title="Open menu"
-              >
-                <IconMenu size={20} />
-              </button>
+              <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu"><IconMenu size={20} /></button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* ── Functional Mobile Navigation Drawer ── */}
+      {/* Mobile Nav Drawer */}
       {mobileMenuOpen && (
         <div className="mobile-nav-overlay" onClick={() => setMobileMenuOpen(false)}>
-          <div className="mobile-nav-drawer" onClick={(e) => e.stopPropagation()}>
+          <div className="mobile-nav-drawer" onClick={e => e.stopPropagation()}>
             <div className="mobile-nav-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <IconBlackFlag size={18} color="var(--wolf-yellow-bright)" />
                 <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Navigation</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  className="theme-toggle-btn"
-                  onClick={toggleTheme}
-                  style={{ padding: '4px 10px', fontSize: '0.70rem' }}
-                >
-                  <span>{theme === 'dark' ? '☀️' : '🌙'}</span>
-                  <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+                <button className="theme-toggle-btn" onClick={toggleTheme} style={{ padding: '4px 10px', fontSize: '0.70rem' }}>
+                  <span>{theme === 'dark' ? '☀️' : '🌙'}</span><span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
                 </button>
-                <button
-                  className="mobile-nav-close"
-                  onClick={() => setMobileMenuOpen(false)}
-                  aria-label="Close menu"
-                >
-                  <IconX size={20} />
-                </button>
+                <button className="mobile-nav-close" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu"><IconX size={20} /></button>
               </div>
             </div>
-
-            {/* Quick Live Price Card */}
             <div className="mobile-nav-price-card">
               <div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bitcoin Last Price</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
-                  {formatPrice(data.currentPrice)}
-                </div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bitcoin</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{formatPrice(data.currentPrice)}</div>
               </div>
-              <button
-                className="live-badge-btn"
-                onClick={() => {
-                  handleRefresh();
-                  setMobileMenuOpen(false);
-                }}
-              >
-                <span className="live-dot" />
-                <span>Refresh</span>
+              <button className="live-badge-btn" onClick={() => { handleRefresh(); setMobileMenuOpen(false); }}>
+                <span className="live-dot" /><span>Refresh</span>
               </button>
             </div>
-
-            {/* Nav Links */}
             <div className="mobile-nav-links">
-              <button
-                className={`mobile-nav-item ${activeTab === 'bias' ? 'active' : ''}`}
-                onClick={() => navigateToSection('bias')}
-              >
-                <IconScale size={18} color="var(--accent)" />
-                <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">Today's Macro Bias</span>
-                  <span className="mobile-nav-desc">Statistical Edge &amp; Confluences</span>
-                </div>
-              </button>
-
-              <button
-                className={`mobile-nav-item ${activeTab === 'levels' ? 'active' : ''}`}
-                onClick={() => navigateToSection('levels')}
-              >
-                <IconWolf size={18} color="var(--wolf-yellow-bright)" />
-                <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">Wolf Key Levels</span>
-                  <span className="mobile-nav-desc">Auction Price Ladder, VAL/VAH &amp; Anchors</span>
-                </div>
-              </button>
-
-              <button
-                className={`mobile-nav-item ${activeTab === 'session' ? 'active' : ''}`}
-                onClick={() => navigateToSection('session')}
-              >
-                <IconClock size={18} color="var(--neutral)" />
-                <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">Session HOD/LOD</span>
-                  <span className="mobile-nav-desc">Asia, London &amp; NY Probabilities</span>
-                </div>
-              </button>
-
-              <button
-                className={`mobile-nav-item ${activeTab === 'pattern' ? 'active' : ''}`}
-                onClick={() => navigateToSection('pattern')}
-              >
-                <IconCalendar size={18} color="var(--neutral)" />
-                <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">Weekly Forecast &amp; HOW/LOW</span>
-                  <span className="mobile-nav-desc">High/Low Formation Probability &amp; Cycle Match</span>
-                </div>
-              </button>
-
-              <button
-                className={`mobile-nav-item ${activeTab === 'rsi' ? 'active' : ''}`}
-                onClick={() => navigateToSection('rsi')}
-              >
-                <IconZap size={18} color="var(--neutral)" />
-                <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">RSI Alerts (Discord)</span>
-                  <span className="mobile-nav-desc">55 Alts • Overbought / Oversold Telemetry</span>
-                </div>
-              </button>
-
-              <button
-                className={`mobile-nav-item ${activeTab === 'structure' ? 'active' : ''}`}
-                onClick={() => navigateToSection('structure')}
-              >
-                <IconScale size={18} color="var(--neutral)" />
-                <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">Market Structure Matrix</span>
-                  <span className="mobile-nav-desc">1H, 4H, 1D, 1W • 2-Candle HTF Bias</span>
-                </div>
-              </button>
-
-              <button
-                className={`mobile-nav-item ${activeTab === 'macro' ? 'active' : ''}`}
-                onClick={() => navigateToSection('macro')}
-              >
-                <IconBarChart size={18} color="var(--neutral)" />
-                <div className="mobile-nav-item-text">
-                  <span className="mobile-nav-title">Whales • MVRV • ETFs</span>
-                  <span className="mobile-nav-desc">Institutional On-Chain Flows</span>
-                </div>
-              </button>
+              {[
+                { id: 'bias', Icon: IconScale, title: "Today's Macro Bias", desc: 'Single Verdict · Signals Breakdown' },
+                { id: 'levels', Icon: IconWolf, title: 'Wolf Key Levels', desc: 'Auction Price Ladder, VAL/VAH & Anchors' },
+                { id: 'session', Icon: IconClock, title: 'Session HOD/LOD', desc: 'Asia, London & NY Probabilities' },
+                { id: 'pattern', Icon: IconCalendar, title: 'Weekly Forecast & HOW/LOW', desc: 'High/Low Formation Probability & Cycle Match' },
+                { id: 'rsi', Icon: IconZap, title: 'RSI Alerts (Discord)', desc: '55 Alts · Overbought / Oversold Telemetry' },
+                { id: 'structure', Icon: IconScale, title: 'Market Structure Matrix', desc: '1H, 4H, 1D, 1W · 2-Candle HTF Bias' },
+                { id: 'macro', Icon: IconBarChart, title: 'Whales · MVRV · ETFs', desc: 'Institutional On-Chain Flows' },
+              ].map(({ id, Icon, title, desc }) => (
+                <button key={id} className={`mobile-nav-item ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
+                  <Icon size={18} color="var(--accent)" />
+                  <div className="mobile-nav-item-text">
+                    <span className="mobile-nav-title">{title}</span>
+                    <span className="mobile-nav-desc">{desc}</span>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -751,15 +596,10 @@ export default function Home() {
           <div className="data-info-bar">
             <div className="data-info-left">
               <IconDatabase size={15} color="var(--accent)" />
-              <span>
-                Analyzing <span className="data-count">{totalCandles.toLocaleString()}</span> daily candles from{' '}
-                <span className="data-count">Jan 2021</span> to today
-              </span>
+              <span>Analyzing <span className="data-count">{totalCandles.toLocaleString()}</span> daily candles from <span className="data-count">Jan 2021</span> to today</span>
             </div>
             <div className="data-info-right">
-              <span>
-                Synced: {lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--'}
-              </span>
+              <span>Synced: {lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--'}</span>
               <button className="refresh-link-btn" onClick={handleRefresh} title="Refresh live data">
                 <IconRefresh size={13} className={refreshing ? 'spin-icon' : ''} />
                 <span>Refresh</span>
@@ -767,585 +607,89 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ── TODAY'S BIAS HERO WITH INSTITUTIONAL HIGH-PROBABILITY FILTERS ── */}
-          <div id="todays-bias" className={`bias-hero hero-${bColor}`}>
-            <div className="hero-glow-bg" />
+          {/* ── VERDICT HERO ── */}
+          <div id="todays-bias">
+            <VerdictHero bias={bias} data={data} clientDate={clientDate} />
 
-            {/* 1. Bias Filter Presets Bar & Matrix Toggle */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: 8,
-              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-              paddingBottom: 14,
-              marginBottom: 16,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{
-                  fontSize: '0.68rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  color: 'var(--text-muted)',
-                  fontFamily: 'var(--font-mono)',
-                  marginRight: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4
-                }}>
-                  <IconZap size={12} color="var(--accent)" /> Models:
-                </span>
-                
-                <button
-                  className={`bias-filter-pill ${biasFilters.preset === 'highest_prob' ? 'active' : ''}`}
-                  onClick={() => applyBiasFilterPreset('highest_prob')}
-                  title="Combines Sigmas, Market Regime, 20 EMA structure, Bleed Guard, Weekly Open & Stats for highest probability bias"
-                >
-                  🎯 High Probability
-                </button>
-                <button
-                  className={`bias-filter-pill ${biasFilters.preset === 'sigma_regime' ? 'active' : ''}`}
-                  onClick={() => applyBiasFilterPreset('sigma_regime')}
-                  title="Statistical Sigmas (Z-Score) & Macro Volatility/Trend Regime"
-                >
-                  📐 Sigmas &amp; Regime
-                </button>
-                <button
-                  className={`bias-filter-pill ${biasFilters.preset === 'bleed_guard' ? 'active' : ''}`}
-                  onClick={() => applyBiasFilterPreset('bleed_guard')}
-                  title="Detects intraday bleeding and prevents bullish bleed traps"
-                >
-                  🛡️ Bleed Guard
-                </button>
-                <button
-                  className={`bias-filter-pill ${biasFilters.preset === 'trend_only' ? 'active' : ''}`}
-                  onClick={() => applyBiasFilterPreset('trend_only')}
-                  title="20 EMA / 50 EMA Market Structure & Weekly Open"
-                >
-                  📈 Trend Structure
-                </button>
-              </div>
-
+            {/* Signals breakdown toggle */}
+            <div style={{ marginBottom: 24 }}>
               <button
-                className="confluence-toggle-btn"
-                onClick={() => setShowConfluences(!showConfluences)}
+                onClick={() => setShowSignals(!showSignals)}
                 style={{
-                  background: showConfluences ? 'var(--accent-dim)' : 'var(--bg-elevated)',
-                  border: `1px solid ${showConfluences ? 'var(--accent)' : 'var(--border)'}`,
-                  color: showConfluences ? 'var(--accent)' : 'var(--text-muted)',
-                  borderRadius: 4,
-                  padding: '4px 10px',
-                  fontSize: '0.72rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontFamily: 'var(--font-mono)'
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 6, padding: '7px 14px', fontSize: '0.74rem',
+                  color: 'var(--text-secondary)', cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)', transition: 'all 0.15s ease',
                 }}
               >
-                <span>Confluence Matrix</span>
-                <span style={{ fontSize: '0.65rem' }}>{showConfluences ? '▲ Hide' : '▼ View'}</span>
+                <IconRadar size={13} color="var(--accent)" />
+                <span>Confluence Breakdown</span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{showSignals ? '▲ Hide' : '▼ Show'}</span>
               </button>
+              {showSignals && <div style={{ marginTop: 12 }}><SignalsBreakdown bias={bias} /></div>}
             </div>
-
-            {/* 2. Bleed Trap Alert Warning Banner (Triggers if Bleed Guard detects trap) */}
-            {bias.bleedTrap?.detected && bias.isFiltered && (
-              <div style={{
-                background: 'rgba(239, 68, 68, 0.12)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                borderRadius: 8,
-                padding: '10px 14px',
-                marginBottom: 16,
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 12,
-              }}>
-                <div style={{
-                  background: '#ef4444',
-                  color: '#000000',
-                  fontWeight: 900,
-                  fontSize: '0.68rem',
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                  fontFamily: 'var(--font-mono)',
-                  marginTop: 1,
-                  flexShrink: 0
-                }}>
-                  BLEED TRAP ⚠️
-                </div>
-                <div style={{ fontSize: '0.8rem', color: '#fca5a5', lineHeight: 1.45 }}>
-                  <strong style={{ color: '#ffffff' }}>{bias.bleedTrap.title}:</strong> {bias.bleedTrap.explanation}
-                </div>
-              </div>
-            )}
-
-            {/* 3. Hero Main Content */}
-            <div className="hero-content">
-              <div className="hero-left">
-                <div className="hero-date">{formattedToday}</div>
-                <div className={`hero-title bias-${bColor}-text`} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {bias.bias === 'bullish' ? (
-                      <IconTrendUp size={28} className="hero-bias-icon" />
-                    ) : bias.bias === 'bearish' ? (
-                      <IconTrendDown size={28} className="hero-bias-icon" />
-                    ) : (
-                      <IconScale size={28} className="hero-bias-icon" />
-                    )}
-                    <span>{bias.bias.charAt(0).toUpperCase() + bias.bias.slice(1)} Bias</span>
-                  </div>
-                  
-                  {/* High Probability Conviction Badge */}
-                  <span style={{
-                    fontSize: '0.68rem',
-                    fontWeight: 800,
-                    padding: '3px 8px',
-                    borderRadius: 4,
-                    fontFamily: 'var(--font-mono)',
-                    letterSpacing: '0.04em',
-                    background: bias.isFiltered ? (bias.bias === 'bearish' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)') : 'rgba(255, 255, 255, 0.08)',
-                    color: bias.isFiltered ? (bias.bias === 'bearish' ? '#f87171' : '#4ade80') : '#888888',
-                    border: `1px solid ${bias.isFiltered ? (bias.bias === 'bearish' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)') : '#333333'}`,
-                  }}>
-                    {bias.isFiltered ? `HIGHEST PROBABILITY: ${bias.confidence}% CONVICTION` : `RAW UNFILTERED: ${bias.confidence}%`}
-                  </span>
-
-                  {/* Market Regime Badge */}
-                  {bias.regimeMetrics && (
-                    <span style={{
-                      fontSize: '0.66rem',
-                      fontWeight: 800,
-                      padding: '3px 8px',
-                      borderRadius: 4,
-                      fontFamily: 'var(--font-mono)',
-                      letterSpacing: '0.04em',
-                      background: `${bias.regimeMetrics.color}15`,
-                      color: bias.regimeMetrics.color,
-                      border: `1px solid ${bias.regimeMetrics.color}40`,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5
-                    }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: bias.regimeMetrics.color }} />
-                      REGIME: {bias.regimeMetrics.name.toUpperCase()}
-                    </span>
-                  )}
-
-                  {/* Sigma Z-Score Badge */}
-                  {bias.sigmaMetrics && (
-                    <span style={{
-                      fontSize: '0.66rem',
-                      fontWeight: 800,
-                      padding: '3px 8px',
-                      borderRadius: 4,
-                      fontFamily: 'var(--font-mono)',
-                      letterSpacing: '0.04em',
-                      background: `${bias.sigmaMetrics.color}15`,
-                      color: bias.sigmaMetrics.color,
-                      border: `1px solid ${bias.sigmaMetrics.color}40`,
-                    }}>
-                      σ {bias.sigmaMetrics.zScoreText} ({bias.sigmaMetrics.statusShort})
-                    </span>
-                  )}
-                </div>
-                <p className="hero-subtitle">{biasSummary}</p>
-
-                {/* Real-time Filtered Confluence Signals */}
-                <div className="hero-signals">
-                  {bias.isFiltered && bias.technicalMetrics ? (
-                    <>
-                      {bias.sigmaMetrics && (
-                        <div className="signal-pill">
-                          <span className="pill-dot" style={{ background: bias.sigmaMetrics.color }} />
-                          <span className="pill-label">Sigma Position</span>
-                          <span className="pill-value" style={{ color: bias.sigmaMetrics.color }}>
-                            {bias.sigmaMetrics.zScoreText} &middot; {bias.sigmaMetrics.statusShort}
-                          </span>
-                        </div>
-                      )}
-                      {bias.regimeMetrics && (
-                        <div className="signal-pill">
-                          <span className="pill-dot" style={{ background: bias.regimeMetrics.color }} />
-                          <span className="pill-label">Macro Regime</span>
-                          <span className="pill-value" style={{ color: bias.regimeMetrics.color }}>
-                            {bias.regimeMetrics.name}
-                          </span>
-                        </div>
-                      )}
-                      <div className="signal-pill">
-                        <span className={`pill-dot ${bias.technicalMetrics.priceVsEma20Pct >= 0 ? 'bullish' : 'bearish'}`} />
-                        <span className="pill-label">20 EMA Structure</span>
-                        <span className={`pill-value ${bias.technicalMetrics.priceVsEma20Pct >= 0 ? 'value-bullish' : 'value-bearish'}`}>
-                          {bias.technicalMetrics.priceVsEma20Pct >= 0 ? '+' : ''}{bias.technicalMetrics.priceVsEma20Pct}% (${bias.technicalMetrics.ema20.toLocaleString()})
-                        </span>
-                      </div>
-                      <div className="signal-pill">
-                        <span className={`pill-dot ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'bullish' : 'bearish'}`} />
-                        <span className="pill-label">Weekly Open</span>
-                        <span className={`pill-value ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'value-bullish' : 'value-bearish'}`}>
-                          {bias.weeklyBias.priceVsWeeklyOpen === 'above' ? '+' : '-'}
-                          {Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%
-                        </span>
-                      </div>
-                      <div className="signal-pill">
-                        <span className={`pill-dot ${bias.technicalMetrics.change24h >= 0 ? 'bullish' : 'bearish'}`} />
-                        <span className="pill-label">Bleed Guard</span>
-                        <span className={`pill-value ${bias.technicalMetrics.change24h >= 0 ? 'value-bullish' : 'value-bearish'}`}>
-                          24h: {bias.technicalMetrics.change24h >= 0 ? '+' : ''}{bias.technicalMetrics.change24h}% · RSI {bias.technicalMetrics.rsi14}
-                        </span>
-                      </div>
-                      {weeklyHighLowData && (
-                        <div
-                          className="signal-pill"
-                          onClick={() => navigateToSection('pattern')}
-                          style={{ cursor: 'pointer', border: '1px solid rgba(56, 189, 248, 0.35)' }}
-                          title="Click to view full Weekly High/Low Formation Probability matrix"
-                        >
-                          <span className="pill-dot" style={{ background: weeklyHighLowData.highMetrics.probabilityIsIn >= 55 ? '#f87171' : '#38bdf8' }} />
-                          <span className="pill-label">HOW Proximity</span>
-                          <span className="pill-value" style={{ color: weeklyHighLowData.highMetrics.probabilityIsIn >= 55 ? '#f87171' : '#38bdf8' }}>
-                            {weeklyHighLowData.highMetrics.probabilityIsIn}% Chance High is IN
-                          </span>
-                        </div>
-                      )}
-                      <div
-                        className="signal-pill"
-                        onClick={() => navigateToSection('rsi')}
-                        style={{ cursor: 'pointer', border: '1px solid rgba(56, 189, 248, 0.35)' }}
-                        title="Click to view live 55 Alts RSI Discord Scanner telemetry"
-                      >
-                        <span className="pill-dot" style={{ background: '#38bdf8' }} />
-                        <span className="pill-label">Discord Alerts</span>
-                        <span className="pill-value" style={{ color: '#38bdf8' }}>
-                          55 Alts &middot; 5m Loop
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="signal-pill">
-                        <span className={`pill-dot ${biasColor(todayDowStats.bias)}`} />
-                        <span className="pill-label">Day-of-Week</span>
-                        <span className={`pill-value value-${biasColor(todayDowStats.bias)}`}>
-                          {todayDowStats.bullishRate.toFixed(0)}% Bull
-                        </span>
-                      </div>
-                      <div className="signal-pill">
-                        <span className={`pill-dot ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'bullish' : 'bearish'}`} />
-                        <span className="pill-label">Weekly Open</span>
-                        <span className={`pill-value ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'value-bullish' : 'value-bearish'}`}>
-                          {bias.weeklyBias.priceVsWeeklyOpen === 'above' ? '+' : '-'}
-                          {Math.abs(bias.weeklyBias.pctFromWeeklyOpen).toFixed(2)}%
-                        </span>
-                      </div>
-                      <div className="signal-pill">
-                        <span className={`pill-dot ${biasColor(bias.monthlyStats.bias)}`} />
-                        <span className="pill-label">{MONTHS[todayMonth]} Seasonal</span>
-                        <span className={`pill-value value-${biasColor(bias.monthlyStats.bias)}`}>
-                          {bias.monthlyStats.bullishRate.toFixed(0)}% Bull
-                        </span>
-                      </div>
-                      <div className="signal-pill">
-                        <span className={`pill-dot ${bias.recentBullRate > 50 ? 'bullish' : 'bearish'}`} />
-                        <span className="pill-label">Recent {DAY_SHORT[todayDow]}s</span>
-                        <span className={`pill-value ${bias.recentBullRate > 50 ? 'value-bullish' : 'value-bearish'}`}>
-                          {bias.recentBullRate}% last 8
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* ── QUANT STATISTICAL SIGMA VOLATILITY GAUGE & BANDS ── */}
-                {bias.sigmaMetrics && (
-                  <div style={{
-                    marginTop: 16,
-                    padding: '12px 14px',
-                    background: '#070707',
-                    border: '1px solid #1a1a1a',
-                    borderRadius: 8,
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: 8,
-                      marginBottom: 8,
-                      fontSize: '0.72rem',
-                      fontFamily: 'var(--font-mono)'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ color: '#38bdf8', fontWeight: 800 }}>STATISTICAL SIGMAS (&plusmn;&sigma;)</span>
-                        <span style={{ color: '#555' }}>&middot;</span>
-                        <span style={{ color: '#888' }}>Daily Volatility: <strong style={{ color: '#fff' }}>&plusmn;{bias.sigmaMetrics.dailyStdDevPct}%</strong></span>
-                      </div>
-                      <div style={{
-                        padding: '2px 8px',
-                        borderRadius: 4,
-                        background: `${bias.sigmaMetrics.color}15`,
-                        color: bias.sigmaMetrics.color,
-                        border: `1px solid ${bias.sigmaMetrics.color}35`,
-                        fontWeight: 700,
-                        fontSize: '0.68rem',
-                      }}>
-                        {bias.sigmaMetrics.zScoreText} &middot; {bias.sigmaMetrics.statusShort}
-                      </div>
-                    </div>
-
-                    {/* Horizontal Sigma Scale Gauge (-3σ to +3σ) */}
-                    <div style={{ position: 'relative', margin: '14px 4px 8px' }}>
-                      <div style={{
-                        height: 6,
-                        background: 'linear-gradient(90deg, #ef4444 0%, #38bdf8 25%, #22c55e 50%, #38bdf8 75%, #ef4444 100%)',
-                        borderRadius: 3,
-                        position: 'relative',
-                        opacity: 0.85
-                      }}>
-                        {/* Live Z-score needle marker */}
-                        <div style={{
-                          position: 'absolute',
-                          left: `${Math.min(Math.max(((bias.sigmaMetrics.zScore + 3) / 6) * 100, 2), 98)}%`,
-                          top: -6,
-                          bottom: -6,
-                          width: 4,
-                          background: '#ffffff',
-                          boxShadow: '0 0 8px #ffffff, 0 0 14px #38bdf8',
-                          borderRadius: 2,
-                          transform: 'translateX(-50%)',
-                          zIndex: 3
-                        }} />
-                      </div>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontSize: '0.58rem',
-                        fontFamily: 'var(--font-mono)',
-                        color: '#666',
-                        marginTop: 6
-                      }}>
-                        <span>-3&sigma; Extreme</span>
-                        <span>-2&sigma; Floor</span>
-                        <span>-1&sigma; Low</span>
-                        <span style={{ color: '#fff', fontWeight: 700 }}>0 (Mean)</span>
-                        <span>+1&sigma; High</span>
-                        <span>+2&sigma; Ceiling</span>
-                        <span>+3&sigma; Extreme</span>
-                      </div>
-                    </div>
-
-                    {/* Sigma Price Nodes Grid */}
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))',
-                      gap: 6,
-                      marginTop: 10
-                    }}>
-                      <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>-2&sigma; Bounce Floor</div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#4ade80', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.minus2Sigma)}</div>
-                      </div>
-                      <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>-1&sigma; Expected Low</div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.minus1Sigma)}</div>
-                      </div>
-                      <div style={{ background: '#0d0d0d', border: '1px solid #262626', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>Mean (20 SMA)</div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ffffff', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.mean)}</div>
-                      </div>
-                      <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>+1&sigma; Expected High</div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.plus1Sigma)}</div>
-                      </div>
-                      <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 4, padding: '5px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.56rem', color: '#888', textTransform: 'uppercase' }}>+2&sigma; Mean Rev Ceiling</div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f87171', fontFamily: 'var(--font-mono)' }}>{formatPrice(bias.sigmaMetrics.plus2Sigma)}</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Confidence Ring */}
-              <div className="confidence-meter">
-                <ConfidenceRing confidence={bias.confidence} bias={bias.bias} />
-                <div className="meter-description">
-                  {bias.isFiltered ? (
-                    <>Highest-probability<br />multi-confluence filter</>
-                  ) : (
-                    <>Raw unweighted<br />3-signal baseline</>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Confluence Matrix Breakdown & Interactive Toggles (Toggleable) */}
-            {showConfluences && (
-              <div style={{
-                marginTop: 20,
-                paddingTop: 16,
-                borderTop: '1px solid var(--border)',
-                animation: 'fadeIn 0.2s ease',
-              }}>
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8, letterSpacing: '0.04em' }}>
-                    ACTIVE CONFLUENCE FILTERS (CLICK TO TOGGLE):
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <button
-                      className={`confluence-chip ${biasFilters.enableSigma ? 'active' : ''}`}
-                      onClick={() => toggleSingleBiasFilter('enableSigma')}
-                    >
-                      {biasFilters.enableSigma ? '✓ ' : '+ '}Sigmas (Z-Score)
-                    </button>
-                    <button
-                      className={`confluence-chip ${biasFilters.enableRegime ? 'active' : ''}`}
-                      onClick={() => toggleSingleBiasFilter('enableRegime')}
-                    >
-                      {biasFilters.enableRegime ? '✓ ' : '+ '}Market Regime
-                    </button>
-                    <button
-                      className={`confluence-chip ${biasFilters.enableTrend ? 'active' : ''}`}
-                      onClick={() => toggleSingleBiasFilter('enableTrend')}
-                    >
-                      {biasFilters.enableTrend ? '✓ ' : '+ '}Trend (20 EMA)
-                    </button>
-                    <button
-                      className={`confluence-chip ${biasFilters.enableBleedGuard ? 'active' : ''}`}
-                      onClick={() => toggleSingleBiasFilter('enableBleedGuard')}
-                    >
-                      {biasFilters.enableBleedGuard ? '✓ ' : '+ '}Bleed Trap Guard
-                    </button>
-                    <button
-                      className={`confluence-chip ${biasFilters.enableWeeklyOpen ? 'active' : ''}`}
-                      onClick={() => toggleSingleBiasFilter('enableWeeklyOpen')}
-                    >
-                      {biasFilters.enableWeeklyOpen ? '✓ ' : '+ '}Weekly Open
-                    </button>
-                    <button
-                      className={`confluence-chip ${biasFilters.enableRecentRegime ? 'active' : ''}`}
-                      onClick={() => toggleSingleBiasFilter('enableRecentRegime')}
-                    >
-                      {biasFilters.enableRecentRegime ? '✓ ' : '+ '}Recent 8W DOW
-                    </button>
-                    <button
-                      className={`confluence-chip ${biasFilters.enableRawStats ? 'active' : ''}`}
-                      onClick={() => toggleSingleBiasFilter('enableRawStats')}
-                    >
-                      {biasFilters.enableRawStats ? '✓ ' : '+ '}Historical DOW
-                    </button>
-                  </div>
-                </div>
-
-                {bias.confluences && (
-                  <>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: 10,
-                      fontSize: '0.75rem',
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--text-secondary)',
-                    }}>
-                      <span>CONFLUENCE ALIGNMENT SCORECARD:</span>
-                      <span style={{ color: bias.bias === 'bearish' ? 'var(--bearish)' : 'var(--bullish)', fontWeight: 700 }}>
-                        Composite Score: {bias.confluenceScore > 0 ? '+' : ''}{bias.confluenceScore}
-                      </span>
-                    </div>
-
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                      gap: 10,
-                    }}>
-                      {bias.confluences.map((c) => {
-                        const isBull = c.state === 'bullish';
-                        const isBear = c.state === 'bearish';
-                        return (
-                          <div
-                            key={c.id}
-                            style={{
-                              background: 'var(--bg-card)',
-                              border: `1px solid ${isBull ? 'rgba(34, 197, 94, 0.25)' : isBear ? 'rgba(239, 68, 68, 0.25)' : 'var(--border)'}`,
-                              borderRadius: 6,
-                              padding: '8px 12px',
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{c.name}</span>
-                              <span style={{
-                                fontSize: '0.65rem',
-                                fontWeight: 800,
-                                padding: '1px 6px',
-                                borderRadius: 3,
-                                background: isBull ? 'rgba(34, 197, 94, 0.2)' : isBear ? 'rgba(239, 68, 68, 0.2)' : 'var(--bg-elevated)',
-                                color: isBull ? '#4ade80' : isBear ? '#f87171' : 'var(--text-muted)',
-                              }}>
-                                {c.state.toUpperCase()}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                              {c.valueText}
-                            </div>
-                            <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                              {c.detail}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
           </div>
 
           {/* ── QUICK STATS ── */}
           <div className="stats-grid">
             <div className="stat-card">
-              <div className="stat-card-label">
-                <IconTrendUp size={14} color="var(--bullish)" />
-                <span>Best Day</span>
-              </div>
-              <div className="stat-card-value value-bullish">{best?.dayName.slice(0, 3)}</div>
-              <div className="stat-card-sub">{best?.bullishRate.toFixed(1)}% win rate &middot; avg {formatPct(best?.avgReturn)}</div>
+              <div className="stat-card-label"><IconTrendUp size={14} color="var(--bullish)" /><span>Best Day</span></div>
+              <div className="stat-card-value value-bullish">{best?.dayName?.slice(0, 3)}</div>
+              <div className="stat-card-sub">{best?.bullishRate.toFixed(1)}% win rate · avg {formatPct(best?.avgReturn)}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-card-label">
-                <IconTrendDown size={14} color="var(--bearish)" />
-                <span>Weakest Day</span>
-              </div>
-              <div className="stat-card-value value-bearish">{worst?.dayName.slice(0, 3)}</div>
-              <div className="stat-card-sub">{worst?.bullishRate.toFixed(1)}% win rate &middot; avg {formatPct(worst?.avgReturn)}</div>
+              <div className="stat-card-label"><IconTrendDown size={14} color="var(--bearish)" /><span>Weakest Day</span></div>
+              <div className="stat-card-value value-bearish">{worst?.dayName?.slice(0, 3)}</div>
+              <div className="stat-card-sub">{worst?.bullishRate.toFixed(1)}% win rate · avg {formatPct(worst?.avgReturn)}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-card-label">
-                <IconBitcoin size={14} color="var(--gold)" />
-                <span>Overall Bull Rate</span>
-              </div>
+              <div className="stat-card-label"><IconBitcoin size={14} color="var(--gold)" /><span>Overall Bull Rate</span></div>
               <div className="stat-card-value value-gold">{overallBullRate}%</div>
               <div className="stat-card-sub">{totalBullish} bull / {totalCandles} total days</div>
             </div>
             <div className="stat-card">
-              <div className="stat-card-label">
-                <IconPin size={14} color="var(--accent)" />
-                <span>Weekly Open</span>
-              </div>
-              <div className={`stat-card-value ${bias.weeklyBias.priceVsWeeklyOpen === 'above' ? 'value-bullish' : 'value-bearish'}`}>
-                {formatPrice(bias.weeklyBias.weeklyOpen)}
-              </div>
+              <div className="stat-card-label"><IconPin size={14} color="var(--accent)" /><span>Weekly Open</span></div>
+              <div className={`stat-card-value ${bias.aboveWeeklyOpen ? 'value-bullish' : 'value-bearish'}`}>{formatPrice(bias.weeklyOpen)}</div>
               <div className="stat-card-sub">
-                Spot: {formatPrice(data.currentPrice)} &middot;{' '}
-                <span style={{ color: bias.weeklyBias.pctFromWeeklyOpen > 0 ? 'var(--bullish)' : 'var(--bearish)' }}>
-                  {formatPct(bias.weeklyBias.pctFromWeeklyOpen)}
+                Spot: {formatPrice(data.currentPrice)} ·{' '}
+                <span style={{ color: bias.pctFromWeeklyOpen > 0 ? 'var(--bullish)' : 'var(--bearish)' }}>
+                  {formatPct(bias.pctFromWeeklyOpen)}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* ── 4 PRIMARY INSTITUTIONAL TABS (Restored Weekly Forecast) ── */}
+          {/* ── DOW GRID ── */}
+          <div className="dow-section">
+            <div className="section-header">
+              <div className="section-title"><IconCalendar size={16} color="var(--accent)" /> Day-of-Week Historical Rates</div>
+              <div className="section-subtitle">5-year base rate by day — context only, not the final verdict</div>
+            </div>
+            <div className="dow-grid">
+              {dowStatsArr.map(d => {
+                const isToday = d.day === bias.dow;
+                const bColor = d.bias === 'bullish' ? 'var(--bullish)' : d.bias === 'bearish' ? 'var(--bearish)' : 'var(--neutral)';
+                return (
+                  <div key={d.day} className={`dow-card${isToday ? ' today' : ''}`}>
+                    <div className="dow-card-day">{DAY_SHORT[d.day]}</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: bColor, fontFamily: 'var(--font-display)', marginBottom: 4 }}>
+                      {d.bullishRate.toFixed(0)}%
+                    </div>
+                    <div className={`dow-bias-badge ${d.bias}`}>{d.bias}</div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                      avg {d.avgReturn > 0 ? '+' : ''}{d.avgReturn.toFixed(2)}%
+                    </div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                      {d.bullish}G / {d.bearish}R
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── TABS ── */}
           <div className="tab-bar">
             <button id="tab-levels" className={`tab-btn ${activeTab === 'levels' ? 'active' : ''}`} onClick={() => navigateToSection('levels')}>
               <IconWolf size={15} color={activeTab === 'levels' ? 'var(--wolf-yellow-bright)' : 'var(--wolf-yellow)'} />
@@ -1361,7 +705,7 @@ export default function Home() {
             </button>
             <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => navigateToSection('macro')}>
               <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
-              <span style={{ color: activeTab === 'macro' ? '#38bdf8' : undefined }}>Whales • MVRV • ETFs</span>
+              <span style={{ color: activeTab === 'macro' ? '#38bdf8' : undefined }}>Whales · MVRV · ETFs</span>
             </button>
             <button id="tab-rsi" className={`tab-btn ${activeTab === 'rsi' ? 'active' : ''}`} onClick={() => navigateToSection('rsi')}>
               <IconZap size={15} color={activeTab === 'rsi' ? '#38bdf8' : undefined} />
@@ -1373,19 +717,10 @@ export default function Home() {
             </button>
           </div>
 
-          {/* ── Active Tab Content Container (Target for Auto-Scroll) ── */}
+          {/* ── Tab Content ── */}
           <div id="active-tab-content" style={{ scrollMarginTop: '80px', minHeight: '400px' }}>
-            {/* ── 1. WOLF KEY LEVELS VIEW ── */}
-            {activeTab === 'levels' && (
-              <WolfKeyLevels levelsData={wolfLevels} />
-            )}
-
-            {/* ── 2. SESSION PROFILER (Asia · London · NY HOD/LOD Probabilities) ── */}
-            {activeTab === 'session' && (
-              <SessionProfiler />
-            )}
-
-            {/* ── 3. WEEKLY FORECAST & HOW/LOW PROBABILITY VIEW ── */}
+            {activeTab === 'levels' && <WolfKeyLevels levelsData={wolfLevels} />}
+            {activeTab === 'session' && <SessionProfiler />}
             {activeTab === 'pattern' && (
               <WeeklyForecast
                 weekPattern={weekPattern}
@@ -1395,84 +730,41 @@ export default function Home() {
                 formatPrice={formatPrice}
               />
             )}
-
-            {/* ── 4. MACRO WHALES & ETF VIEW ── */}
-            {activeTab === 'macro' && (
-              <MacroWhalesEtf />
-            )}
-
-            {/* ── 5. DISCORD RSI SCANNER VIEW ── */}
-            {activeTab === 'rsi' && (
-              <RsiScannerWidget />
-            )}
-
-            {/* ── 6. MARKET STRUCTURE MATRIX (1H, 4H, 1D, 1W HTF) ── */}
-            {activeTab === 'structure' && (
-              <MarketStructureTable />
-            )}
+            {activeTab === 'macro' && <MacroWhalesEtf />}
+            {activeTab === 'rsi' && <RsiScannerWidget />}
+            {activeTab === 'structure' && <MarketStructureTable />}
           </div>
 
         </div>
       </main>
 
-      {/* ── Mobile Sticky Bottom Bar (Institutional Tools) ── */}
+      {/* Mobile Bottom Bar */}
       <div className="mobile-bottom-bar">
-        <button
-          className={`mobile-bottom-btn ${activeTab === 'levels' ? 'active' : ''}`}
-          onClick={() => navigateToSection('levels')}
-        >
-          <IconWolf size={18} />
-          <span>Levels</span>
-        </button>
-        <button
-          className={`mobile-bottom-btn ${activeTab === 'session' ? 'active' : ''}`}
-          onClick={() => navigateToSection('session')}
-        >
-          <IconClock size={18} />
-          <span>Sessions</span>
-        </button>
-        <button
-          className={`mobile-bottom-btn ${activeTab === 'pattern' ? 'active' : ''}`}
-          onClick={() => navigateToSection('pattern')}
-        >
-          <IconCalendar size={18} />
-          <span>Forecast</span>
-        </button>
-        <button
-          className={`mobile-bottom-btn ${activeTab === 'macro' ? 'active' : ''}`}
-          onClick={() => navigateToSection('macro')}
-        >
-          <IconBarChart size={18} />
-          <span>Whales</span>
-        </button>
-        <button
-          className={`mobile-bottom-btn ${activeTab === 'rsi' ? 'active' : ''}`}
-          onClick={() => navigateToSection('rsi')}
-        >
-          <IconZap size={18} />
-          <span>RSI</span>
-        </button>
-        <button
-          className={`mobile-bottom-btn ${activeTab === 'structure' ? 'active' : ''}`}
-          onClick={() => navigateToSection('structure')}
-        >
-          <IconScale size={18} />
-          <span>Structure</span>
-        </button>
+        {[
+          { id: 'levels', Icon: IconWolf, label: 'Levels' },
+          { id: 'session', Icon: IconClock, label: 'Sessions' },
+          { id: 'pattern', Icon: IconCalendar, label: 'Forecast' },
+          { id: 'macro', Icon: IconBarChart, label: 'Whales' },
+          { id: 'rsi', Icon: IconZap, label: 'RSI' },
+          { id: 'structure', Icon: IconScale, label: 'Structure' },
+        ].map(({ id, Icon, label }) => (
+          <button key={id} className={`mobile-bottom-btn ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
+            <Icon size={18} /><span>{label}</span>
+          </button>
+        ))}
       </div>
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <footer className="footer">
         <div className="container">
           <div className="footer-content">
             <div className="footer-left">
               <IconBlackFlag size={18} />
-              <span>Wolf Tape Reader &middot; Trading The Tape, With Precision &middot; Pitch Black Desk</span>
+              <span>Wolf Tape Reader · Trading The Tape, With Precision · Pitch Black Desk</span>
             </div>
             <p className="disclaimer">
               <IconShield size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: -2 }} />
-              Educational &amp; statistical reference only. Past market statistics do not guarantee future performance.
-              Not financial advice.
+              Educational &amp; statistical reference only. Past market statistics do not guarantee future performance. Not financial advice.
             </p>
           </div>
         </div>
