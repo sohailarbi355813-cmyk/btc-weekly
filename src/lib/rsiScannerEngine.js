@@ -415,6 +415,7 @@ export async function scanAllAltsRSI() {
     majorsTelemetry,
     overboughtCoins,
     oversoldCoins,
+    allCoins: allScanned,
   };
 }
 

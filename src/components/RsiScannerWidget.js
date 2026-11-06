@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   IconRadar,
   IconRefresh,
@@ -13,14 +13,17 @@ import {
 
 export default function RsiScannerWidget() {
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [scanningNow, setScanningNow] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [message, setMessage] = useState(null);
-  const [filterExtremeOnly, setFilterExtremeOnly] = useState(false);
+
+  // View & Filter State
+  const [viewMode, setViewMode] = useState('signals'); // 'signals' | 'all' | 'majors'
+  const [selectedTf, setSelectedTf] = useState('all'); // 'all' | '30m' | '45m' | '1h' | '2h' | '3h'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [territoryFilter, setTerritoryFilter] = useState('both'); // 'both' | 'overbought' | 'oversold'
   const [filterDivergenceOnly, setFilterDivergenceOnly] = useState(false);
-  const [filterMajorsOnly, setFilterMajorsOnly] = useState(false);
-  const [territoryFilter, setTerritoryFilter] = useState('both'); // 'both' (default) | 'overbought' | 'oversold'
+  const [filterExtremeOnly, setFilterExtremeOnly] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -34,32 +37,9 @@ export default function RsiScannerWidget() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000); // Poll status every 30s
+    const interval = setInterval(fetchStatus, 30000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
-
-  const handleTestAlert = async () => {
-    setTestingWebhook(true);
-    setMessage(null);
-    try {
-      const res = await fetch('/api/rsi-scanner', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'test_alert' }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setMessage({ type: 'success', text: '✅ Test ping sent to Discord channel!' });
-      } else {
-        setMessage({ type: 'error', text: '❌ Failed to send test ping: ' + json.message });
-      }
-    } catch (err) {
-      setMessage({ type: 'error', text: '❌ Error: ' + err.message });
-    } finally {
-      setTestingWebhook(false);
-      setTimeout(() => setMessage(null), 5000);
-    }
-  };
 
   const handleScanNow = async () => {
     setScanningNow(true);
@@ -72,19 +52,41 @@ export default function RsiScannerWidget() {
       });
       const json = await res.json();
       if (json.success) {
-        const sideLabel = territoryFilter === 'overbought' ? 'Overbought' : territoryFilter === 'oversold' ? 'Oversold' : 'Both Sides';
         setMessage({
           type: 'success',
-          text: `✅ ${sideLabel} scan complete! Found ${json.overboughtCount} Overbought, ${json.oversoldCount} Oversold. Dispatched ${json.alertsDispatched} alert(s) to Discord.`,
+          text: `Scan complete! Found ${json.overboughtCount || 0} Overbought, ${json.oversoldCount || 0} Oversold across 55 coins.`,
         });
         fetchStatus();
       } else {
-        setMessage({ type: 'error', text: '❌ Scan failed' });
+        setMessage({ type: 'error', text: 'Scan failed' });
       }
     } catch (err) {
-      setMessage({ type: 'error', text: '❌ Scan error: ' + err.message });
+      setMessage({ type: 'error', text: 'Scan error: ' + err.message });
     } finally {
       setScanningNow(false);
+      setTimeout(() => setMessage(null), 5000);
+    }
+  };
+
+  const handleTestAlert = async () => {
+    setTestingWebhook(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/rsi-scanner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test_alert' }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setMessage({ type: 'success', text: 'Discord test embed delivered successfully!' });
+      } else {
+        setMessage({ type: 'error', text: json.message || 'Webhook failed' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Error: ' + err.message });
+    } finally {
+      setTestingWebhook(false);
       setTimeout(() => setMessage(null), 6000);
     }
   };
@@ -92,20 +94,84 @@ export default function RsiScannerWidget() {
   const status = data?.status || {};
   const overboughtCoins = status.overboughtCoins || [];
   const oversoldCoins = status.oversoldCoins || [];
-  const totalTerritoryCount = overboughtCoins.length + oversoldCoins.length;
-  const isDaemonActive = data?.daemonActive;
+  const divergenceCoins = status.divergenceCoins || [];
+  const allScannedCoins = status.allCoins || [];
+
+  // Coins for "Active Signals" view
+  const activeSignalCoins = useMemo(() => {
+    const combined = [...overboughtCoins, ...oversoldCoins];
+    // Add divergences if not already in list
+    for (const d of divergenceCoins) {
+      if (!combined.some((c) => c.symbol === d.symbol && c.timeframe === d.timeframe)) {
+        combined.push(d);
+      }
+    }
+    return combined;
+  }, [overboughtCoins, oversoldCoins, divergenceCoins]);
+
+  // Unified list depending on view mode
+  const baseCoinsList = useMemo(() => {
+    if (viewMode === 'all') {
+      // If allScannedCoins is populated, use it. Otherwise fallback to active signals
+      return allScannedCoins.length > 0 ? allScannedCoins : activeSignalCoins;
+    }
+    if (viewMode === 'majors') {
+      const pool = allScannedCoins.length > 0 ? allScannedCoins : activeSignalCoins;
+      return pool.filter((c) => ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].includes(c.symbol));
+    }
+    // Default 'signals'
+    return activeSignalCoins;
+  }, [viewMode, allScannedCoins, activeSignalCoins]);
+
+  // Filtered coins by search, timeframe, territory, divergence, sigma
+  const displayedCoins = useMemo(() => {
+    return baseCoinsList.filter((item) => {
+      // Timeframe filter
+      if (selectedTf !== 'all' && item.timeframe !== selectedTf) {
+        return false;
+      }
+      // Search query filter (matches BTC, Bitcoin, etc.)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesSym = item.symbol?.toLowerCase().includes(q);
+        const matchesDisp = item.displaySymbol?.toLowerCase().includes(q);
+        const matchesName = item.name?.toLowerCase().includes(q);
+        if (!matchesSym && !matchesDisp && !matchesName) return false;
+      }
+      // Territory filter (applicable in signals view or if explicitly selected)
+      if (territoryFilter === 'overbought' && item.rsi < 70 && !item.divergence?.type?.includes('BEARISH')) {
+        return false;
+      }
+      if (territoryFilter === 'oversold' && item.rsi > 30 && !item.divergence?.type?.includes('BULLISH')) {
+        return false;
+      }
+      // Divergence filter
+      if (filterDivergenceOnly && !item.divergence) {
+        return false;
+      }
+      // Extreme Gaussian filter (>= 1.8 sigma)
+      if (filterExtremeOnly && Math.abs(item.sigmaMetrics?.zScore || 0) < 1.8) {
+        return false;
+      }
+      return true;
+    });
+  }, [baseCoinsList, selectedTf, searchQuery, territoryFilter, filterDivergenceOnly, filterExtremeOnly]);
+
+  const lastScanDateStr = status.lastScanTime
+    ? new Date(status.lastScanTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : 'Live';
 
   return (
     <div style={{
-      background: '#070707',
-      border: '1px solid #1a1a1a',
-      borderRadius: 10,
-      padding: '16px 18px',
-      marginBottom: 20,
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      padding: '20px',
+      marginBottom: 24,
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {/* Top Accent Line */}
+      {/* Top Accent Gradient Bar */}
       <div style={{
         position: 'absolute',
         top: 0,
@@ -115,53 +181,54 @@ export default function RsiScannerWidget() {
         background: 'linear-gradient(90deg, #ef4444 0%, #38bdf8 50%, #22c55e 100%)',
       }} />
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: 12,
-        borderBottom: '1px solid #151515',
-        paddingBottom: 14,
-        marginBottom: 14,
+        borderBottom: '1px solid var(--border)',
+        paddingBottom: 16,
+        marginBottom: 16,
       }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span style={{
               display: 'inline-block',
               width: 8,
               height: 8,
               borderRadius: '50%',
-              background: isDaemonActive ? '#22c55e' : '#38bdf8',
-              boxShadow: isDaemonActive ? '0 0 10px #22c55e' : '0 0 10px #38bdf8',
+              background: '#22c55e',
+              boxShadow: '0 0 10px #22c55e',
             }} />
-            <span style={{
-              fontSize: '0.88rem',
+            <h2 style={{
+              fontSize: '1.05rem',
               fontWeight: 800,
-              letterSpacing: '0.05em',
+              letterSpacing: '0.04em',
               textTransform: 'uppercase',
-              color: '#ffffff',
-              fontFamily: 'var(--font-mono)'
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-mono)',
+              margin: 0,
             }}>
-              Discord RSI Telemetry Scanner &middot; 55 Alts
-            </span>
+              55 Coins Market Radar · Live RSI Telemetry
+            </h2>
             <span style={{
-              fontSize: '0.64rem',
-              fontWeight: 700,
+              fontSize: '0.65rem',
+              fontWeight: 800,
               padding: '2px 8px',
               borderRadius: 4,
-              background: isDaemonActive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)',
-              color: isDaemonActive ? '#4ade80' : '#38bdf8',
-              border: `1px solid ${isDaemonActive ? 'rgba(34, 197, 94, 0.3)' : 'rgba(56, 189, 248, 0.3)'}`,
-              fontFamily: 'var(--font-mono)'
+              background: 'rgba(56, 189, 248, 0.15)',
+              color: 'var(--accent)',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              fontFamily: 'var(--font-mono)',
             }}>
-              {isDaemonActive ? '● DAEMON ACTIVE (5M)' : '● STANDBY'}
+              55 ASSETS · 5 TIMEFRAMES
             </span>
           </div>
 
-          <div style={{ fontSize: '0.70rem', color: '#777777', marginTop: 4 }}>
-            Dispatches live Discord embeds when any of the 55 watchlist altcoins enter RSI Overbought (&ge;70) or Oversold (&le;30).
+          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 4 }}>
+            Monitors real-time RSI extremes (&ge;70 Overbought, &le;30 Oversold), price levels, and divergences directly on this site.
           </div>
         </div>
 
@@ -171,12 +238,12 @@ export default function RsiScannerWidget() {
             onClick={handleTestAlert}
             disabled={testingWebhook}
             style={{
-              padding: '5px 12px',
-              background: '#121212',
-              border: '1px solid #2a2a2a',
-              borderRadius: 5,
-              color: '#38bdf8',
-              fontSize: '0.70rem',
+              padding: '6px 12px',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              color: 'var(--accent)',
+              fontSize: '0.72rem',
               fontWeight: 700,
               fontFamily: 'var(--font-mono)',
               cursor: testingWebhook ? 'not-allowed' : 'pointer',
@@ -184,33 +251,34 @@ export default function RsiScannerWidget() {
               alignItems: 'center',
               gap: 6,
             }}
-            title="Send test embed to Discord channel"
+            title="Test Discord Webhook URL (if configured in .env.local)"
           >
-            <IconZap size={12} color="#38bdf8" />
-            <span>{testingWebhook ? 'Sending...' : 'Test Discord Webhook'}</span>
+            <IconZap size={13} color="var(--accent)" />
+            <span>{testingWebhook ? 'Testing...' : 'Test Webhook'}</span>
           </button>
 
           <button
             onClick={handleScanNow}
             disabled={scanningNow}
             style={{
-              padding: '5px 12px',
-              background: '#161616',
-              border: '1px solid #333',
-              borderRadius: 5,
+              padding: '6px 14px',
+              background: '#0284c7',
+              border: '1px solid #38bdf8',
+              borderRadius: 6,
               color: '#ffffff',
-              fontSize: '0.70rem',
-              fontWeight: 700,
+              fontSize: '0.72rem',
+              fontWeight: 800,
               fontFamily: 'var(--font-mono)',
               cursor: scanningNow ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 6,
+              boxShadow: '0 0 12px rgba(56, 189, 248, 0.25)',
             }}
-            title="Run instant scan across all 55 coins on 30m, 45m, 1h, 2h, 3h"
+            title="Run instant real-time scan across all 55 coins on Bybit"
           >
-            <IconRefresh size={12} className={scanningNow ? 'spin-icon' : ''} color="#ffffff" />
-            <span>{scanningNow ? 'Scanning 275 Charts...' : 'Scan Now (55 Alts)'}</span>
+            <IconRefresh size={13} className={scanningNow ? 'spin-icon' : ''} color="#ffffff" />
+            <span>{scanningNow ? 'Scanning 55 Coins...' : 'Scan Now'}</span>
           </button>
         </div>
       </div>
@@ -218,10 +286,10 @@ export default function RsiScannerWidget() {
       {/* Toast Feedback */}
       {message && (
         <div style={{
-          padding: '8px 12px',
+          padding: '8px 14px',
           borderRadius: 6,
-          marginBottom: 12,
-          fontSize: '0.74rem',
+          marginBottom: 14,
+          fontSize: '0.76rem',
           fontFamily: 'var(--font-mono)',
           background: message.type === 'success' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
           color: message.type === 'success' ? '#4ade80' : '#f87171',
@@ -231,285 +299,119 @@ export default function RsiScannerWidget() {
         </div>
       )}
 
-      {/* Monitored Timeframes Bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        flexWrap: 'wrap',
-        marginBottom: 14,
-        padding: '8px 12px',
-        background: '#0a0a0a',
-        borderRadius: 6,
-        border: '1px solid #141414',
-        fontSize: '0.70rem',
-        fontFamily: 'var(--font-mono)',
-      }}>
-        <span style={{ color: '#888' }}>STRICT TIMEFRAMES MONITORED:</span>
-        {['30m', '45m', '1h', '2h', '3h'].map((tf) => (
-          <span
-            key={tf}
-            style={{
-              padding: '2px 8px',
-              borderRadius: 4,
-              background: '#151515',
-              border: '1px solid #282828',
-              color: '#38bdf8',
-              fontWeight: 700,
-            }}
-          >
-            {tf.toUpperCase()}
-          </span>
-        ))}
-        <span style={{ color: '#555', marginLeft: 'auto' }}>
-          Loop: <strong style={{ color: '#aaa' }}>Every 5 Mins</strong> &middot; Cooldown: <strong style={{ color: '#aaa' }}>45m Anti-Spam</strong>
-        </span>
-      </div>
-
-      {/* Summary Cards with Click-to-Filter */}
+      {/* ── Summary Counters Row ── */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
         gap: 10,
-        marginBottom: 14,
+        marginBottom: 16,
       }}>
         {/* Overbought Card */}
         <div
-          onClick={() => setTerritoryFilter(territoryFilter === 'overbought' ? 'both' : 'overbought')}
+          onClick={() => {
+            setViewMode('signals');
+            setTerritoryFilter(territoryFilter === 'overbought' ? 'both' : 'overbought');
+          }}
           style={{
-            background: territoryFilter === 'overbought' ? 'rgba(239, 68, 68, 0.18)' : 'var(--bg-card)',
-            border: `1px solid ${territoryFilter === 'overbought' ? '#ef4444' : 'rgba(239, 68, 68, 0.3)'}`,
+            background: territoryFilter === 'overbought' ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-elevated)',
+            border: `1px solid ${territoryFilter === 'overbought' ? '#ef4444' : 'rgba(239, 68, 68, 0.25)'}`,
             borderRadius: 8,
             padding: '12px 14px',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
-            boxShadow: territoryFilter === 'overbought' ? '0 0 14px rgba(239, 68, 68, 0.25)' : 'none',
           }}
-          title="Click to filter exclusively for Overbought coins"
+          title="Click to filter Overbought coins (RSI >= 70)"
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.70rem', color: '#f87171', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 700 }}>
-              Overbought (&ge;70) {territoryFilter === 'overbought' ? '✓' : ''}
+            <span style={{ fontSize: '0.70rem', color: '#f87171', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 800 }}>
+              Overbought (&ge;70)
             </span>
-            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f87171', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#f87171', fontFamily: 'var(--font-display)' }}>
               {status.overboughtCount || 0}
             </span>
           </div>
-          <div style={{ fontSize: '0.64rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-            Resistance risk &middot; Click to view only OB
+          <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
+            Resistance &amp; exhaustion territory
           </div>
         </div>
 
         {/* Oversold Card */}
         <div
-          onClick={() => setTerritoryFilter(territoryFilter === 'oversold' ? 'both' : 'oversold')}
+          onClick={() => {
+            setViewMode('signals');
+            setTerritoryFilter(territoryFilter === 'oversold' ? 'both' : 'oversold');
+          }}
           style={{
-            background: territoryFilter === 'oversold' ? 'rgba(34, 197, 94, 0.18)' : 'var(--bg-card)',
-            border: `1px solid ${territoryFilter === 'oversold' ? '#22c55e' : 'rgba(34, 197, 94, 0.3)'}`,
+            background: territoryFilter === 'oversold' ? 'rgba(34, 197, 94, 0.15)' : 'var(--bg-elevated)',
+            border: `1px solid ${territoryFilter === 'oversold' ? '#22c55e' : 'rgba(34, 197, 94, 0.25)'}`,
             borderRadius: 8,
             padding: '12px 14px',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
-            boxShadow: territoryFilter === 'oversold' ? '0 0 14px rgba(34, 197, 94, 0.25)' : 'none',
           }}
-          title="Click to filter exclusively for Oversold coins"
+          title="Click to filter Oversold coins (RSI <= 30)"
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.70rem', color: '#4ade80', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 700 }}>
-              Oversold (&le;30) {territoryFilter === 'oversold' ? '✓' : ''}
+            <span style={{ fontSize: '0.70rem', color: '#4ade80', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 800 }}>
+              Oversold (&le;30)
             </span>
-            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#4ade80', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#4ade80', fontFamily: 'var(--font-display)' }}>
               {status.oversoldCount || 0}
             </span>
           </div>
-          <div style={{ fontSize: '0.64rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-            Capitulation dip &middot; Click to view only OS
+          <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
+            Discount value &amp; bounce zone
           </div>
         </div>
 
-        {/* Divergence Counter Card */}
+        {/* Divergences Card */}
         <div
           onClick={() => setFilterDivergenceOnly(!filterDivergenceOnly)}
           style={{
-            background: filterDivergenceOnly ? 'rgba(234, 179, 8, 0.18)' : 'var(--bg-card)',
-            border: `1px solid ${filterDivergenceOnly ? '#eab308' : 'rgba(234, 179, 8, 0.3)'}`,
+            background: filterDivergenceOnly ? 'rgba(234, 179, 8, 0.18)' : 'var(--bg-elevated)',
+            border: `1px solid ${filterDivergenceOnly ? '#eab308' : 'rgba(234, 179, 8, 0.25)'}`,
             borderRadius: 8,
             padding: '12px 14px',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
-            boxShadow: filterDivergenceOnly ? '0 0 14px rgba(234, 179, 8, 0.25)' : 'none',
           }}
-          title="Click to filter exclusively for coins with confirmed RSI Divergence"
+          title="Click to filter confirmed RSI Divergences"
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.70rem', color: '#eab308', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 700 }}>
-              🎯 RSI Divergences {filterDivergenceOnly ? '✓' : ''}
+            <span style={{ fontSize: '0.70rem', color: '#eab308', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 800 }}>
+              🎯 Divergences
             </span>
-            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#eab308', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#eab308', fontFamily: 'var(--font-display)' }}>
               {status.divergenceCount || 0}
             </span>
           </div>
-          <div style={{ fontSize: '0.64rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-            BTC, ETH, SOL &amp; Alts &middot; Reversal Confluence
+          <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
+            High-conviction reversal setups
           </div>
         </div>
 
         {/* Total Monitored Card */}
         <div style={{
-          background: 'var(--bg-card)',
+          background: 'var(--bg-elevated)',
           border: '1px solid var(--border)',
           borderRadius: 8,
           padding: '12px 14px',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.70rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 600 }}>
-              Lifetime Alerts
+            <span style={{ fontSize: '0.70rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 700 }}>
+              Monitored Coins
             </span>
-            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
-              {status.totalAlertsSentLifetime || 0}
+            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: 'var(--accent)', fontFamily: 'var(--font-display)' }}>
+              55
             </span>
           </div>
           <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Last scan: {status.lastScanTime ? new Date(status.lastScanTime).toLocaleTimeString() : 'Pending'}
+            Last scan: <strong style={{ color: 'var(--text-primary)' }}>{lastScanDateStr}</strong>
           </div>
         </div>
       </div>
 
-      {/* 👑 Majors Radar (BTC, ETH, SOL) RSI & Divergence Telemetry */}
-      <div style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 8,
-        padding: '12px 14px',
-        marginBottom: 14,
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 10,
-          flexWrap: 'wrap',
-          gap: 6,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#eab308', fontFamily: 'var(--font-mono)' }}>
-              👑 MAJORS RSI &amp; DIVERGENCE RADAR
-            </span>
-            <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              (BTC • ETH • SOL &middot; 30m, 45m, 1h, 2h, 3h)
-            </span>
-          </div>
-          <button
-            onClick={() => setFilterMajorsOnly(!filterMajorsOnly)}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 4,
-              fontSize: '0.66rem',
-              fontFamily: 'var(--font-mono)',
-              fontWeight: 700,
-              background: filterMajorsOnly ? 'rgba(234, 179, 8, 0.2)' : 'var(--bg-elevated)',
-              color: filterMajorsOnly ? '#eab308' : 'var(--text-secondary)',
-              border: `1px solid ${filterMajorsOnly ? '#eab308' : 'var(--border)'}`,
-              cursor: 'pointer',
-            }}
-          >
-            {filterMajorsOnly ? '✓ Viewing Majors Only' : 'Filter Feed to Majors'}
-          </button>
-        </div>
-
-        {/* 3 Major Cards: BTC, ETH, SOL */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: 10,
-        }}>
-          {[
-            { sym: 'BTCUSDT', disp: 'BTCUSDT.P', name: 'Bitcoin' },
-            { sym: 'ETHUSDT', disp: 'ETHUSDT.P', name: 'Ethereum' },
-            { sym: 'SOLUSDT', disp: 'SOLUSDT.P', name: 'Solana' },
-          ].map((item) => {
-            const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${item.sym}.P`;
-            const allSignals = [...overboughtCoins, ...oversoldCoins, ...(status.divergenceCoins || [])];
-            const matchingSignals = allSignals.filter((c) => c.symbol === item.sym);
-            const divSignal = matchingSignals.find((c) => c.divergence);
-            const latestSignal = matchingSignals[0];
-
-            return (
-              <div
-                key={item.sym}
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: `1px solid ${divSignal ? (divSignal.divergence.type === 'BEARISH_DIVERGENCE' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(34, 197, 94, 0.6)') : 'var(--border)'}`,
-                  borderRadius: 6,
-                  padding: '10px 12px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: '0.80rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                      {item.disp}
-                    </span>
-                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{item.name}</span>
-                  </div>
-                  <a
-                    href={tvUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ fontSize: '0.62rem', color: 'var(--accent)', textDecoration: 'none', fontFamily: 'var(--font-mono)' }}
-                  >
-                    Chart &rarr;
-                  </a>
-                </div>
-
-                {divSignal ? (
-                  <div style={{
-                    margin: '6px 0',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    background: divSignal.divergence.type === 'BEARISH_DIVERGENCE' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                    border: `1px solid ${divSignal.divergence.type === 'BEARISH_DIVERGENCE' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}>
-                    <span style={{
-                      fontSize: '0.66rem',
-                      fontWeight: 800,
-                      color: divSignal.divergence.type === 'BEARISH_DIVERGENCE' ? '#f87171' : '#4ade80',
-                      fontFamily: 'var(--font-mono)',
-                    }}>
-                      ⚠️ {divSignal.divergence.label} ({divSignal.timeframe.toUpperCase()})
-                    </span>
-                    <span style={{ fontSize: '0.64rem', fontWeight: 800, color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
-                      RSI {divSignal.rsi}
-                    </span>
-                  </div>
-                ) : (
-                  <div style={{
-                    margin: '6px 0',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border)',
-                    fontSize: '0.64rem',
-                    color: 'var(--text-secondary)',
-                    fontFamily: 'var(--font-mono)',
-                  }}>
-                    {latestSignal ? `${latestSignal.territory} (${latestSignal.timeframe.toUpperCase()}) · RSI ${latestSignal.rsi}` : 'No Extreme Divergence Active · Trend Normal'}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                  <span>{latestSignal ? `Spot: $${Number(latestSignal.price).toLocaleString()}` : 'Monitored 24/7'}</span>
-                  <span>{latestSignal?.sigmaMetrics ? `${latestSignal.sigmaMetrics.zScoreText} (${latestSignal.sigmaMetrics.gaussianPct}% Gauss)` : '30m-3h Timeframes'}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Primary Territory Segmented Filter Controls */}
+      {/* ── View Mode & Controls Bar ── */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -517,37 +419,140 @@ export default function RsiScannerWidget() {
         flexWrap: 'wrap',
         gap: 10,
         marginBottom: 14,
-        padding: '10px 14px',
+        padding: '12px 14px',
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border)',
         borderRadius: 8,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.70rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-            TERRITORY SCAN:
-          </span>
-          <div className="rsi-territory-selector">
-            <button
-              className={`rsi-territory-pill ${territoryFilter === 'both' ? 'active' : ''}`}
-              onClick={() => setTerritoryFilter('both')}
-            >
-              🌐 Both Sides (Default)
-            </button>
-            <button
-              className={`rsi-territory-pill ob ${territoryFilter === 'overbought' ? 'active' : ''}`}
-              onClick={() => setTerritoryFilter('overbought')}
-            >
-              🔥 Overbought Only ({status.overboughtCount || 0})
-            </button>
-            <button
-              className={`rsi-territory-pill os ${territoryFilter === 'oversold' ? 'active' : ''}`}
-              onClick={() => setTerritoryFilter('oversold')}
-            >
-              ❄️ Oversold Only ({status.oversoldCount || 0})
-            </button>
-          </div>
+        {/* View Mode Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => { setViewMode('signals'); setTerritoryFilter('both'); }}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 6,
+              fontSize: '0.72rem',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 800,
+              background: viewMode === 'signals' ? 'var(--accent-dim)' : 'transparent',
+              color: viewMode === 'signals' ? 'var(--accent)' : 'var(--text-secondary)',
+              border: `1px solid ${viewMode === 'signals' ? 'var(--accent)' : 'var(--border)'}`,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            ⚡ Active Signals ({activeSignalCoins.length})
+          </button>
+          <button
+            onClick={() => { setViewMode('all'); setTerritoryFilter('both'); }}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 6,
+              fontSize: '0.72rem',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 800,
+              background: viewMode === 'all' ? 'var(--accent-dim)' : 'transparent',
+              color: viewMode === 'all' ? 'var(--accent)' : 'var(--text-secondary)',
+              border: `1px solid ${viewMode === 'all' ? 'var(--accent)' : 'var(--border)'}`,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            📋 All 55 Coins Watchlist
+          </button>
+          <button
+            onClick={() => { setViewMode('majors'); setTerritoryFilter('both'); }}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 6,
+              fontSize: '0.72rem',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 800,
+              background: viewMode === 'majors' ? 'rgba(234, 179, 8, 0.2)' : 'transparent',
+              color: viewMode === 'majors' ? '#eab308' : 'var(--text-secondary)',
+              border: `1px solid ${viewMode === 'majors' ? '#eab308' : 'var(--border)'}`,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            👑 Majors (BTC · ETH · SOL)
+          </button>
         </div>
 
+        {/* Timeframe Selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>TF:</span>
+          {['all', '30m', '45m', '1h', '2h', '3h'].map((tf) => (
+            <button
+              key={tf}
+              onClick={() => setSelectedTf(tf)}
+              style={{
+                padding: '3px 8px',
+                borderRadius: 4,
+                fontSize: '0.68rem',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 700,
+                background: selectedTf === tf ? 'var(--accent)' : 'var(--bg-card)',
+                color: selectedTf === tf ? '#000000' : 'var(--text-secondary)',
+                border: `1px solid ${selectedTf === tf ? 'var(--accent)' : 'var(--border)'}`,
+                cursor: 'pointer',
+              }}
+            >
+              {tf.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Search & Filter Pill Controls ── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginBottom: 16,
+      }}>
+        {/* Fast Search Input */}
+        <div style={{ flex: '1 1 240px', maxWidth: 360, position: 'relative' }}>
+          <input
+            type="text"
+            placeholder="Search coin (e.g. SOL, DOGE, SUI, ADA)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '7px 12px',
+              borderRadius: 6,
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-primary)',
+              fontSize: '0.74rem',
+              fontFamily: 'var(--font-mono)',
+              outline: 'none',
+            }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{
+                position: 'absolute',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: '0.8rem',
+              }}
+            >
+              &times;
+            </button>
+          )}
+        </div>
+
+        {/* Filters */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <button
             onClick={() => setFilterDivergenceOnly(!filterDivergenceOnly)}
@@ -559,9 +564,8 @@ export default function RsiScannerWidget() {
               fontWeight: 700,
               background: filterDivergenceOnly ? 'rgba(234, 179, 8, 0.2)' : 'var(--bg-card)',
               color: filterDivergenceOnly ? '#eab308' : 'var(--text-secondary)',
-              border: filterDivergenceOnly ? '1px solid #eab308' : '1px solid var(--border)',
+              border: `1px solid ${filterDivergenceOnly ? '#eab308' : 'var(--border)'}`,
               cursor: 'pointer',
-              transition: 'all 0.15s ease',
             }}
           >
             🎯 Divergence Only {filterDivergenceOnly ? '✓' : ''}
@@ -574,108 +578,119 @@ export default function RsiScannerWidget() {
               fontSize: '0.68rem',
               fontFamily: 'var(--font-mono)',
               fontWeight: 700,
-              background: filterExtremeOnly ? 'rgba(56, 189, 248, 0.18)' : 'var(--bg-card)',
-              color: filterExtremeOnly ? '#38bdf8' : 'var(--text-secondary)',
-              border: filterExtremeOnly ? '1px solid #38bdf8' : '1px solid var(--border)',
+              background: filterExtremeOnly ? 'rgba(56, 189, 248, 0.2)' : 'var(--bg-card)',
+              color: filterExtremeOnly ? 'var(--accent)' : 'var(--text-secondary)',
+              border: `1px solid ${filterExtremeOnly ? 'var(--accent)' : 'var(--border)'}`,
               cursor: 'pointer',
-              transition: 'all 0.15s ease',
             }}
           >
-            ⚡ &ge;2.0&sigma; Gaussian {filterExtremeOnly ? '✓' : ''}
+            ⚡ &ge;1.8&sigma; Sigma {filterExtremeOnly ? '✓' : ''}
           </button>
+          {territoryFilter !== 'both' && (
+            <button
+              onClick={() => setTerritoryFilter('both')}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 6,
+                fontSize: '0.68rem',
+                fontFamily: 'var(--font-mono)',
+                background: 'var(--bg-card)',
+                color: 'var(--text-muted)',
+                border: '1px solid var(--border)',
+                cursor: 'pointer',
+              }}
+            >
+              Clear Territory Filter &times;
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Detected Coins Feed Table */}
-      {(() => {
-        const allCoins = [...overboughtCoins, ...oversoldCoins];
-        const territoryCoins = allCoins.filter(item => {
-          if (territoryFilter === 'overbought') return item.territory === 'OVERBOUGHT';
-          if (territoryFilter === 'oversold') return item.territory === 'OVERSOLD';
-          return true; // 'both'
-        });
-        const displayedCoins = territoryCoins
-          .filter(item => !filterExtremeOnly || (item.sigmaMetrics && item.sigmaMetrics.isExtremeGaussian))
-          .filter(item => !filterDivergenceOnly || item.divergence)
-          .filter(item => !filterMajorsOnly || ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].includes(item.symbol));
+      {/* ── Coins Grid Display ── */}
+      <div>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+          fontSize: '0.70rem',
+          fontFamily: 'var(--font-mono)',
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+        }}>
+          <span>Showing <strong style={{ color: 'var(--text-primary)' }}>{displayedCoins.length}</strong> Results:</span>
+          <span>TF: {selectedTf.toUpperCase()}</span>
+        </div>
 
-        return (
+        {displayedCoins.length === 0 ? (
           <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
+            textAlign: 'center',
+            padding: '36px 20px',
+            background: 'var(--bg-elevated)',
             borderRadius: 8,
-            padding: '12px 14px',
+            border: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.80rem',
           }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 12,
-              flexWrap: 'wrap',
-              gap: 8,
-            }}>
-              <div style={{
-                fontSize: '0.70rem',
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--text-secondary)',
-                textTransform: 'uppercase',
-                fontWeight: 600,
-              }}>
-                Active Signals: <strong style={{ color: 'var(--text-primary)' }}>{displayedCoins.length}</strong>
-                {territoryFilter === 'overbought' ? ' (Overbought Only)' : territoryFilter === 'oversold' ? ' (Oversold Only)' : ' (Both Sides)'}
-                {filterDivergenceOnly ? ' • [🎯 Divergence Only]' : ''}
-                {filterMajorsOnly ? ' • [👑 Majors Only]' : ''}
-              </div>
+            <IconRadar size={28} color="var(--accent)" style={{ marginBottom: 8, opacity: 0.6 }} />
+            <div>No coins currently match the selected filter criteria.</div>
+            <div style={{ fontSize: '0.70rem', color: 'var(--text-muted)', marginTop: 4 }}>
+              Click <strong>&quot;All 55 Coins Watchlist&quot;</strong> above or click <strong>&quot;Scan Now&quot;</strong> to refresh live market feeds.
             </div>
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 10,
+          }}>
+            {displayedCoins.map((item, idx) => {
+              const isOB = item.rsi >= 70;
+              const isOS = item.rsi <= 30;
+              const isMajor = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].includes(item.symbol) || item.isMajor;
+              const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${item.symbol}.P`;
+              const rsiColor = isOB ? '#ef4444' : isOS ? '#22c55e' : 'var(--accent)';
+              const rsiPct = Math.min(Math.max(item.rsi, 0), 100);
 
-            {displayedCoins.length === 0 ? (
-              <div style={{
-                textAlign: 'center',
-                padding: '24px',
-                color: 'var(--text-muted)',
-                fontSize: '0.78rem',
-                fontFamily: 'var(--font-mono)',
-              }}>
-                No coins currently matching filter criteria across 30m, 45m, 1h, 2h, 3h.
-              </div>
-            ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                gap: 10,
-              }}>
-                {displayedCoins.map((item, idx) => {
-                  const isOB = item.territory === 'OVERBOUGHT';
-                  const isMajor = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].includes(item.symbol) || item.isMajor;
-                  const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${item.symbol}.P`;
-                  const isExtreme = item.sigmaMetrics?.isExtremeGaussian;
-                  return (
-                    <div
-                      key={`${item.symbol}-${item.timeframe}-${idx}`}
-                      style={{
-                        background: 'var(--bg-elevated)',
-                        border: `1px solid ${item.divergence ? (isOB ? 'rgba(239, 68, 68, 0.7)' : 'rgba(34, 197, 94, 0.7)') : isExtreme ? 'var(--accent)' : isOB ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
-                        borderRadius: 6,
-                        padding: '10px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              return (
+                <div
+                  key={`${item.symbol}-${item.timeframe}-${idx}`}
+                  style={{
+                    background: 'var(--bg-elevated)',
+                    border: `1px solid ${
+                      item.divergence
+                        ? item.divergence.type?.includes('BEARISH')
+                          ? 'rgba(239, 68, 68, 0.7)'
+                          : 'rgba(34, 197, 94, 0.7)'
+                        : isOB
+                        ? 'rgba(239, 68, 68, 0.35)'
+                        : isOS
+                        ? 'rgba(34, 197, 94, 0.35)'
+                        : 'var(--border)'
+                    }`,
+                    borderRadius: 8,
+                    padding: '12px 14px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {/* Top line: Symbol, Name, TF, TradingView Link */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{
-                        fontSize: '0.78rem',
+                        fontSize: '0.82rem',
                         fontWeight: 800,
-                        color: isMajor ? '#eab308' : '#ffffff',
-                        fontFamily: 'var(--font-mono)'
+                        color: isMajor ? '#eab308' : 'var(--text-primary)',
+                        fontFamily: 'var(--font-mono)',
                       }}>
-                        {item.displaySymbol}
+                        {item.displaySymbol || item.symbol}
+                      </span>
+                      <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>
+                        {item.name}
                       </span>
                       {isMajor && (
                         <span style={{
-                          fontSize: '0.60rem',
+                          fontSize: '0.58rem',
                           padding: '1px 5px',
                           borderRadius: 3,
                           background: 'rgba(234, 179, 8, 0.2)',
@@ -684,90 +699,115 @@ export default function RsiScannerWidget() {
                           fontFamily: 'var(--font-mono)',
                           fontWeight: 800,
                         }}>
-                          👑 MAJOR
+                          MAJOR
                         </span>
                       )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{
-                        fontSize: '0.62rem',
-                        padding: '1px 5px',
+                        fontSize: '0.64rem',
+                        padding: '1px 6px',
                         borderRadius: 3,
-                        background: '#1a1a1a',
-                        color: '#38bdf8',
-                        fontFamily: 'var(--font-mono)'
+                        background: 'var(--bg-card)',
+                        color: 'var(--accent)',
+                        fontFamily: 'var(--font-mono)',
+                        border: '1px solid var(--border)',
+                        fontWeight: 700,
                       }}>
-                        {item.timeframe.toUpperCase()}
+                        {item.timeframe?.toUpperCase()}
                       </span>
-                      {item.divergence && (
-                        <span style={{
-                          fontSize: '0.60rem',
-                          padding: '1px 5px',
-                          borderRadius: 3,
-                          background: item.divergence.type === 'BEARISH_DIVERGENCE' ? 'rgba(239, 68, 68, 0.25)' : 'rgba(34, 197, 94, 0.25)',
-                          color: item.divergence.type === 'BEARISH_DIVERGENCE' ? '#f87171' : '#4ade80',
-                          border: `1px solid ${item.divergence.type === 'BEARISH_DIVERGENCE' ? '#ef4444' : '#22c55e'}`,
+                      <a
+                        href={tvUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: '0.65rem',
+                          color: 'var(--text-muted)',
+                          textDecoration: 'none',
                           fontFamily: 'var(--font-mono)',
-                          fontWeight: 800,
-                        }}>
-                          🎯 DIVERGENCE
-                        </span>
-                      )}
-                      {item.sigmaMetrics && (
-                        <span style={{
-                          fontSize: '0.60rem',
-                          padding: '1px 5px',
-                          borderRadius: 3,
-                          fontWeight: 800,
-                          background: isExtreme ? 'rgba(56, 189, 248, 0.25)' : '#171717',
-                          color: isExtreme ? '#38bdf8' : '#888',
-                          border: isExtreme ? '1px solid rgba(56, 189, 248, 0.5)' : '1px solid #222',
-                          fontFamily: 'var(--font-mono)'
-                        }}>
-                          {item.sigmaMetrics.zScoreText} ({item.sigmaMetrics.gaussianPct}% Gauss)
-                        </span>
-                      )}
+                        }}
+                        title="Open in TradingView"
+                      >
+                        Chart &rarr;
+                      </a>
                     </div>
-                    <div style={{ fontSize: '0.64rem', color: '#888', marginTop: 3 }}>
-                      Spot: ${Number(item.price).toFixed(item.price < 1 ? 4 : 2)} &middot; Mean: ${Number(item.sigmaMetrics?.mean || 0).toFixed(item.price < 1 ? 4 : 2)}
-                    </div>
-                    {item.divergence && (
-                      <div style={{ fontSize: '0.62rem', color: item.divergence.type === 'BEARISH_DIVERGENCE' ? '#f87171' : '#4ade80', fontWeight: 600, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                        ⚠️ {item.divergence.label} ({item.divergence.barsAgo} bars ago)
-                      </div>
+                  </div>
+
+                  {/* Price & Sigma */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: '0.74rem' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      ${Number(item.price || 0).toLocaleString(undefined, { minimumFractionDigits: item.price < 1 ? 4 : 2 })}
+                    </span>
+                    {item.sigmaMetrics && (
+                      <span style={{
+                        fontSize: '0.64rem',
+                        fontFamily: 'var(--font-mono)',
+                        color: Math.abs(item.sigmaMetrics.zScore || 0) >= 1.8 ? (item.sigmaMetrics.zScore > 0 ? '#f87171' : '#4ade80') : 'var(--text-muted)',
+                      }}>
+                        σ {item.sigmaMetrics.zScoreText}
+                      </span>
                     )}
                   </div>
 
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{
-                      fontSize: '0.86rem',
-                      fontWeight: 900,
-                      color: isOB ? '#f87171' : '#4ade80',
-                      fontFamily: 'var(--font-mono)'
-                    }}>
-                      RSI {item.rsi}
+                  {/* RSI Visual Bar Gauge */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3, fontSize: '0.68rem', fontFamily: 'var(--font-mono)' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>RSI (14)</span>
+                      <span style={{ color: rsiColor, fontWeight: 900 }}>
+                        {item.rsi} {isOB ? '· OVERBOUGHT' : isOS ? '· OVERSOLD' : ''}
+                      </span>
                     </div>
-                    <a
-                      href={tvUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        fontSize: '0.60rem',
-                        color: '#38bdf8',
-                        textDecoration: 'none',
-                        fontFamily: 'var(--font-mono)'
-                      }}
-                    >
-                      Chart &rarr;
-                    </a>
+
+                    <div style={{
+                      height: 5,
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      borderRadius: 3,
+                      position: 'relative',
+                      overflow: 'hidden',
+                    }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${rsiPct}%`,
+                        background: rsiColor,
+                        borderRadius: 3,
+                        transition: 'width 0.4s ease',
+                      }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.55rem', color: '#555', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
+                      <span>0</span>
+                      <span style={{ color: '#22c55e' }}>30 OS</span>
+                      <span style={{ color: '#ef4444' }}>70 OB</span>
+                      <span>100</span>
+                    </div>
                   </div>
+
+                  {/* Divergence Tag if Active */}
+                  {item.divergence && (
+                    <div style={{
+                      marginTop: 8,
+                      padding: '4px 8px',
+                      borderRadius: 4,
+                      background: item.divergence.type?.includes('BEARISH') ? 'rgba(239, 68, 68, 0.18)' : 'rgba(34, 197, 94, 0.18)',
+                      border: `1px solid ${item.divergence.type?.includes('BEARISH') ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
+                      fontSize: '0.66rem',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 800,
+                      color: item.divergence.type?.includes('BEARISH') ? '#f87171' : '#4ade80',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}>
+                      <span>⚠️ {item.divergence.label}</span>
+                      <span>{item.divergence.barsAgo} bars ago</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
-    );
-  })()}
     </div>
   );
 }
-

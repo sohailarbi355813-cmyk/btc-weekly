@@ -7,54 +7,87 @@ import path from 'path';
 const STATUS_FILE = path.join(process.cwd(), '.rsi-scanner-status.json');
 const CONFIG_FILE = path.join(process.cwd(), '.rsi-scanner-config.json');
 
+let inMemoryCache = null;
+let lastScanTime = 0;
+const CACHE_TTL_MS = 60 * 1000; // 1-minute memory cache
+
+function persistStatus(data) {
+  inMemoryCache = data;
+  lastScanTime = Date.now();
+  try {
+    fs.writeFileSync(STATUS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('Failed to write .rsi-scanner-status.json:', e.message);
+  }
+}
+
+function loadStatus() {
+  if (inMemoryCache && Date.now() - lastScanTime < CACHE_TTL_MS) {
+    return inMemoryCache;
+  }
+  try {
+    if (fs.existsSync(STATUS_FILE)) {
+      const raw = fs.readFileSync(STATUS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      inMemoryCache = parsed;
+      lastScanTime = parsed.lastScanTime || Date.now();
+      return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
 
-    // On-demand immediate scan
+    // On-demand explicit scan
     if (action === 'scan') {
       const results = await scanAllAltsRSI();
       const allTerritory = [...results.overboughtCoins, ...results.oversoldCoins];
       const alertable = filterCooldownAlerts(allTerritory);
 
       let sentAlerts = 0;
-      if (alertable.length > 0) {
+      if (alertable.length > 0 && process.env.DISCORD_WEBHOOK_URL) {
         const sendRes = await sendDiscordRsiAlerts(alertable);
         sentAlerts = sendRes.count || 0;
       }
 
+      const statusObj = {
+        ...results,
+        lastScanTime: Date.now(),
+        alertsDispatched: sentAlerts,
+      };
+      persistStatus(statusObj);
+
       return NextResponse.json({
         success: true,
         scannedNow: true,
-        ...results,
-        alertsDispatched: sentAlerts,
+        ...statusObj,
       });
     }
 
-    // Default: read persisted scanner status
-    let cachedStatus = null;
-    try {
-      if (fs.existsSync(STATUS_FILE)) {
-        const raw = fs.readFileSync(STATUS_FILE, 'utf-8');
-        cachedStatus = JSON.parse(raw);
-      }
-    } catch (e) {}
+    // Default: return cached or run auto-scan on initial load if no cache exists
+    let cachedStatus = loadStatus();
 
-    const isDaemonActive = cachedStatus && Date.now() - cachedStatus.lastScanTime < 7 * 60 * 1000;
+    // Auto-scan if no cache exists yet so the website doesn't appear empty
+    if (!cachedStatus || (!cachedStatus.allCoins?.length && !cachedStatus.overboughtCoins?.length)) {
+      const results = await scanAllAltsRSI();
+      cachedStatus = {
+        ...results,
+        lastScanTime: Date.now(),
+        alertsDispatched: 0,
+      };
+      persistStatus(cachedStatus);
+    }
+
+    const isDaemonActive = cachedStatus && Date.now() - (cachedStatus.lastScanTime || 0) < 7 * 60 * 1000;
 
     return NextResponse.json({
       success: true,
       daemonActive: isDaemonActive,
-      status: cachedStatus || {
-        lastScanTime: null,
-        overboughtCount: 0,
-        oversoldCount: 0,
-        overboughtCoins: [],
-        oversoldCoins: [],
-        totalCoins: 55,
-        timeframes: SCAN_TIMEFRAMES.map((t) => t.id),
-      },
+      status: cachedStatus,
       timeframes: SCAN_TIMEFRAMES,
     });
   } catch (error) {
@@ -69,8 +102,17 @@ export async function POST(request) {
     const { action } = body;
 
     if (action === 'test_alert') {
+      if (!process.env.DISCORD_WEBHOOK_URL) {
+        return NextResponse.json({
+          success: false,
+          message: 'No DISCORD_WEBHOOK_URL found in environment. Alerts are displayed directly on-site in the table below.',
+        });
+      }
       const ok = await sendTestDiscordAlert();
-      return NextResponse.json({ success: ok, message: ok ? 'Test alert sent to Discord!' : 'Failed to send test alert' });
+      return NextResponse.json({
+        success: ok,
+        message: ok ? 'Test alert sent to Discord!' : 'Failed to send test alert to Discord URL',
+      });
     }
 
     if (action === 'scan_now') {
@@ -89,10 +131,9 @@ export async function POST(request) {
         targetCoins = [...results.overboughtCoins, ...results.oversoldCoins];
       }
 
-      // Always include active divergences
       if (results.divergenceCoins && results.divergenceCoins.length > 0) {
         for (const d of results.divergenceCoins) {
-          if (!targetCoins.some(t => t.symbol === d.symbol && t.timeframe === d.timeframe)) {
+          if (!targetCoins.some((t) => t.symbol === d.symbol && t.timeframe === d.timeframe)) {
             targetCoins.push(d);
           }
         }
@@ -101,22 +142,22 @@ export async function POST(request) {
       const alertable = filterCooldownAlerts(targetCoins);
 
       let sentAlerts = 0;
-      if (alertable.length > 0) {
+      if (alertable.length > 0 && process.env.DISCORD_WEBHOOK_URL) {
         const sendRes = await sendDiscordRsiAlerts(alertable);
         sentAlerts = sendRes.count || 0;
       }
 
+      const statusObj = {
+        ...results,
+        lastScanTime: Date.now(),
+        territory,
+        alertsDispatched: sentAlerts,
+      };
+      persistStatus(statusObj);
+
       return NextResponse.json({
         success: true,
-        territory,
-        overboughtCount: results.overboughtCount,
-        oversoldCount: results.oversoldCount,
-        divergenceCount: results.divergenceCount || 0,
-        divergenceCoins: results.divergenceCoins || [],
-        majorsTelemetry: results.majorsTelemetry || [],
-        alertsDispatched: sentAlerts,
-        overboughtCoins: results.overboughtCoins,
-        oversoldCoins: results.oversoldCoins,
+        ...statusObj,
       });
     }
 
@@ -126,4 +167,3 @@ export async function POST(request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
-
