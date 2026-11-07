@@ -2653,19 +2653,186 @@ body::after {
   flex-shrink: 0;
 }
 
-/* Comprehensive Responsive Overrides */
+/* ═══════════════════════════════════════════
+   SIGMA GAUSSIAN BAND BAR
+═══════════════════════════════════════════ */
+.sigma-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sigma-bar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sigma-bar-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.sigma-bar-zscore {
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+
+.sigma-bar-status {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+/* The gradient track */
+.sigma-bar-track {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  border-radius: 7px;
+  overflow: visible;
+  display: flex;
+  box-sizing: border-box;
+  /* Base track bg */
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Zone fills — 5 zones each 20% wide of the bar */
+.sigma-zone {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 0;
+}
+.sigma-zone-extreme-os {
+  left: 0%;
+  width: 16.66%;
+  background: linear-gradient(90deg, rgba(74,222,128,0.5), rgba(74,222,128,0.2));
+  border-radius: 7px 0 0 7px;
+}
+.sigma-zone-os {
+  left: 16.66%;
+  width: 16.66%;
+  background: linear-gradient(90deg, rgba(56,189,248,0.2), rgba(56,189,248,0.08));
+}
+.sigma-zone-fair {
+  left: 33.33%;
+  width: 33.33%;
+  background: rgba(148,163,184,0.06);
+}
+.sigma-zone-ob {
+  left: 66.66%;
+  width: 16.66%;
+  background: linear-gradient(90deg, rgba(251,146,60,0.08), rgba(251,146,60,0.2));
+}
+.sigma-zone-extreme-ob {
+  left: 83.33%;
+  width: 16.66%;
+  background: linear-gradient(90deg, rgba(248,113,113,0.2), rgba(248,113,113,0.5));
+  border-radius: 0 7px 7px 0;
+}
+
+/* Tick marks */
+.sigma-tick {
+  position: absolute;
+  top: 100%;
+  transform: translateX(-50%);
+  margin-top: 3px;
+}
+.sigma-tick span {
+  font-size: 0.55rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+/* Price marker diamond */
+.sigma-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #000;
+  z-index: 10;
+  transition: left 0.4s ease;
+  flex-shrink: 0;
+}
+
+/* Price anchors below the bar */
+.sigma-prices-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px; /* room for tick labels */
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ═══════════════════════════════════════════
+   COMPREHENSIVE MOBILE RESPONSIVENESS
+═══════════════════════════════════════════ */
+
+/* Prevent full-page horizontal scroll */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Container safe padding */
+.container {
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+  box-sizing: border-box;
+}
+
+/* Any table that might overflow */
+table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+/* ═══════════════════════════════════════════
+   MOBILE RESPONSIVE — 768px and below
+═══════════════════════════════════════════ */
 @media (max-width: 768px) {
+  /* VerdictHero card */
   .verdict-hero-card {
-    padding: 16px 14px !important;
+    padding: 14px 12px !important;
+    margin-bottom: 16px !important;
   }
   .verdict-hero-body {
     grid-template-columns: 1fr !important;
-    gap: 16px !important;
+    gap: 14px !important;
   }
+  .verdict-hero-title {
+    font-size: clamp(1.6rem, 10vw, 2.4rem) !important;
+    line-height: 1.1 !important;
+  }
+  /* Score meter goes horizontal below the content on mobile */
   .verdict-score-meter-wrap {
     flex-direction: row !important;
-    justify-content: space-between !important;
+    justify-content: flex-start !important;
+    gap: 14px !important;
     width: 100% !important;
+    min-width: 0 !important;
     padding: 10px 14px !important;
     background: rgba(255, 255, 255, 0.03);
     border-radius: 8px;
@@ -2673,29 +2840,44 @@ body::after {
     box-sizing: border-box;
   }
   .verdict-score-circle {
-    width: 64px !important;
-    height: 64px !important;
+    width: 60px !important;
+    height: 60px !important;
     border-width: 2px !important;
+    flex-shrink: 0;
   }
   .verdict-score-circle span:first-child {
-    font-size: 1.3rem !important;
+    font-size: 1.2rem !important;
   }
-  .verdict-hero-title {
-    font-size: clamp(1.8rem, 8vw, 2.4rem) !important;
-    line-height: 1.15 !important;
+
+  /* Sigma bar on mobile */
+  .sigma-bar-wrap {
+    gap: 4px;
   }
+  .sigma-prices-row {
+    gap: 2px;
+  }
+  .sigma-prices-row span {
+    font-size: 0.58rem !important;
+  }
+  .sigma-tick span {
+    font-size: 0.48rem !important;
+  }
+
+  /* Signals breakdown: stack rows vertically */
   .signals-breakdown-row {
     display: flex !important;
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 8px !important;
-    padding: 12px 10px !important;
+    gap: 6px !important;
+    padding: 10px 10px !important;
   }
   .signals-breakdown-score-col {
     text-align: left !important;
   }
+
+  /* Header */
   .header-right {
-    gap: 6px !important;
+    gap: 5px !important;
   }
   .theme-toggle-btn span:last-child {
     display: none !important;
@@ -2708,44 +2890,154 @@ body::after {
   }
   .btc-price-header {
     padding: 4px 8px !important;
-    font-size: 0.80rem !important;
+    font-size: 0.78rem !important;
   }
+
+  /* Stat cards */
   .stat-card-value {
-    font-size: 1.2rem !important;
+    font-size: 1.15rem !important;
     word-break: break-word;
   }
   .stat-card-sub {
-    font-size: 0.68rem !important;
+    font-size: 0.65rem !important;
     word-break: break-word;
   }
+
+  /* DOW grid: 2 columns on mobile */
   .dow-grid {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 6px !important;
   }
+
+  /* Prior week levels + verdict footer */
+  .verdict-footer-bar {
+    gap: 14px !important;
+  }
+  .verdict-top-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    margin-bottom: 12px !important;
+  }
+  .verdict-price-badge {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Signal pills: smaller text on mobile */
+  .verdict-signal-pill {
+    font-size: 0.68rem !important;
+    padding: 4px 8px !important;
+  }
+  .verdict-signals-wrap {
+    gap: 5px !important;
+  }
+
+  /* RSI Scanner Widget tables */
+  .rsi-scanner-table,
+  .rsi-scanner-row,
+  .coin-watchlist-table {
+    font-size: 0.72rem !important;
+  }
+
+  /* Any flex row that might wrap badly */
+  .wolf-levels-row,
+  .session-row,
+  .forecast-row {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  /* Section headers */
+  .section-header-title {
+    font-size: 0.75rem !important;
+  }
+
+  /* Tab nav: scroll horizontally */
+  .tab-nav-wrap,
+  .tabs-row {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none !important;
+  }
+  .tab-nav-wrap::-webkit-scrollbar,
+  .tabs-row::-webkit-scrollbar {
+    display: none !important;
+  }
 }
 
+/* ═══════════════════════════════════════════
+   MOBILE RESPONSIVE — 480px and below
+═══════════════════════════════════════════ */
 @media (max-width: 480px) {
+  /* Container safe insets */
+  .container {
+    padding: 0 10px !important;
+    padding-left: max(10px, env(safe-area-inset-left)) !important;
+    padding-right: max(10px, env(safe-area-inset-right)) !important;
+  }
+
+  /* Stats grid: 2-col */
   .stats-grid {
     grid-template-columns: 1fr 1fr !important;
     gap: 8px !important;
   }
   .stat-card {
-    padding: 12px 10px !important;
-  }
-  .stat-card-label {
-    font-size: 0.65rem !important;
-    margin-bottom: 6px !important;
-  }
-  .stat-card-value {
-    font-size: 1.1rem !important;
-  }
-  .stat-card-sub {
-    font-size: 0.63rem !important;
-  }
-  .dow-card {
     padding: 10px 8px !important;
   }
-  .container {
-    padding: 0 10px !important;
+  .stat-card-label {
+    font-size: 0.62rem !important;
+    margin-bottom: 4px !important;
+  }
+  .stat-card-value {
+    font-size: 1.0rem !important;
+  }
+  .stat-card-sub {
+    font-size: 0.60rem !important;
+  }
+  .dow-card {
+    padding: 8px 6px !important;
+  }
+
+  /* VerdictHero even tighter */
+  .verdict-hero-card {
+    padding: 12px 10px !important;
+  }
+  .verdict-hero-title {
+    font-size: clamp(1.4rem, 11vw, 2rem) !important;
+  }
+
+  /* Score circle even smaller on tiny screens */
+  .verdict-score-circle {
+    width: 52px !important;
+    height: 52px !important;
+  }
+  .verdict-score-circle span:first-child {
+    font-size: 1.0rem !important;
+  }
+
+  /* Sigma bar prices: even smaller */
+  .sigma-prices-row span {
+    font-size: 0.55rem !important;
+  }
+
+  /* Coin radar cards */
+  .coin-card,
+  .rsi-coin-card {
+    padding: 10px 8px !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* Prior week badge text */
+  .verdict-footer-bar span {
+    font-size: 0.68rem !important;
+  }
+
+  /* Signal pills: tiny */
+  .verdict-signal-pill {
+    font-size: 0.64rem !important;
+    padding: 3px 6px !important;
+    gap: 4px !important;
   }
 }

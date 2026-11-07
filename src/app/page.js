@@ -179,26 +179,75 @@ function VerdictHero({ bias, data, clientDate }) {
             )}
           </div>
         )}
-        {/* Sigma levels */}
-        {bias.sigmaMetrics && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.76rem', flexWrap: 'wrap' }}>
-            <span style={{ color: '#4b5563', fontFamily: 'var(--font-mono)' }}>
-              Sigma {bias.sigmaMetrics.zScoreText}:
-            </span>
-            {[
-              { label: '-2σ', val: bias.sigmaMetrics.minus2Sigma, c: '#4ade80' },
-              { label: '-1σ', val: bias.sigmaMetrics.minus1Sigma, c: '#38bdf8' },
-              { label: 'Mean', val: bias.sigmaMetrics.mean, c: '#888' },
-              { label: '+1σ', val: bias.sigmaMetrics.plus1Sigma, c: '#38bdf8' },
-              { label: '+2σ', val: bias.sigmaMetrics.plus2Sigma, c: '#f87171' },
-            ].map(({ label, val, c }) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                <span style={{ color: '#374151', fontSize: '0.6rem', fontFamily: 'var(--font-mono)' }}>{label}</span>
-                <span style={{ color: c, fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.74rem' }}>{formatPrice(val)}</span>
+        {/* Sigma Visual Bar */}
+        {bias.sigmaMetrics && (() => {
+          const sm = bias.sigmaMetrics;
+          // Map zScore (-3 to +3) → 0% to 100% position on bar
+          const rawPos = ((sm.zScore + 3) / 6) * 100;
+          const markerPos = Math.max(1, Math.min(99, rawPos));
+          // Color zones: -2σ to -1σ = green (mean reversion long), mean zone = neutral, +1σ to +2σ = caution, beyond ±2σ = extreme
+          const markerColor = sm.zScore <= -2.2 ? '#4ade80'
+            : sm.zScore <= -1.2 ? '#38bdf8'
+            : sm.zScore >= 2.2 ? '#f87171'
+            : sm.zScore >= 1.2 ? '#fb923c'
+            : '#94a3b8';
+          const statusColor = sm.color || markerColor;
+          return (
+            <div className="sigma-bar-wrap">
+              {/* Header row */}
+              <div className="sigma-bar-header">
+                <span className="sigma-bar-label">σ Gaussian Band</span>
+                <span className="sigma-bar-zscore" style={{ color: statusColor }}>
+                  {sm.zScoreText}
+                </span>
+                <span className="sigma-bar-status" style={{ color: statusColor }}>
+                  {sm.statusShort}
+                </span>
               </div>
-            ))}
-          </div>
-        )}
+
+              {/* The visual bar */}
+              <div className="sigma-bar-track">
+                {/* Zone fills */}
+                <div className="sigma-zone sigma-zone-extreme-os" />   {/* below -2σ: strong green */}
+                <div className="sigma-zone sigma-zone-os" />            {/* -2σ to -1σ: soft green */}
+                <div className="sigma-zone sigma-zone-fair" />          {/* -1σ to +1σ: neutral */}
+                <div className="sigma-zone sigma-zone-ob" />            {/* +1σ to +2σ: amber */}
+                <div className="sigma-zone sigma-zone-extreme-ob" />   {/* above +2σ: red */}
+
+                {/* Tick labels on bar */}
+                <div className="sigma-tick" style={{ left: '0%' }}><span>-3σ</span></div>
+                <div className="sigma-tick" style={{ left: '16.66%' }}><span>-2σ</span></div>
+                <div className="sigma-tick" style={{ left: '33.33%' }}><span>-1σ</span></div>
+                <div className="sigma-tick" style={{ left: '50%' }}><span>μ</span></div>
+                <div className="sigma-tick" style={{ left: '66.66%' }}><span>+1σ</span></div>
+                <div className="sigma-tick" style={{ left: '83.33%' }}><span>+2σ</span></div>
+                <div className="sigma-tick" style={{ left: '100%' }}><span>+3σ</span></div>
+
+                {/* Price marker */}
+                <div className="sigma-marker" style={{ left: `${markerPos}%`, background: markerColor, boxShadow: `0 0 8px ${markerColor}` }} />
+              </div>
+
+              {/* Price anchors row */}
+              <div className="sigma-prices-row">
+                <span style={{ color: '#4ade80', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
+                  -2σ {formatPrice(sm.minus2Sigma)}
+                </span>
+                <span style={{ color: '#38bdf8', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
+                  -1σ {formatPrice(sm.minus1Sigma)}
+                </span>
+                <span style={{ color: '#6b7280', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
+                  μ {formatPrice(sm.mean)}
+                </span>
+                <span style={{ color: '#fb923c', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
+                  +1σ {formatPrice(sm.plus1Sigma)}
+                </span>
+                <span style={{ color: '#f87171', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
+                  +2σ {formatPrice(sm.plus2Sigma)}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
