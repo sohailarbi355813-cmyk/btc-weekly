@@ -11,7 +11,6 @@ import { sendDiscordRsiAlerts, sendTestDiscordAlert } from '@/lib/discordNotifie
 import fs from 'fs';
 import path from 'path';
 
-export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const DATA_DIR = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) ? '/tmp' : process.cwd();
