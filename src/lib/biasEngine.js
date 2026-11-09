@@ -1,4 +1,4 @@
-/**
+﻿/**
  * BTC Bias Engine v4 — Upgraded Verdict System
  *
  * Outputs ONE clear verdict: BULLISH | BEARISH | CAUTION
@@ -305,7 +305,8 @@ export function analyzeDayOfWeek(candles) {
     s.avgReturn = s.returns.reduce((a, b) => a + b, 0) / s.returns.length;
     s.bullishRate = (s.bullish / s.total) * 100;
     s.bearishRate = (s.bearish / s.total) * 100;
-    s.bias = s.bullishRate > 55 ? 'bullish' : s.bullishRate < 45 ? 'bearish' : 'neutral';
+    s.bias = s.bullishRate >= 50.0 ? 'bullish' : 'bearish';
+    s.bearishRate = 100 - s.bullishRate;
     s.strength = Math.abs(s.bullishRate - 50);
   }
   return stats;
@@ -336,7 +337,8 @@ export function analyzeMonthlyBias(candles) {
     if (s.total === 0) continue;
     s.avgReturn = s.returns.reduce((a, b) => a + b, 0) / s.returns.length;
     s.bullishRate = (s.bullish / s.total) * 100;
-    s.bias = s.bullishRate > 55 ? 'bullish' : s.bullishRate < 45 ? 'bearish' : 'neutral';
+    s.bias = s.bullishRate >= 50.0 ? 'bullish' : 'bearish';
+    s.bearishRate = 100 - s.bullishRate;
   }
   return stats;
 }
@@ -585,20 +587,16 @@ export function getTodayBias(candles, currentPrice, referenceDate = null) {
     (change24h < -0.5 || rsi14 < 44 || currentPrice < ema20) &&
     todayDowStats.bullishRate >= 54;
 
-  // ── VERDICT ──────────────────────────────────────────────────────────────────
+  // ── VERDICT (STRICT INSTITUTIONAL DIRECTION — ZERO DUALITY) ──────────────────
   let verdict, verdictColor, verdictGlow;
-  if (normalizedScore >= 20) {
+  if (normalizedScore >= 0) {
     verdict = 'BULLISH'; verdictColor = '#22c55e'; verdictGlow = 'rgba(34,197,94,0.2)';
-  } else if (normalizedScore <= -20) {
-    verdict = 'BEARISH'; verdictColor = '#ef4444'; verdictGlow = 'rgba(239,68,68,0.2)';
   } else {
-    verdict = 'CAUTION'; verdictColor = '#f59e0b'; verdictGlow = 'rgba(245,158,11,0.2)';
+    verdict = 'BEARISH'; verdictColor = '#ef4444'; verdictGlow = 'rgba(239,68,68,0.2)';
   }
 
-  // Bleed trap override: downgrade BULLISH → CAUTION
-  if (isBleedTrap && verdict === 'BULLISH') {
-    verdict = 'CAUTION'; verdictColor = '#f59e0b'; verdictGlow = 'rgba(245,158,11,0.2)';
-  }
+  // Calculate clean, positive 0-100% conviction strength
+  const strengthPct = Math.min(98, Math.max(52, Math.round(50 + (Math.abs(normalizedScore) * 0.48))));
 
   // ── VERDICT REASON (plain English, actionable) ───────────────────────────────
   const bullSignals = signals.filter(s => s.state === 'bullish' && Math.abs(s.score) >= 8).map(s => s.name);
@@ -628,6 +626,7 @@ export function getTodayBias(candles, currentPrice, referenceDate = null) {
     verdict, verdictColor, verdictGlow,
     verdictReason,
     score: normalizedScore,
+    strengthPct,
     convictionLevel,
     isBleedTrap,
     signals,

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { getTodayBias } from '@/lib/biasEngine';
@@ -141,16 +141,17 @@ function VerdictHero({ bias, data, clientDate }) {
           </div>
         </div>
 
-        {/* Score meter */}
+        {/* Score meter — Single Clear Conviction, No Duality, No Negative Numbers */}
         <div className="verdict-score-meter-wrap">
           <div className="verdict-score-circle" style={{ borderColor: color, boxShadow: `0 0 20px ${color}30`, background: `${color}0d` }}>
             <span style={{ color }}>
-              {score > 0 ? '+' : ''}{score}
+              {bias.strengthPct || Math.min(98, Math.max(52, Math.round(50 + Math.abs(score) * 0.48)))}%
             </span>
-            <span>score</span>
+            <span style={{ fontSize: '0.58rem', letterSpacing: '0.08em', color: '#9ca3af' }}>{verdict} STRENGTH</span>
           </div>
           <div className="verdict-score-subtext">
-            −100 Bear<br />+100 Bull
+            <span style={{ color: color, fontWeight: 800 }}>{verdict} BIAS</span><br />
+            Conviction: {convictionLabel}
           </div>
         </div>
       </div>
@@ -179,19 +180,28 @@ function VerdictHero({ bias, data, clientDate }) {
             )}
           </div>
         )}
-        {/* Sigma Visual Bar */}
+        {/* Sigma Visual Bar — Perfectly Anchored Ticks & Spot Price Badge */}
         {bias.sigmaMetrics && (() => {
           const sm = bias.sigmaMetrics;
-          // Map zScore (-3 to +3) → 0% to 100% position on bar
           const rawPos = ((sm.zScore + 3) / 6) * 100;
-          const markerPos = Math.max(1, Math.min(99, rawPos));
-          // Color zones: -2σ to -1σ = green (mean reversion long), mean zone = neutral, +1σ to +2σ = caution, beyond ±2σ = extreme
+          const markerPos = Math.max(2, Math.min(98, rawPos));
           const markerColor = sm.zScore <= -2.2 ? '#4ade80'
             : sm.zScore <= -1.2 ? '#38bdf8'
             : sm.zScore >= 2.2 ? '#f87171'
             : sm.zScore >= 1.2 ? '#fb923c'
             : '#94a3b8';
           const statusColor = sm.color || markerColor;
+
+          const anchors = [
+            { pct: 0, label: '-3σ', val: null },
+            { pct: 16.66, label: '-2σ', val: sm.minus2Sigma, color: '#4ade80' },
+            { pct: 33.33, label: '-1σ', val: sm.minus1Sigma, color: '#38bdf8' },
+            { pct: 50.00, label: 'Mean (μ)', val: sm.mean, color: '#9ca3af' },
+            { pct: 66.66, label: '+1σ', val: sm.plus1Sigma, color: '#fb923c' },
+            { pct: 83.33, label: '+2σ', val: sm.plus2Sigma, color: '#f87171' },
+            { pct: 100, label: '+3σ', val: null },
+          ];
+
           return (
             <div className="sigma-bar-wrap">
               {/* Header row */}
@@ -205,45 +215,48 @@ function VerdictHero({ bias, data, clientDate }) {
                 </span>
               </div>
 
-              {/* The visual bar */}
-              <div className="sigma-bar-track">
-                {/* Zone fills */}
-                <div className="sigma-zone sigma-zone-extreme-os" />   {/* below -2σ: strong green */}
-                <div className="sigma-zone sigma-zone-os" />            {/* -2σ to -1σ: soft green */}
-                <div className="sigma-zone sigma-zone-fair" />          {/* -1σ to +1σ: neutral */}
-                <div className="sigma-zone sigma-zone-ob" />            {/* +1σ to +2σ: amber */}
-                <div className="sigma-zone sigma-zone-extreme-ob" />   {/* above +2σ: red */}
+              {/* The visual bar container */}
+              <div className="sigma-bar-container">
+                <div className="sigma-bar-track">
+                  {/* Zone fills */}
+                  <div className="sigma-zone sigma-zone-extreme-os" />
+                  <div className="sigma-zone sigma-zone-os" />
+                  <div className="sigma-zone sigma-zone-fair" />
+                  <div className="sigma-zone sigma-zone-ob" />
+                  <div className="sigma-zone sigma-zone-extreme-ob" />
 
-                {/* Tick labels on bar */}
-                <div className="sigma-tick" style={{ left: '0%' }}><span>-3σ</span></div>
-                <div className="sigma-tick" style={{ left: '16.66%' }}><span>-2σ</span></div>
-                <div className="sigma-tick" style={{ left: '33.33%' }}><span>-1σ</span></div>
-                <div className="sigma-tick" style={{ left: '50%' }}><span>μ</span></div>
-                <div className="sigma-tick" style={{ left: '66.66%' }}><span>+1σ</span></div>
-                <div className="sigma-tick" style={{ left: '83.33%' }}><span>+2σ</span></div>
-                <div className="sigma-tick" style={{ left: '100%' }}><span>+3σ</span></div>
+                  {/* Spot Marker Dot with attached floating price pill */}
+                  <div className="sigma-marker-wrap" style={{ left: `${markerPos}%` }}>
+                    <div className="sigma-marker-dot" style={{ background: markerColor, boxShadow: `0 0 10px ${markerColor}` }} />
+                    <div className="sigma-marker-pill" style={{ color: markerColor, borderColor: `${markerColor}60` }}>
+                      ${formatPrice(data.currentPrice).replace('$', '')} ({sm.zScoreText})
+                    </div>
+                  </div>
+                </div>
 
-                {/* Price marker */}
-                <div className="sigma-marker" style={{ left: `${markerPos}%`, background: markerColor, boxShadow: `0 0 8px ${markerColor}` }} />
-              </div>
-
-              {/* Price anchors row */}
-              <div className="sigma-prices-row">
-                <span style={{ color: '#4ade80', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
-                  -2σ {formatPrice(sm.minus2Sigma)}
-                </span>
-                <span style={{ color: '#38bdf8', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
-                  -1σ {formatPrice(sm.minus1Sigma)}
-                </span>
-                <span style={{ color: '#6b7280', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
-                  μ {formatPrice(sm.mean)}
-                </span>
-                <span style={{ color: '#fb923c', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
-                  +1σ {formatPrice(sm.plus1Sigma)}
-                </span>
-                <span style={{ color: '#f87171', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
-                  +2σ {formatPrice(sm.plus2Sigma)}
-                </span>
+                {/* Anchored Labels & Prices Under Their Exact Ticks */}
+                <div className="sigma-anchors-track">
+                  {anchors.map(a => (
+                    <div
+                      key={a.label}
+                      className="sigma-anchor-col"
+                      style={{
+                        left: `${a.pct}%`,
+                        transform: a.pct === 0 ? 'translateX(0%)' : a.pct === 100 ? 'translateX(-100%)' : 'translateX(-50%)',
+                      }}
+                    >
+                      <div className="sigma-anchor-tick" />
+                      <div className="sigma-anchor-label" style={{ color: a.color || 'var(--text-muted)' }}>
+                        {a.label}
+                      </div>
+                      {a.val && (
+                        <div className="sigma-anchor-price" style={{ color: a.color || '#fff' }}>
+                          {formatPrice(a.val)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           );
@@ -388,7 +401,7 @@ export default function Home() {
       const weeklyProfiles = buildWeeklyProfiles(json.candles);
       const patternResult = findSimilarWeeks(weeklyProfiles, 25, now);
       const wolfLevelsResult = calculateWolfKeyLevels(json.candles, currentPrice);
-      const hlProb = calculateWeeklyHighLowProbabilities(json.candles, currentPrice, now, weeklyProbBias);
+      const hlProb = calculateWeeklyHighLowProbabilities(json.candles, currentPrice, now, weeklyProbBias, patternResult?.topMatches);
 
       setData({ candles: json.candles, count: json.count, currentPrice });
       setBias(biasResult);
@@ -407,7 +420,7 @@ export default function Home() {
   const handleWeeklyProbBiasChange = (newBias) => {
     setWeeklyProbBias(newBias);
     if (data?.candles) {
-      const updated = calculateWeeklyHighLowProbabilities(data.candles, data.currentPrice, clientDate || new Date(), newBias);
+      const updated = calculateWeeklyHighLowProbabilities(data.candles, data.currentPrice, clientDate || new Date(), newBias, weekPattern?.topMatches);
       setWeeklyHighLowData(updated);
     }
   };
@@ -678,14 +691,17 @@ export default function Home() {
             <div className="dow-grid">
               {dowStatsArr.map(d => {
                 const isToday = d.day === bias.dow;
-                const bColor = d.bias === 'bullish' ? 'var(--bullish)' : d.bias === 'bearish' ? 'var(--bearish)' : 'var(--neutral)';
+                const isBullEdge = d.bullishRate >= 50;
+                const edgePct = isBullEdge ? d.bullishRate : (d.bearishRate || (100 - d.bullishRate));
+                const bColor = isBullEdge ? 'var(--bullish)' : 'var(--bearish)';
+                const badgeText = isBullEdge ? 'BULLISH' : 'BEARISH';
                 return (
                   <div key={d.day} className={`dow-card${isToday ? ' today' : ''}`}>
                     <div className="dow-card-day">{DAY_SHORT[d.day]}</div>
                     <div style={{ fontSize: '1.1rem', fontWeight: 800, color: bColor, fontFamily: 'var(--font-display)', marginBottom: 4 }}>
-                      {d.bullishRate.toFixed(0)}%
+                      {edgePct.toFixed(0)}%
                     </div>
-                    <div className={`dow-bias-badge ${d.bias}`}>{d.bias}</div>
+                    <div className={`dow-bias-badge ${badgeText.toLowerCase()}`}>{badgeText}</div>
                     <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 6 }}>
                       avg {d.avgReturn > 0 ? '+' : ''}{d.avgReturn.toFixed(2)}%
                     </div>

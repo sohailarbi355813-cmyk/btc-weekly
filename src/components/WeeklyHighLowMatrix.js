@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState } from 'react';
 import {
@@ -45,6 +45,7 @@ export default function WeeklyHighLowMatrix({
     currentWeek,
     highMetrics,
     lowMetrics,
+    matchedStats,
   } = probData;
 
   const isBearModel = effectiveBias === 'bearish';
@@ -354,7 +355,7 @@ export default function WeeklyHighLowMatrix({
           justifyContent: 'space-around',
           gap: 10,
         }}>
-          {/* Bullet 1: Timing In By Now */}
+          {/* Bullet 1: Matched Pattern Timing vs Cohort */}
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
             <div style={{
               width: 22,
@@ -372,15 +373,29 @@ export default function WeeklyHighLowMatrix({
             </div>
             <div>
               <div style={{ fontSize: '0.78rem', color: '#e5e5e5', lineHeight: 1.3 }}>
-                <strong style={{ color: '#ffffff', fontFamily: 'var(--font-mono)' }}>{activeMetrics.pctInByNow}%</strong> of {effectiveBias} weeks had the {isHighTab ? 'high' : 'low'} in by <strong style={{ color: '#38bdf8' }}>{currentWeek.currentDayName}</strong>
+                {matchedStats ? (
+                  <>
+                    <strong style={{ color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
+                      {isHighTab ? matchedStats.highsInByNowPct : matchedStats.lowsInByNowPct}%
+                    </strong> ({isHighTab ? matchedStats.highsInByNowCount : matchedStats.lowsInByNowCount}/{matchedStats.totalMatched}) of matched similar weeks had the {isHighTab ? 'high' : 'low'} in by <strong style={{ color: '#38bdf8' }}>{currentWeek.currentDayName}</strong>
+                  </>
+                ) : (
+                  <>
+                    <strong style={{ color: '#ffffff', fontFamily: 'var(--font-mono)' }}>{activeMetrics.pctInByNow}%</strong> of {effectiveBias} weeks had the {isHighTab ? 'high' : 'low'} in by <strong style={{ color: '#38bdf8' }}>{currentWeek.currentDayName}</strong>
+                  </>
+                )}
               </div>
               <div style={{ fontSize: '0.66rem', color: '#777', marginTop: 2 }}>
-                {activeMetrics.pctInLater}% of {effectiveBias} weeks put the {isHighTab ? 'high' : 'low'} in later in the week
+                {matchedStats ? (
+                  <>Peak {isHighTab ? 'high' : 'low'} day was <strong style={{ color: '#aaa' }}>{isHighTab ? matchedStats.peakHighDay : matchedStats.peakLowDay}</strong> ({isHighTab ? matchedStats.peakHighPct : matchedStats.peakLowPct}% of matched) with avg extension {isHighTab ? `+${matchedStats.avgHighExt}%` : `-${matchedStats.avgLowExt}%`}</>
+                ) : (
+                  <>{activeMetrics.pctInLater}% of {effectiveBias} weeks put the {isHighTab ? 'high' : 'low'} in later in the week</>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Bullet 2: Magnitude Extension */}
+          {/* Bullet 2: Subsequent Week Follow-Through Scan */}
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
             <div style={{
               width: 22,
@@ -390,7 +405,7 @@ export default function WeeklyHighLowMatrix({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: isBearModel ? '#f87171' : '#4ade80',
+              color: matchedStats?.subsequent?.bias === 'BEARISH' ? '#f87171' : '#4ade80',
               flexShrink: 0,
               marginTop: 1,
             }}>
@@ -398,17 +413,31 @@ export default function WeeklyHighLowMatrix({
             </div>
             <div>
               <div style={{ fontSize: '0.78rem', color: '#e5e5e5', lineHeight: 1.3 }}>
-                <strong style={{ color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
-                  {isHighTab ? activeMetrics.pctFurtherAboveOpen : activeMetrics.pctFurtherBelowOpen}%
-                </strong> of {effectiveBias} weeks put the {isHighTab ? 'high further above' : 'low further below'} the open
+                {matchedStats?.subsequent ? (
+                  <>
+                    Subsequent Week Scan: <strong style={{ color: matchedStats.subsequent.bias === 'BEARISH' ? '#f87171' : '#4ade80', fontFamily: 'var(--font-mono)' }}>
+                      {matchedStats.subsequent.biasRate}% {matchedStats.subsequent.bias}
+                    </strong>
+                  </>
+                ) : (
+                  <>
+                    <strong style={{ color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
+                      {isHighTab ? activeMetrics.pctFurtherAboveOpen : activeMetrics.pctFurtherBelowOpen}%
+                    </strong> of {effectiveBias} weeks put {isHighTab ? 'high further above' : 'low further below'} open
+                  </>
+                )}
               </div>
               <div style={{ fontSize: '0.66rem', color: '#777', marginTop: 2 }}>
-                Median historical extension is <strong style={{ color: '#aaa' }}>{isHighTab ? `+${activeMetrics.medianPct}%` : `-${activeMetrics.medianPct}%`}</strong> (Current: {isHighTab ? `+${currentWeek.highPct}%` : `-${currentWeek.lowPct}%`})
+                {matchedStats?.subsequent ? (
+                  <>Across {matchedStats.subsequent.total} matching sequence weeks, next week averaged <strong style={{ color: '#aaa' }}>{matchedStats.subsequent.avgReturn > 0 ? '+' : ''}{matchedStats.subsequent.avgReturn}%</strong> return.</>
+                ) : (
+                  <>Median extension is {isHighTab ? `+${activeMetrics.medianPct}%` : `-${activeMetrics.medianPct}%`} (Current: {isHighTab ? `+${currentWeek.highPct}%` : `-${currentWeek.lowPct}%`})</>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Bullet 3: Tactical Trade Takeaway */}
+          {/* Bullet 3: Definitive Actionable Verdict (Zero Duality) */}
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
             <div style={{
               width: 22,
@@ -418,7 +447,7 @@ export default function WeeklyHighLowMatrix({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#fbbf24',
+              color: effectiveBias === 'bearish' ? '#f87171' : '#4ade80',
               flexShrink: 0,
               marginTop: 1,
             }}>
@@ -426,26 +455,10 @@ export default function WeeklyHighLowMatrix({
             </div>
             <div>
               <div style={{ fontSize: '0.76rem', color: '#e5e5e5', lineHeight: 1.3 }}>
-                {isHighTab ? (
-                  isBearModel ? (
-                    activeMetrics.probabilityIsIn >= 50 ? (
-                      <>Current high formed at a statistically viable time &amp; magnitude. If you are bearish, <strong>why wait for higher?</strong></>
-                    ) : (
-                      <>High extension is currently shallow. Bearish weeks usually push higher above WO before final top.</>
-                    )
-                  ) : (
-                    <>In bullish weeks, highs typically form late (Thu–Sun). Early week highs are usually taken out.</>
-                  )
+                {effectiveBias === 'bearish' ? (
+                  <>Institutional bias is <strong style={{ color: '#f87171' }}>BEARISH</strong>. Structure favors short positioning with downside target toward <strong style={{ color: '#ffffff' }}>{formatPrice(activeMetrics.projectedTarget)}</strong>.</>
                 ) : (
-                  isBullModel ? (
-                    activeMetrics.probabilityIsIn >= 50 ? (
-                      <>Weekly low has likely swept Monday/Tuesday liquidity. High statistical edge for long expansion.</>
-                    ) : (
-                      <>Low is still developing. Bullish weeks often wait for deeper pullback before markup.</>
-                    )
-                  ) : (
-                    <>Bearish weeks print their lows late in the week (Fri–Sun). Expect further downside exploration.</>
-                  )
+                  <>Institutional bias is <strong style={{ color: '#4ade80' }}>BULLISH</strong>. Structure favors accumulation with expansion target toward <strong style={{ color: '#ffffff' }}>{formatPrice(activeMetrics.projectedTarget)}</strong>.</>
                 )}
               </div>
             </div>

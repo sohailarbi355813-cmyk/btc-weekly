@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Weekly High / Low of the Week (HOW / LOW) Formation Probability Engine
  * 
  * Quantitatively models:
@@ -151,7 +151,7 @@ export function buildWeeklyCandles(candles, currentPrice) {
  * @param {Date} refDate - Reference date
  * @param {string} selectedBias - 'auto' | 'bearish' | 'bullish' | 'all'
  */
-export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDate = new Date(), selectedBias = 'auto') {
+export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDate = new Date(), selectedBias = 'auto', topMatches = null) {
   const { completedWeeks, currentWeek } = buildWeeklyCandles(candles, currentPrice);
 
   if (!currentWeek || completedWeeks.length < 10) {
@@ -264,7 +264,119 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
   const projectedLowTarget = Math.round(WO * (1 - (medianLowPct / 100)));
   const projectedLowMax = Math.round(WO * (1 - (p75LowPct / 100)));
 
+  // ── 5. MATCHED HISTORICAL WEEKS & SUBSEQUENT WEEK PROJECTIONS ──────────
+  let matchedStats = null;
+  if (topMatches && topMatches.length > 0) {
+    const weekCandleMap = new Map();
+    for (const w of completedWeeks) {
+      weekCandleMap.set(w.weekStart, w);
+    }
+
+    const matchedCandles = [];
+    const subsequentWeeks = [];
+
+    for (const m of topMatches) {
+      const wkStart = m.week?.weekStart;
+      const matchedCandle = weekCandleMap.get(wkStart);
+      if (matchedCandle) {
+        matchedCandles.push({ ...matchedCandle, matchScore: m.score, nextWeek: m.nextWeek });
+      }
+      if (m.nextWeek) {
+        let nextReturn = 0;
+        if (m.nextWeek.days) {
+          const dArr = Object.values(m.nextWeek.days);
+          if (dArr.length > 0) {
+            const firstOpen = dArr[0].open;
+            const lastClose = dArr[dArr.length - 1].close;
+            nextReturn = firstOpen > 0 ? ((lastClose - firstOpen) / firstOpen) * 100 : 0;
+          }
+        }
+        subsequentWeeks.push({
+          returnPct: Math.round(nextReturn * 100) / 100,
+          isBullish: nextReturn > 0,
+          isBearish: nextReturn <= 0,
+        });
+      }
+    }
+
+    if (matchedCandles.length >= 3) {
+      const totalMatched = matchedCandles.length;
+      const matchedHighDayCounts = [0, 0, 0, 0, 0, 0, 0];
+      const matchedLowDayCounts = [0, 0, 0, 0, 0, 0, 0];
+      let sumHighExt = 0;
+      let sumLowExt = 0;
+
+      for (const mc of matchedCandles) {
+        matchedHighDayCounts[mc.highDayIndex] = (matchedHighDayCounts[mc.highDayIndex] || 0) + 1;
+        matchedLowDayCounts[mc.lowDayIndex] = (matchedLowDayCounts[mc.lowDayIndex] || 0) + 1;
+        sumHighExt += mc.highPctAboveOpen;
+        sumLowExt += mc.lowPctBelowOpen;
+      }
+
+      let peakHighDayIndex = 0;
+      let maxHighDayCount = -1;
+      for (let i = 0; i < 7; i++) {
+        if (matchedHighDayCounts[i] > maxHighDayCount) {
+          maxHighDayCount = matchedHighDayCounts[i];
+          peakHighDayIndex = i;
+        }
+      }
+
+      let peakLowDayIndex = 0;
+      let maxLowDayCount = -1;
+      for (let i = 0; i < 7; i++) {
+        if (matchedLowDayCounts[i] > maxLowDayCount) {
+          maxLowDayCount = matchedLowDayCounts[i];
+          peakLowDayIndex = i;
+        }
+      }
+
+      const matchedHighsInByNow = matchedCandles.filter(mc => mc.highDayIndex <= currentDayIndex).length;
+      const matchedHighsInByNowPct = Math.round((matchedHighsInByNow / totalMatched) * 100);
+
+      const matchedLowsInByNow = matchedCandles.filter(mc => mc.lowDayIndex <= currentDayIndex).length;
+      const matchedLowsInByNowPct = Math.round((matchedLowsInByNow / totalMatched) * 100);
+
+      const subTotal = subsequentWeeks.length;
+      const subBearCount = subsequentWeeks.filter(s => s.isBearish).length;
+      const subBullCount = subsequentWeeks.filter(s => s.isBullish).length;
+      const subBearPct = subTotal > 0 ? Math.round((subBearCount / subTotal) * 100) : 50;
+      const subBullPct = subTotal > 0 ? Math.round((subBullCount / subTotal) * 100) : 50;
+      const subAvgReturn = subTotal > 0
+        ? Math.round((subsequentWeeks.reduce((acc, s) => acc + s.returnPct, 0) / subTotal) * 100) / 100
+        : 0;
+
+      matchedStats = {
+        totalMatched,
+        peakHighDay: DAY_LABELS[peakHighDayIndex],
+        peakHighCount: maxHighDayCount,
+        peakHighPct: Math.round((maxHighDayCount / totalMatched) * 100),
+        highsInByNowPct: matchedHighsInByNowPct,
+        highsInByNowCount: matchedHighsInByNow,
+
+        peakLowDay: DAY_LABELS[peakLowDayIndex],
+        peakLowCount: maxLowDayCount,
+        peakLowPct: Math.round((maxLowDayCount / totalMatched) * 100),
+        lowsInByNowPct: matchedLowsInByNowPct,
+        lowsInByNowCount: matchedLowsInByNow,
+
+        avgHighExt: Math.round((sumHighExt / totalMatched) * 100) / 100,
+        avgLowExt: Math.round((sumLowExt / totalMatched) * 100) / 100,
+
+        subsequent: {
+          total: subTotal,
+          bearPct: subBearPct,
+          bullPct: subBullPct,
+          bias: subBearPct >= subBullPct ? 'BEARISH' : 'BULLISH',
+          biasRate: subBearPct >= subBullPct ? subBearPct : subBullPct,
+          avgReturn: subAvgReturn,
+        }
+      };
+    }
+  }
+
   return {
+    matchedStats,
     effectiveBias,
     selectedBias,
     cohortLabel,
