@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getTodayBias, analyzeDayOfWeek } from '@/lib/biasEngine';
 import { calculateWolfKeyLevels } from '@/lib/wolfLevelsEngine';
 import { buildWeeklyProfiles, findSimilarWeeks } from '@/lib/weekPatternEngine';
@@ -9,18 +9,15 @@ import WolfKeyLevels from '@/components/WolfKeyLevels';
 import MacroWhalesEtf from '@/components/MacroWhalesEtf';
 import WeeklyForecast from '@/components/WeeklyForecast';
 import SessionProfiler from '@/components/SessionProfiler';
-import BootIntroSequence from '@/components/BootIntroSequence';
 import RsiScannerWidget from '@/components/RsiScannerWidget';
 import MarketStructureTable from '@/components/MarketStructureTable';
 import {
-  IconBitcoin, IconTrendUp, IconTrendDown, IconScale, IconRadar,
-  IconBarChart, IconRefresh, IconZap, IconPin, IconAlertTriangle,
-  IconShield, IconCheck, IconDatabase, IconWolf, IconBlackFlag,
+  IconScale, IconRadar, IconBarChart, IconRefresh, IconZap,
+  IconAlertTriangle, IconShield, IconWolf, IconBlackFlag,
   IconMenu, IconX, IconCalendar, IconClock,
 } from '@/components/Icons';
 
-const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const PRIMARY_SIGNAL_IDS = ['trend', 'structure', 'weekly_open', 'momentum'];
 
 function formatPrice(n) {
   if (!n) return '--';
@@ -28,57 +25,56 @@ function formatPrice(n) {
 }
 
 function formatPct(n, decimals = 1) {
-  if (n === undefined || n === null) return '--';
+  if (n === undefined || n === null || Number.isNaN(Number(n))) return '--';
   const sign = n > 0 ? '+' : '';
   return `${sign}${Number(n).toFixed(decimals)}%`;
 }
 
 // ─── Verdict Hero Component ────────────────────────────────────────────────────
 
-function VerdictHero({ bias, data, clientDate }) {
+function VerdictHero({ bias, data, clientDate, lastUpdated }) {
   if (!bias || !data) return null;
 
-  const verdict = bias.verdict; // 'BULLISH' | 'BEARISH' | 'CAUTION'
-  const color = bias.verdictColor;
+  const verdict = bias.verdict === 'BULLISH' ? 'BULLISH' : 'BEARISH';
+  const color = verdict === 'BULLISH' ? '#22c55e' : '#ef4444';
+  const verdictBorder = verdict === 'BULLISH' ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
   const score = bias.score;
   const effectiveStrength = bias.strengthPct || Math.min(98, Math.max(52, Math.round(50 + Math.abs(score) * 0.48)));
-  const convictionDots = effectiveStrength >= 82 ? 5 : effectiveStrength >= 72 ? 4 : effectiveStrength >= 62 ? 3 : effectiveStrength >= 54 ? 2 : 1;
 
   const formattedDate = clientDate
     ? clientDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : bias.date || '';
 
-  const convictionLabel = effectiveStrength >= 82 ? 'Very High' : effectiveStrength >= 72 ? 'High' : effectiveStrength >= 62 ? 'Moderate' : effectiveStrength >= 54 ? 'Mild' : 'Developing';
+  const syncedTime = lastUpdated
+    ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
 
-  const verdictBg = verdict === 'BULLISH'
-    ? 'rgba(34,197,94,0.07)'
-    : verdict === 'BEARISH'
-    ? 'rgba(239,68,68,0.07)'
-    : 'rgba(245,158,11,0.07)';
+  const convictionLabel = effectiveStrength >= 82
+    ? 'Very High'
+    : effectiveStrength >= 72
+    ? 'High'
+    : effectiveStrength >= 62
+    ? 'Moderate'
+    : effectiveStrength >= 54
+    ? 'Mild'
+    : 'Developing';
 
-  const verdictBorder = verdict === 'BULLISH'
-    ? 'rgba(34,197,94,0.35)'
-    : verdict === 'BEARISH'
-    ? 'rgba(239,68,68,0.35)'
-    : 'rgba(245,158,11,0.35)';
+  const primarySignals = (bias.signals || []).filter(sig => PRIMARY_SIGNAL_IDS.includes(sig.id));
 
   return (
     <div className="verdict-hero-card" style={{
       border: `1px solid ${verdictBorder}`,
-      background: verdictBg,
+      background: '#050505',
     }}>
-      {/* Top bar: date + live price */}
+      {/* Top bar: date + synced time + live spot */}
       <div className="verdict-top-bar">
         <div className="verdict-date">
           {formattedDate}
+          {syncedTime && <span style={{ color: '#4b5563', marginLeft: 8 }}>· Synced {syncedTime}</span>}
         </div>
         <div className="verdict-price-badge">
           <div className="verdict-spot-price">
             {formatPrice(data.currentPrice)}
-          </div>
-          <div className="verdict-badge" style={{ color: color, background: `${color}18`, borderColor: `${color}40` }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
-            {verdict}
           </div>
         </div>
       </div>
@@ -86,53 +82,20 @@ function VerdictHero({ bias, data, clientDate }) {
       {/* Main verdict body */}
       <div className="verdict-hero-body">
         <div className="verdict-hero-content">
-          {/* Bleed Trap Alert */}
-          {bias.isBleedTrap && verdict === 'CAUTION' && (
-            <div style={{
-              background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)',
-              borderRadius: 8, padding: '8px 14px', marginBottom: 14,
-              display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.78rem',
-            }}>
-              <span style={{ background: '#f59e0b', color: '#000', fontWeight: 900, fontSize: '0.65rem', padding: '2px 7px', borderRadius: 3, flexShrink: 0, fontFamily: 'var(--font-mono)', marginTop: 1 }}>
-                ⚠ BLEED TRAP
-              </span>
-              <span style={{ color: '#fcd34d', lineHeight: 1.5 }}>
-                Historical stats say bull, but real-time structure is bleeding. Do not trust the calendar stats right now.
-              </span>
-            </div>
-          )}
-
-          {/* Big verdict word */}
-          <div className="verdict-hero-title" style={{ color: color }}>
-            {verdict === 'BULLISH' ? '↑ BULLISH' : verdict === 'BEARISH' ? '↓ BEARISH' : '⚡ CAUTION'}
+          <div className="verdict-hero-title" style={{ color }}>
+            {verdict === 'BULLISH' ? '↑ BULLISH' : '↓ BEARISH'}
           </div>
 
-          {/* Conviction bar */}
-          <div className="verdict-conviction-row">
-            <span className="verdict-conviction-label">
-              Conviction:
-            </span>
-            <div className="verdict-conviction-dots">
-              {[1,2,3,4,5].map(i => (
-                <div key={i} className="conviction-dot" style={{ background: i <= convictionDots ? color : 'rgba(255,255,255,0.08)' }} />
-              ))}
-            </div>
-            <span className="verdict-conviction-text" style={{ color }}>
-              {convictionLabel}
-            </span>
-          </div>
-
-          {/* Reason */}
           <p className="verdict-hero-reason">
             {bias.verdictReason}
           </p>
 
-          {/* Signal pills */}
+          {/* 4 Core Driver Pills */}
           <div className="verdict-signals-wrap">
-            {bias.signals && bias.signals.map(sig => {
+            {primarySignals.map(sig => {
               const sc = sig.state === 'bullish' ? '#22c55e' : sig.state === 'bearish' ? '#ef4444' : '#6b7280';
               return (
-                <div key={sig.id} className="verdict-signal-pill" style={{ borderColor: `${sc}30`, background: `${sc}08` }}>
+                <div key={sig.id} className="verdict-signal-pill" style={{ borderColor: '#1e1e24', background: '#0a0a0a' }}>
                   <span style={{ width: 5, height: 5, borderRadius: '50%', background: sc, flexShrink: 0 }} />
                   <span style={{ color: '#6b7280', fontFamily: 'var(--font-mono)' }}>{sig.name}:</span>
                   <span style={{ color: sc, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{sig.value}</span>
@@ -142,46 +105,58 @@ function VerdictHero({ bias, data, clientDate }) {
           </div>
         </div>
 
-        {/* Score meter — Single Clear Conviction, No Duality, No Negative Numbers */}
+        {/* Strength Ring */}
         <div className="verdict-score-meter-wrap">
-          <div className="verdict-score-circle" style={{ borderColor: color, boxShadow: `0 0 20px ${color}30`, background: `${color}0d` }}>
+          <div className="verdict-score-circle" style={{ borderColor: color, background: '#0a0a0a' }}>
             <span style={{ color }}>
               {effectiveStrength}%
             </span>
-            <span style={{ fontSize: '0.62rem', letterSpacing: '0.08em', color: '#9ca3af', fontWeight: 700 }}>STRENGTH</span>
+            <span style={{ fontSize: '0.58rem', letterSpacing: '0.08em', color: '#9ca3af', fontWeight: 700, textAlign: 'center', lineHeight: 1.1 }}>
+              STRENGTH
+            </span>
           </div>
           <div className="verdict-score-subtext">
-            <span style={{ color: color, fontWeight: 800 }}>{verdict} BIAS</span><br />
+            <span style={{ color, fontWeight: 800 }}>{verdict} BIAS</span><br />
             Conviction: <strong style={{ color: '#ffffff' }}>{convictionLabel}</strong>
           </div>
         </div>
       </div>
 
-      {/* Footer: Prior Week Levels + Sigma */}
+      {/* Footer: Weekly Levels + Sigma Bar */}
       <div className="verdict-footer-bar">
-        {/* Prior Week High / Low */}
-        {bias.priorWeekLevels && bias.priorWeekLevels.pwh > 0 && (
+        {(bias.weeklyOpen > 0 || bias.priorWeekLevels?.pwh > 0) && (
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontSize: '0.76rem' }}>
-            <span style={{ color: '#4b5563', fontFamily: 'var(--font-mono)' }}>Prior Week:</span>
-            <span style={{ color: '#f87171', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-              PWH {formatPrice(bias.priorWeekLevels.pwh)}
-            </span>
-            <span style={{ color: '#374151' }}>·</span>
-            <span style={{ color: '#4ade80', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-              PWL {formatPrice(bias.priorWeekLevels.pwl)}
-            </span>
-            {bias.priorWeekLevels.posInRange !== null && (
-              <span style={{
-                fontSize: '0.68rem', fontFamily: 'var(--font-mono)',
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                padding: '1px 7px', borderRadius: 3, color: '#6b7280',
-              }}>
-                {bias.priorWeekLevels.posInRange}% of range
+            <span style={{ color: '#6b7280', fontFamily: 'var(--font-mono)' }}>Weekly:</span>
+            {bias.weeklyOpen > 0 && (
+              <span style={{ color: bias.aboveWeeklyOpen ? '#4ade80' : '#f87171', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                WO {formatPrice(bias.weeklyOpen)} ({formatPct(bias.pctFromWeeklyOpen)})
               </span>
+            )}
+            {bias.priorWeekLevels?.pwh > 0 && (
+              <>
+                <span style={{ color: '#374151' }}>·</span>
+                <span style={{ color: '#f87171', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                  PWH {formatPrice(bias.priorWeekLevels.pwh)}
+                </span>
+                <span style={{ color: '#374151' }}>·</span>
+                <span style={{ color: '#4ade80', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                  PWL {formatPrice(bias.priorWeekLevels.pwl)}
+                </span>
+                {bias.priorWeekLevels.posInRange !== null && bias.priorWeekLevels.posInRange !== undefined && (
+                  <span style={{
+                    fontSize: '0.68rem', fontFamily: 'var(--font-mono)',
+                    background: '#0a0a0a', border: '1px solid #1e1e24',
+                    padding: '1px 7px', borderRadius: 3, color: '#9ca3af',
+                  }}>
+                    {bias.priorWeekLevels.posInRange}% of PW range
+                  </span>
+                )}
+              </>
             )}
           </div>
         )}
-        {/* Sigma Visual Bar — Perfectly Anchored Ticks & Spot Price Badge */}
+
+        {/* Sigma Visual Bar */}
         {bias.sigmaMetrics && (() => {
           const sm = bias.sigmaMetrics;
           const rawPos = ((sm.zScore + 3) / 6) * 100;
@@ -208,7 +183,6 @@ function VerdictHero({ bias, data, clientDate }) {
 
           return (
             <div className="sigma-bar-wrap">
-              {/* Header row */}
               <div className="sigma-bar-header">
                 <span className="sigma-bar-label">σ Gaussian Band</span>
                 <span className="sigma-bar-zscore" style={{ color: statusColor }}>
@@ -219,26 +193,29 @@ function VerdictHero({ bias, data, clientDate }) {
                 </span>
               </div>
 
-              {/* The visual bar container */}
               <div className="sigma-bar-container">
                 <div className="sigma-bar-track">
-                  {/* Zone fills */}
                   <div className="sigma-zone sigma-zone-extreme-os" />
                   <div className="sigma-zone sigma-zone-os" />
                   <div className="sigma-zone sigma-zone-fair" />
                   <div className="sigma-zone sigma-zone-ob" />
                   <div className="sigma-zone sigma-zone-extreme-ob" />
 
-                  {/* Spot Marker Dot with attached floating price pill */}
                   <div className="sigma-marker-wrap" style={{ left: `${markerPos}%` }}>
-                    <div className="sigma-marker-dot" style={{ background: markerColor, boxShadow: `0 0 10px ${markerColor}` }} />
-                    <div className="sigma-marker-pill" style={{ color: markerColor, borderColor: `${markerColor}60` }}>
-                      ${formatPrice(data.currentPrice).replace('$', '')} ({sm.zScoreText})
+                    <div className="sigma-marker-dot" style={{ background: markerColor }} />
+                    <div
+                      className="sigma-marker-pill"
+                      style={{
+                        color: markerColor,
+                        borderColor: `${markerColor}60`,
+                        ...(markerPos < 18 ? { left: 0 } : markerPos > 82 ? { right: 0 } : {}),
+                      }}
+                    >
+                      {formatPrice(data.currentPrice)} ({sm.zScoreText})
                     </div>
                   </div>
                 </div>
 
-                {/* Anchored Labels & Prices Under Their Exact Ticks */}
                 <div className="sigma-anchors-track">
                   {anchors.map(a => (
                     <div
@@ -275,17 +252,17 @@ function VerdictHero({ bias, data, clientDate }) {
 function SignalsBreakdown({ bias }) {
   if (!bias?.signals) return null;
   return (
-    <div style={{ marginBottom: 24, background: '#0c0c0f', border: '1px solid #1e1e24', borderRadius: 10, overflow: 'hidden' }}>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #1e1e24', display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ marginBottom: 24, background: '#050505', border: '1px solid #1a1a1a', borderRadius: 10, overflow: 'hidden' }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', gap: 8 }}>
         <IconRadar size={14} color="#38bdf8" />
-        <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6b7280' }}>
-          Confluence Breakdown · Score: {bias.score > 0 ? '+' : ''}{bias.score}/100
+        <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af' }}>
+          All 8 Factors · Weighted Score: {bias.score > 0 ? '+' : ''}{bias.score}/100
         </span>
       </div>
       <div style={{ padding: '0 4px' }}>
         {bias.signals.map((sig, i) => {
           const sc = sig.state === 'bullish' ? '#22c55e' : sig.state === 'bearish' ? '#ef4444' : '#6b7280';
-          const barWidth = `${Math.round((Math.abs(sig.score) / sig.weight) * 100)}%`;
+          const barWidth = sig.weight > 0 ? `${Math.round((Math.abs(sig.score) / sig.weight) * 100)}%` : '0%';
           const isBull = sig.state === 'bullish';
           return (
             <div key={sig.id} className="signals-breakdown-row" style={{
@@ -300,7 +277,7 @@ function SignalsBreakdown({ bias }) {
                   <div style={{
                     height: '100%', width: barWidth, background: sc, borderRadius: 2,
                     marginLeft: isBull ? 0 : 'auto',
-                    transition: 'width 0.5s ease',
+                    transition: 'width 0.35s ease',
                   }} />
                 </div>
                 <div style={{ fontSize: '0.68rem', color: sc, fontFamily: 'var(--font-mono)' }}>{sig.label}</div>
@@ -309,7 +286,7 @@ function SignalsBreakdown({ bias }) {
                 <span style={{
                   fontSize: '0.7rem', fontFamily: 'var(--font-mono)', fontWeight: 700,
                   color: sc,
-                  background: `${sc}15`, border: `1px solid ${sc}30`,
+                  background: '#0a0a0a', border: `1px solid ${sc}30`,
                   padding: '2px 7px', borderRadius: 3,
                 }}>
                   {sig.score > 0 ? '+' : ''}{sig.score}
@@ -327,43 +304,15 @@ function SignalsBreakdown({ bias }) {
 
 export default function Home() {
   const [data, setData] = useState(null);
-  const [bias, setBias] = useState(null);
-  const [wolfLevels, setWolfLevels] = useState(null);
-  const [weekPattern, setWeekPattern] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [loadStep, setLoadStep] = useState(1);
   const [activeTab, setActiveTab] = useState('levels');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [clientDate, setClientDate] = useState(null);
-  const [bootDone, setBootDone] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [weeklyProbBias, setWeeklyProbBias] = useState('auto');
-  const [weeklyHighLowData, setWeeklyHighLowData] = useState(null);
-  const [theme, setTheme] = useState('dark');
   const [showSignals, setShowSignals] = useState(false);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('wolf-theme') || 'dark';
-      setTheme(saved);
-      document.documentElement.setAttribute('data-theme', saved);
-      document.documentElement.classList.toggle('theme-light', saved === 'light');
-      document.documentElement.classList.toggle('theme-dark', saved !== 'light');
-    } catch (e) {}
-  }, []);
-
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    try {
-      localStorage.setItem('wolf-theme', next);
-      document.documentElement.setAttribute('data-theme', next);
-      document.documentElement.classList.toggle('theme-light', next === 'light');
-      document.documentElement.classList.toggle('theme-dark', next !== 'light');
-    } catch (e) {}
-  };
 
   const navigateToSection = (tabId) => {
     setActiveTab(tabId);
@@ -383,51 +332,28 @@ export default function Home() {
     if (!isSilent) setLoading(true);
     setRefreshing(true);
     setError(null);
-    setLoadStep(1);
 
     try {
       const res = await fetch('/api/btc-data');
       if (!res.ok) throw new Error('Failed to fetch BTC price history. Please try again.');
       const json = await res.json();
       if (json.error) throw new Error(json.error);
+      if (!Array.isArray(json.candles) || json.candles.length === 0) {
+        throw new Error('No historical BTC candle data returned.');
+      }
 
-      setLoadStep(2);
       const currentPrice = json.currentPrice || json.candles[json.candles.length - 1]?.close || 0;
-
-      setLoadStep(3);
       const now = new Date();
       setClientDate(now);
-
-      // Single call to getTodayBias — no filter presets, deterministic
-      const biasResult = getTodayBias(json.candles, currentPrice, now);
-
-      setLoadStep(4);
-      const weeklyProfiles = buildWeeklyProfiles(json.candles);
-      const patternResult = findSimilarWeeks(weeklyProfiles, 25, now);
-      const wolfLevelsResult = calculateWolfKeyLevels(json.candles, currentPrice);
-      const hlProb = calculateWeeklyHighLowProbabilities(json.candles, currentPrice, now, weeklyProbBias, patternResult?.topMatches);
-
-      setData({ candles: json.candles, count: json.count, currentPrice });
-      setBias(biasResult);
-      setWolfLevels(wolfLevelsResult);
-      setWeekPattern(patternResult);
-      setWeeklyHighLowData(hlProb);
       setLastUpdated(now);
+      setData({ candles: json.candles, count: json.count, currentPrice });
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
-      setTimeout(() => setRefreshing(false), 500);
+      setTimeout(() => setRefreshing(false), 400);
     }
-  }, [weeklyProbBias]);
-
-  const handleWeeklyProbBiasChange = (newBias) => {
-    setWeeklyProbBias(newBias);
-    if (data?.candles) {
-      const updated = calculateWeeklyHighLowProbabilities(data.candles, data.currentPrice, clientDate || new Date(), newBias, weekPattern?.topMatches);
-      setWeeklyHighLowData(updated);
-    }
-  };
+  }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -444,7 +370,6 @@ export default function Home() {
             if (!prev || prev.currentPrice === pData.price) return prev;
             return { ...prev, currentPrice: pData.price };
           });
-          setWolfLevels(prev => prev ? { ...prev, spot: pData.price } : prev);
         }
       } catch (e) {}
     };
@@ -452,26 +377,71 @@ export default function Home() {
     return () => { isMounted = false; clearInterval(interval); };
   }, []);
 
-  const handleRefresh = () => loadData(true);
+  // Synchronize latest daily candle immutably with 5s live spot ticks
+  const syncedCandles = useMemo(() => {
+    if (!data?.candles?.length) return null;
+    const candles = data.candles;
+    const spot = data.currentPrice;
+    if (!spot || spot <= 0) return candles;
+    const refDayStr = (clientDate || new Date()).toISOString().split('T')[0];
+    const last = candles[candles.length - 1];
+    if (last.date !== refDayStr) return candles;
+    const updated = candles.slice(0, -1);
+    updated.push({
+      ...last,
+      close: spot,
+      high: Math.max(last.high, spot),
+      low: Math.min(last.low, spot),
+    });
+    return updated;
+  }, [data, clientDate]);
 
-  // Boot intro
-  if (!bootDone) return <BootIntroSequence onComplete={() => setBootDone(true)} />;
+  const bias = useMemo(() => {
+    if (!syncedCandles?.length || !data?.currentPrice) return null;
+    return getTodayBias(syncedCandles, data.currentPrice, clientDate || new Date());
+  }, [syncedCandles, data?.currentPrice, clientDate]);
+
+  const weekPattern = useMemo(() => {
+    if (!syncedCandles?.length) return null;
+    const profiles = buildWeeklyProfiles(syncedCandles);
+    return findSimilarWeeks(profiles, 25, clientDate || new Date());
+  }, [syncedCandles, clientDate]);
+
+  const dowStats2025 = useMemo(() => {
+    if (!syncedCandles?.length) return null;
+    return analyzeDayOfWeek(syncedCandles, '2025-01-01');
+  }, [syncedCandles]);
+
+  const wolfLevels = useMemo(() => {
+    if (!syncedCandles?.length || !data?.currentPrice) return null;
+    return calculateWolfKeyLevels(syncedCandles, data.currentPrice);
+  }, [syncedCandles, data?.currentPrice]);
+
+  const weeklyHighLowData = useMemo(() => {
+    if (!syncedCandles?.length || !data?.currentPrice) return null;
+    return calculateWeeklyHighLowProbabilities(
+      syncedCandles,
+      data.currentPrice,
+      clientDate || new Date(),
+      weeklyProbBias,
+      weekPattern?.topMatches,
+      bias?.verdict?.toLowerCase()
+    );
+  }, [syncedCandles, data?.currentPrice, clientDate, weeklyProbBias, weekPattern?.topMatches, bias?.verdict]);
+
+  const handleRefresh = () => loadData(true);
 
   // Loading
   if (loading && !data) {
-    const steps = [
-      { label: 'Connecting to market data feed...', Icon: IconDatabase },
-      { label: 'Ingesting daily BTC candles (2021 → today)...', Icon: IconBitcoin },
-      { label: 'Computing statistical bias & seasonal distributions...', Icon: IconBarChart },
-      { label: 'Deriving historical sequence & weekly forecasts...', Icon: IconRadar },
-      { label: 'Calculating Wolf Key Levels auction price ladder...', Icon: IconWolf },
-    ];
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
         <header className="header">
           <div className="container">
             <div className="header-inner">
-              <div className="logo"><div className="logo-icon"><IconBlackFlag size={20} /></div><div className="logo-text"><h1>Wolf Tape Reader</h1></div></div>
+              <div className="logo">
+                <div className="logo-icon"><IconBlackFlag size={20} /></div>
+                <div className="logo-text"><h1>Wolf Terminal</h1></div>
+              </div>
             </div>
           </div>
         </header>
@@ -479,16 +449,8 @@ export default function Home() {
           <div className="container">
             <div className="loading-screen">
               <div className="loading-spinner" />
-              <div className="loading-text" style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>CALIBRATING WOLF TAPE TELEMETRY...</div>
-              <div className="loading-steps">
-                {steps.map((s, i) => (
-                  <div key={i} className={`loading-step ${i < loadStep ? 'done' : i === loadStep ? 'active' : ''}`}>
-                    <span className="step-indicator">
-                      {i < loadStep ? <IconCheck size={13} color="var(--bullish)" /> : i === loadStep ? <IconRefresh size={13} className="spin-icon" color="var(--accent)" /> : <span className="step-circle" />}
-                    </span>
-                    <span className="step-label"><s.Icon size={14} className="step-icon" />{s.label}</span>
-                  </div>
-                ))}
+              <div className="loading-text" style={{ fontFamily: 'var(--font-mono)', color: '#9ca3af' }}>
+                Loading BTC market data...
               </div>
             </div>
           </div>
@@ -500,29 +462,37 @@ export default function Home() {
   // Error
   if (error && !data) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000' }}>
-        <header className="header"><div className="container"><div className="header-inner"><div className="logo"><div className="logo-icon"><IconBlackFlag size={20} /></div><div className="logo-text"><h1>Wolf Tape Reader</h1></div></div></div></div></header>
-        <main className="main" style={{ flex: 1 }}><div className="container"><div className="error-screen">
-          <div className="error-icon-box"><IconAlertTriangle size={36} color="var(--bearish)" /></div>
-          <h2>Market Data Sync Error</h2><p>{error}</p>
-          <button id="retry-btn" className="retry-btn" onClick={() => loadData()}><IconRefresh size={14} /><span>Retry Sync</span></button>
-        </div></div></main>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
+        <header className="header">
+          <div className="container">
+            <div className="header-inner">
+              <div className="logo">
+                <div className="logo-icon"><IconBlackFlag size={20} /></div>
+                <div className="logo-text"><h1>Wolf Terminal</h1></div>
+              </div>
+            </div>
+          </div>
+        </header>
+        <main className="main" style={{ flex: 1 }}>
+          <div className="container">
+            <div className="error-screen">
+              <div className="error-icon-box"><IconAlertTriangle size={36} color="var(--bearish)" /></div>
+              <h2>Market Data Sync Error</h2>
+              <p>{error}</p>
+              <button id="retry-btn" className="retry-btn" onClick={() => loadData()}>
+                <IconRefresh size={14} /><span>Retry Sync</span>
+              </button>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
 
   if (!bias || !data) return null;
 
-  const dowStats2025 = data?.candles ? analyzeDayOfWeek(data.candles, '2025-01-01') : null;
-  const dowStatsArr = Object.values(bias.allDowStats);
-  const totalCandles = data.count;
-  const totalBullish = data.candles.filter(c => c.close > c.open).length;
-  const overallBullRate = ((totalBullish / totalCandles) * 100).toFixed(1);
-  const best = dowStatsArr.reduce((a, b) => a.bullishRate > b.bullishRate ? a : b, dowStatsArr[0]);
-  const worst = dowStatsArr.reduce((a, b) => a.bullishRate < b.bullishRate ? a : b, dowStatsArr[0]);
-
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
 
       {/* ── Header ── */}
       <header className="header">
@@ -530,38 +500,36 @@ export default function Home() {
           <div className="header-inner">
             <div className="logo" onClick={() => navigateToSection('bias')} style={{ cursor: 'pointer' }}>
               <div className="logo-icon"><IconBlackFlag size={20} /></div>
-              <div className="logo-text"><h1>Wolf Tape Reader</h1></div>
+              <div className="logo-text"><h1>Wolf Terminal</h1></div>
             </div>
 
             <nav className="header-nav">
               {[
-                { id: 'bias', label: "Today's Bias" },
-                { id: 'levels', label: 'Key Levels', Icon: IconWolf, iconColor: 'var(--wolf-yellow-bright)' },
+                { id: 'bias', label: 'Today' },
+                { id: 'levels', label: 'Levels', Icon: IconWolf, iconColor: 'var(--wolf-yellow-bright)' },
                 { id: 'session', label: 'Sessions', Icon: IconClock },
-                { id: 'pattern', label: 'Weekly Forecast', Icon: IconCalendar },
-                { id: 'rsi', label: 'RSI Alerts', Icon: IconZap },
+                { id: 'pattern', label: 'Forecast', Icon: IconCalendar },
+                { id: 'rsi', label: 'RSI', Icon: IconZap },
                 { id: 'structure', label: 'Structure', Icon: IconScale },
                 { id: 'macro', label: 'Whales', Icon: IconBarChart },
               ].map(({ id, label, Icon, iconColor }) => (
                 <button key={id} className={`header-nav-link ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
-                  {Icon && <Icon size={13} color={activeTab === id ? (iconColor || 'var(--accent)') : 'var(--neutral)'} />}
+                  {Icon && <Icon size={13} color={activeTab === id ? (iconColor || 'var(--accent)') : 'var(--text-muted)'} />}
                   <span>{label}</span>
                 </button>
               ))}
             </nav>
 
             <div className="header-right">
-              <button className="theme-toggle-btn" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}>
-                <span style={{ fontSize: '0.85rem' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
-                <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
-              </button>
               <div className="btc-price-header">{formatPrice(data.currentPrice)}</div>
               <button className="live-badge-btn" onClick={handleRefresh} title="Click to refresh live feed">
                 <span className="live-dot" />
-                <span>Live Feed</span>
+                <span>Live</span>
                 <IconRefresh size={12} className={refreshing ? 'spin-icon' : ''} style={{ opacity: refreshing ? 1 : 0.6 }} />
               </button>
-              <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu"><IconMenu size={20} /></button>
+              <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu">
+                <IconMenu size={20} />
+              </button>
             </div>
           </div>
         </div>
@@ -576,12 +544,9 @@ export default function Home() {
                 <IconBlackFlag size={18} color="var(--wolf-yellow-bright)" />
                 <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Navigation</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button className="theme-toggle-btn" onClick={toggleTheme} style={{ padding: '4px 10px', fontSize: '0.70rem' }}>
-                  <span>{theme === 'dark' ? '☀️' : '🌙'}</span><span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
-                </button>
-                <button className="mobile-nav-close" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu"><IconX size={20} /></button>
-              </div>
+              <button className="mobile-nav-close" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu">
+                <IconX size={20} />
+              </button>
             </div>
             <div className="mobile-nav-price-card">
               <div>
@@ -594,13 +559,13 @@ export default function Home() {
             </div>
             <div className="mobile-nav-links">
               {[
-                { id: 'bias', Icon: IconScale, title: "Today's Macro Bias", desc: 'Single Verdict · Signals Breakdown' },
-                { id: 'levels', Icon: IconWolf, title: 'Wolf Key Levels', desc: 'Auction Price Ladder, VAL/VAH & Anchors' },
+                { id: 'bias', Icon: IconScale, title: "Today's Bias", desc: 'Direction, Strength & Sigma Band' },
+                { id: 'levels', Icon: IconWolf, title: 'Key Levels', desc: 'Auction Ladder, VAL/VAH & Targets' },
                 { id: 'session', Icon: IconClock, title: 'Session HOD/LOD', desc: 'Asia, London & NY Probabilities' },
-                { id: 'pattern', Icon: IconCalendar, title: 'Weekly Forecast & HOW/LOW', desc: 'High/Low Formation Probability & Cycle Match' },
-                { id: 'rsi', Icon: IconZap, title: 'RSI Alerts (Discord)', desc: '55 Alts · Overbought / Oversold Telemetry' },
-                { id: 'structure', Icon: IconScale, title: 'Market Structure Matrix', desc: '1H, 4H, 1D, 1W · 2-Candle HTF Bias' },
-                { id: 'macro', Icon: IconBarChart, title: 'Whales · MVRV · ETFs', desc: 'Institutional On-Chain Flows' },
+                { id: 'pattern', Icon: IconCalendar, title: 'Weekly Forecast & HOW/LOW', desc: 'High/Low Probabilities & Cycle Match' },
+                { id: 'rsi', Icon: IconZap, title: 'RSI Alerts', desc: 'Overbought / Oversold Scanner' },
+                { id: 'structure', Icon: IconScale, title: 'Market Structure', desc: '1H, 4H, 1D, 1W · 2-Candle Confirmation' },
+                { id: 'macro', Icon: IconBarChart, title: 'Whales · MVRV · ETFs', desc: 'Positioning, Valuation & Flows' },
               ].map(({ id, Icon, title, desc }) => (
                 <button key={id} className={`mobile-nav-item ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
                   <Icon size={18} color="var(--accent)" />
@@ -619,24 +584,9 @@ export default function Home() {
       <main className="main" style={{ flex: 1 }}>
         <div className="container">
 
-          {/* Data freshness bar */}
-          <div className="data-info-bar">
-            <div className="data-info-left">
-              <IconDatabase size={15} color="var(--accent)" />
-              <span>Analyzing <span className="data-count">{totalCandles.toLocaleString()}</span> daily candles from <span className="data-count">Jan 2021</span> to today</span>
-            </div>
-            <div className="data-info-right">
-              <span>Synced: {lastUpdated ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--'}</span>
-              <button className="refresh-link-btn" onClick={handleRefresh} title="Refresh live data">
-                <IconRefresh size={13} className={refreshing ? 'spin-icon' : ''} />
-                <span>Refresh</span>
-              </button>
-            </div>
-          </div>
-
           {/* ── VERDICT HERO ── */}
           <div id="todays-bias">
-            <VerdictHero bias={bias} data={data} clientDate={clientDate} />
+            <VerdictHero bias={bias} data={data} clientDate={clientDate} lastUpdated={lastUpdated} />
 
             {/* Signals breakdown toggle */}
             <div style={{ marginBottom: 24 }}>
@@ -644,46 +594,17 @@ export default function Home() {
                 onClick={() => setShowSignals(!showSignals)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
-                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  background: '#080808', border: '1px solid #1e1e24',
                   borderRadius: 6, padding: '7px 14px', fontSize: '0.74rem',
-                  color: 'var(--text-secondary)', cursor: 'pointer',
+                  color: '#9ca3af', cursor: 'pointer',
                   fontFamily: 'var(--font-mono)', transition: 'all 0.15s ease',
                 }}
               >
                 <IconRadar size={13} color="var(--accent)" />
                 <span>Confluence Breakdown</span>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{showSignals ? '▲ Hide' : '▼ Show'}</span>
+                <span style={{ fontSize: '0.65rem', color: '#6b7280' }}>{showSignals ? '▲ Hide' : '▼ Show'}</span>
               </button>
               {showSignals && <div style={{ marginTop: 12 }}><SignalsBreakdown bias={bias} /></div>}
-            </div>
-          </div>
-
-          {/* ── QUICK STATS ── */}
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-card-label"><IconTrendUp size={14} color="var(--bullish)" /><span>Best Day</span></div>
-              <div className="stat-card-value value-bullish">{best?.dayName?.slice(0, 3)}</div>
-              <div className="stat-card-sub">{best?.bullishRate.toFixed(1)}% win rate · avg {formatPct(best?.avgReturn)}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card-label"><IconTrendDown size={14} color="var(--bearish)" /><span>Weakest Day</span></div>
-              <div className="stat-card-value value-bearish">{worst?.dayName?.slice(0, 3)}</div>
-              <div className="stat-card-sub">{worst?.bullishRate.toFixed(1)}% win rate · avg {formatPct(worst?.avgReturn)}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card-label"><IconBitcoin size={14} color="var(--gold)" /><span>Overall Bull Rate</span></div>
-              <div className="stat-card-value value-gold">{overallBullRate}%</div>
-              <div className="stat-card-sub">{totalBullish} bull / {totalCandles} total days</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card-label"><IconPin size={14} color="var(--accent)" /><span>Weekly Open</span></div>
-              <div className={`stat-card-value ${bias.aboveWeeklyOpen ? 'value-bullish' : 'value-bearish'}`}>{formatPrice(bias.weeklyOpen)}</div>
-              <div className="stat-card-sub">
-                Spot: {formatPrice(data.currentPrice)} ·{' '}
-                <span style={{ color: bias.pctFromWeeklyOpen > 0 ? 'var(--bullish)' : 'var(--bearish)' }}>
-                  {formatPct(bias.pctFromWeeklyOpen)}
-                </span>
-              </div>
             </div>
           </div>
 
@@ -699,7 +620,7 @@ export default function Home() {
             </button>
             <button id="tab-pattern" className={`tab-btn ${activeTab === 'pattern' ? 'active' : ''}`} onClick={() => navigateToSection('pattern')}>
               <IconCalendar size={15} color={activeTab === 'pattern' ? '#38bdf8' : undefined} />
-              <span style={{ color: activeTab === 'pattern' ? '#38bdf8' : undefined }}>Weekly HOW/LOW &amp; Forecast</span>
+              <span style={{ color: activeTab === 'pattern' ? '#38bdf8' : undefined }}>Weekly Forecast</span>
             </button>
             <button id="tab-macro" className={`tab-btn ${activeTab === 'macro' ? 'active' : ''}`} onClick={() => navigateToSection('macro')}>
               <IconBarChart size={15} color={activeTab === 'macro' ? '#38bdf8' : undefined} />
@@ -707,7 +628,7 @@ export default function Home() {
             </button>
             <button id="tab-rsi" className={`tab-btn ${activeTab === 'rsi' ? 'active' : ''}`} onClick={() => navigateToSection('rsi')}>
               <IconZap size={15} color={activeTab === 'rsi' ? '#38bdf8' : undefined} />
-              <span style={{ color: activeTab === 'rsi' ? '#38bdf8' : undefined }}>RSI Alerts (Discord)</span>
+              <span style={{ color: activeTab === 'rsi' ? '#38bdf8' : undefined }}>RSI Alerts</span>
             </button>
             <button id="tab-structure" className={`tab-btn ${activeTab === 'structure' ? 'active' : ''}`} onClick={() => navigateToSection('structure')}>
               <IconScale size={15} color={activeTab === 'structure' ? '#38bdf8' : undefined} />
@@ -724,7 +645,7 @@ export default function Home() {
                 weekPattern={weekPattern}
                 weeklyHighLowData={weeklyHighLowData}
                 selectedWeeklyBias={weeklyProbBias}
-                onWeeklyBiasChange={handleWeeklyProbBiasChange}
+                onWeeklyBiasChange={setWeeklyProbBias}
                 dowStats2025={dowStats2025}
                 formatPrice={formatPrice}
               />
@@ -758,12 +679,12 @@ export default function Home() {
         <div className="container">
           <div className="footer-content">
             <div className="footer-left">
-              <IconBlackFlag size={18} />
-              <span>Wolf Tape Reader · Trading The Tape, With Precision · Pitch Black Desk</span>
+              <IconBlackFlag size={16} />
+              <span>Wolf Terminal · Statistical Reference</span>
             </div>
             <p className="disclaimer">
-              <IconShield size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: -2 }} />
-              Educational &amp; statistical reference only. Past market statistics do not guarantee future performance. Not financial advice.
+              <IconShield size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: -2 }} />
+              Educational &amp; statistical analysis only. Not financial advice.
             </p>
           </div>
         </div>

@@ -11,7 +11,6 @@ import {
   IconSparkles,
   IconTrendUp,
   IconTrendDown,
-  IconScale,
 } from '@/components/Icons';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -25,7 +24,7 @@ function formatPct(n, decimals = 1) {
 }
 
 function biasColor(bias) {
-  return bias === 'bullish' ? 'bullish' : bias === 'bearish' ? 'bearish' : 'neutral';
+  return bias === 'bullish' ? 'bullish' : 'bearish';
 }
 
 function defaultFormatPrice(n) {
@@ -64,21 +63,21 @@ export default function WeeklyForecast({
 
       {/* ── Average Return Per Day of the Week (Calculated from Start of 2025 to Present) ── */}
       {dowStats2025 && (
-        <div className="section-card" style={{ marginBottom: 24, background: '#050505', border: '1px solid #1c1c1c' }}>
+        <div className="panel" style={{ marginBottom: 24, background: '#050505', border: '1px solid #1c1c1c', padding: 18 }}>
           <div className="section-header" style={{ marginBottom: 12 }}>
             <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <IconCalendar size={16} color="var(--accent)" />
               <span>Avg Return Per Day of the Week</span>
             </div>
             <div className="section-subtitle">
-              Calculated from start of 2025 to present &mdash; current market regime only
+              2025 to present
             </div>
           </div>
           <div className="dow-grid">
             {Object.values(dowStats2025).map(d => {
               const isToday = d.day === weekPattern.todayDow;
               const isBullEdge = d.bullishRate >= 50;
-              const edgePct = isBullEdge ? d.bullishRate : (d.bearishRate || (100 - d.bullishRate));
+              const edgePct = isBullEdge ? d.bullishRate : (d.bearishRate ?? (100 - d.bullishRate));
               const bColor = isBullEdge ? 'var(--bullish)' : 'var(--bearish)';
               const badgeText = isBullEdge ? 'BULLISH' : 'BEARISH';
               return (
@@ -102,13 +101,13 @@ export default function WeeklyForecast({
       )}
 
       {/* ── 1. Current Week Timeline ── */}
-      <div className="section-header" style={{ marginBottom: 14 }}>
+      <div className="section-header" style={{ marginBottom: 12 }}>
         <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <IconLayers size={18} color="#38bdf8" />
-          <span>This Week&apos;s Running Sequence</span>
+          <IconLayers size={16} color="#38bdf8" />
+          <span>This Week&apos;s Sequence</span>
         </div>
-        <div className="section-subtitle" style={{ color: '#888888', fontSize: '0.78rem' }}>
-          Closed days display realized % returns. Active day is live. Future days show upcoming targets.
+        <div className="section-subtitle" style={{ color: '#888888', fontSize: '0.76rem' }}>
+          Realized daily returns this week vs active session
         </div>
       </div>
 
@@ -182,14 +181,13 @@ export default function WeeklyForecast({
       </div>
 
       {/* ── 4. Current Week Predictions / Weekly Forecast ── */}
-      <div className="panel" style={{ background: '#000000', border: '1px solid #1a1a1a', borderRadius: 10, padding: 20, marginBottom: 28 }}>
+      <div className="panel" style={{ background: '#050505', border: '1px solid #1a1a1a', borderRadius: 10, padding: 18, marginBottom: 24 }}>
         <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <IconTarget size={18} color="#38bdf8" />
-          <span>Historical Sequence Forecast (This Week)</span>
+          <IconTarget size={16} color="#38bdf8" />
+          <span>Matched Weeks Forecast (This Week)</span>
         </div>
-        <div className="section-subtitle" style={{ color: '#888888', fontSize: '0.78rem', marginBottom: 20 }}>
-          Based on what unfolded across the {weekPattern.totalMatchesFound} matched historical weeks.
-          Completed days reflect realized history; active and upcoming days show probabilistic bias.
+        <div className="section-subtitle" style={{ color: '#888888', fontSize: '0.76rem', marginBottom: 16 }}>
+          Directional odds across the {weekPattern.totalMatchesFound} matched historical weeks
         </div>
         <div className="predictions-grid">
           {WEEK_ORDER.map(dow => {
@@ -201,6 +199,7 @@ export default function WeeklyForecast({
               </div>
             );
             const color = biasColor(pred.bias);
+            const displayRate = pred.biasRate ?? (pred.bias === 'bullish' ? pred.weightedBullRate : 100 - pred.weightedBullRate);
             let cardClass = `prediction-card pred-${color}`;
             if (pred.isClosed) cardClass += ' is-completed';
             if (pred.isToday) cardClass += ' is-today-pred';
@@ -212,15 +211,13 @@ export default function WeeklyForecast({
                   {pred.isToday && <span className="today-chip">Today</span>}
                 </div>
                 <div className={`pred-bull-rate value-${color}`}>
-                  {pred.weightedBullRate.toFixed(0)}%
+                  {displayRate.toFixed(0)}%
                 </div>
                 <div className="pred-dir-badge">
                   {pred.bias === 'bullish' ? (
                     <span className="badge-bullish-mini"><IconTrendUp size={11} /> Bullish</span>
-                  ) : pred.bias === 'bearish' ? (
-                    <span className="badge-bearish-mini"><IconTrendDown size={11} /> Bearish</span>
                   ) : (
-                    <span className="badge-neutral-mini"><IconScale size={11} /> Neutral</span>
+                    <span className="badge-bearish-mini"><IconTrendDown size={11} /> Bearish</span>
                   )}
                 </div>
                 <div className={`pred-avg-return ${pred.avgReturn > 0 ? 'value-bullish' : 'value-bearish'}`}>
@@ -229,7 +226,7 @@ export default function WeeklyForecast({
                 <div className="pred-conf-bar">
                   <div
                     className={`pred-conf-fill bar-${color}`}
-                    style={{ width: `${pred.confidence}%` }}
+                    style={{ width: `${displayRate}%` }}
                   />
                 </div>
                 <div className="pred-sample">{pred.sampleSize} matched weeks</div>
@@ -242,12 +239,11 @@ export default function WeeklyForecast({
                 {/* Tooltip */}
                 <div className="tooltip-box">
                   <div className="tooltip-row"><span className="tooltip-key">Day</span><span className="tooltip-val">{pred.fullDayName}</span></div>
-                  <div className="tooltip-row"><span className="tooltip-key">Win Rate</span><span className="tooltip-val">{pred.bullishRate.toFixed(1)}%</span></div>
-                  <div className="tooltip-row"><span className="tooltip-key">Weighted Win</span><span className="tooltip-val" style={{ color: `var(--${color})` }}>{pred.weightedBullRate.toFixed(1)}%</span></div>
+                  <div className="tooltip-row"><span className="tooltip-key">Bias Odds</span><span className="tooltip-val" style={{ color: `var(--${color})` }}>{displayRate.toFixed(1)}% {pred.bias}</span></div>
+                  <div className="tooltip-row"><span className="tooltip-key">Raw Bull %</span><span className="tooltip-val">{pred.bullishRate.toFixed(1)}%</span></div>
                   <div className="tooltip-row"><span className="tooltip-key">Avg Return</span><span className="tooltip-val">{pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%</span></div>
                   <div className="tooltip-row"><span className="tooltip-key">Best</span><span className="tooltip-val" style={{ color: 'var(--bullish)' }}>+{pred.maxGain.toFixed(2)}%</span></div>
                   <div className="tooltip-row"><span className="tooltip-key">Worst</span><span className="tooltip-val" style={{ color: 'var(--bearish)' }}>{pred.maxLoss.toFixed(2)}%</span></div>
-                  <div className="tooltip-row"><span className="tooltip-key">Confidence</span><span className="tooltip-val">{pred.confidence}%</span></div>
                   <div className="tooltip-row"><span className="tooltip-key">Samples</span><span className="tooltip-val">{pred.sampleSize}</span></div>
                 </div>
               </div>
@@ -316,14 +312,13 @@ export default function WeeklyForecast({
 
       {/* ── 6. Subsequent Week Historical Projection (Next Week Forecast) ── */}
       {Object.keys(weekPattern.nextWeekPredictions).length >= 3 && (
-        <div className="panel" style={{ background: '#000000', border: '1px solid #1a1a1a', borderRadius: 10, padding: 20, marginBottom: 32 }}>
+        <div className="panel" style={{ background: '#050505', border: '1px solid #1a1a1a', borderRadius: 10, padding: 18, marginBottom: 28 }}>
           <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <IconSparkles size={18} color="#38bdf8" />
-            <span>Subsequent Week Historical Projection</span>
+            <IconSparkles size={16} color="#38bdf8" />
+            <span>Subsequent Week Projection</span>
           </div>
-          <div className="section-subtitle" style={{ color: '#888888', fontSize: '0.78rem', marginBottom: 20 }}>
-            What happened during the week immediately following these matched patterns?
-            Provides forward statistical positioning for the coming week.
+          <div className="section-subtitle" style={{ color: '#888888', fontSize: '0.76rem', marginBottom: 16 }}>
+            Week following these {weekPattern.totalMatchesFound} matched patterns
           </div>
           <div className="next-week-grid">
             {WEEK_ORDER.map(dow => {
@@ -335,14 +330,15 @@ export default function WeeklyForecast({
                 </div>
               );
               const color = biasColor(pred.bias);
+              const displayRate = pred.biasRate ?? (pred.bias === 'bullish' ? pred.weightedBullRate : 100 - pred.weightedBullRate);
               return (
                 <div key={dow} className={`next-week-card nw-${color} tooltip-wrap`}>
                   <div className="nw-day-name">{pred.dayName}</div>
                   <div className={`nw-bias-badge badge-${color}`}>
-                    {pred.bias === 'bullish' ? <IconTrendUp size={10} /> : pred.bias === 'bearish' ? <IconTrendDown size={10} /> : <IconScale size={10} />}
+                    {pred.bias === 'bullish' ? <IconTrendUp size={10} /> : <IconTrendDown size={10} />}
                     <span>{pred.bias}</span>
                   </div>
-                  <div className={`nw-bull-rate value-${color}`}>{pred.weightedBullRate.toFixed(0)}%</div>
+                  <div className={`nw-bull-rate value-${color}`}>{displayRate.toFixed(0)}%</div>
                   <div className={`nw-avg-return ${pred.avgReturn > 0 ? 'value-bullish' : 'value-bearish'}`}>
                     avg {pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%
                   </div>
@@ -350,8 +346,8 @@ export default function WeeklyForecast({
                   {/* Tooltip */}
                   <div className="tooltip-box">
                     <div className="tooltip-row"><span className="tooltip-key">Day</span><span className="tooltip-val">{pred.fullDayName}</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Bull Rate</span><span className="tooltip-val">{pred.bullishRate.toFixed(1)}%</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Weighted</span><span className="tooltip-val" style={{ color: `var(--${color})` }}>{pred.weightedBullRate.toFixed(1)}%</span></div>
+                    <div className="tooltip-row"><span className="tooltip-key">Bias Odds</span><span className="tooltip-val" style={{ color: `var(--${color})` }}>{displayRate.toFixed(1)}% {pred.bias}</span></div>
+                    <div className="tooltip-row"><span className="tooltip-key">Raw Bull %</span><span className="tooltip-val">{pred.bullishRate.toFixed(1)}%</span></div>
                     <div className="tooltip-row"><span className="tooltip-key">Avg Return</span><span className="tooltip-val">{pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%</span></div>
                     <div className="tooltip-row"><span className="tooltip-key">Best</span><span className="tooltip-val" style={{ color: 'var(--bullish)' }}>+{pred.maxGain.toFixed(2)}%</span></div>
                     <div className="tooltip-row"><span className="tooltip-key">Worst</span><span className="tooltip-val" style={{ color: 'var(--bearish)' }}>{pred.maxLoss.toFixed(2)}%</span></div>

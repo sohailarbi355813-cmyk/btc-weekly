@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Weekly High / Low of the Week (HOW / LOW) Formation Probability Engine
  * 
  * Quantitatively models:
@@ -33,7 +33,7 @@ function getPercentile(arr, p) {
 /**
  * Groups daily candles into Monday-to-Sunday weekly candles
  */
-export function buildWeeklyCandles(candles, currentPrice) {
+export function buildWeeklyCandles(candles, currentPrice, refDate = null) {
   if (!candles || candles.length === 0) return { completedWeeks: [], currentWeek: null };
 
   const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
@@ -115,24 +115,26 @@ export function buildWeeklyCandles(candles, currentPrice) {
 
   // Adjust current week with live price if available
   if (currentPrice && currentWeek) {
+    const activeRef = refDate instanceof Date ? refDate : new Date();
+    const todayDow = activeRef.getUTCDay();
     currentWeek.close = currentPrice;
     if (currentPrice > currentWeek.high) {
       currentWeek.high = currentPrice;
-      const todayDow = new Date().getUTCDay();
       currentWeek.highDay = todayDow;
       currentWeek.highDayIndex = DAY_INDEX_MAP[todayDow] ?? 0;
       currentWeek.highDayName = DAY_LABELS[currentWeek.highDayIndex];
     }
     if (currentPrice < currentWeek.low) {
       currentWeek.low = currentPrice;
-      const todayDow = new Date().getUTCDay();
       currentWeek.lowDay = todayDow;
       currentWeek.lowDayIndex = DAY_INDEX_MAP[todayDow] ?? 0;
       currentWeek.lowDayName = DAY_LABELS[currentWeek.lowDayIndex];
     }
-    currentWeek.returnPct = Math.round((((currentWeek.close - currentWeek.open) / currentWeek.open) * 100) * 100) / 100;
-    currentWeek.highPctAboveOpen = Math.round((((currentWeek.high - currentWeek.open) / currentWeek.open) * 100) * 100) / 100;
-    currentWeek.lowPctBelowOpen = Math.round((((currentWeek.open - currentWeek.low) / currentWeek.open) * 100) * 100) / 100;
+    if (currentWeek.open > 0) {
+      currentWeek.returnPct = Math.round((((currentWeek.close - currentWeek.open) / currentWeek.open) * 100) * 100) / 100;
+      currentWeek.highPctAboveOpen = Math.round((((currentWeek.high - currentWeek.open) / currentWeek.open) * 100) * 100) / 100;
+      currentWeek.lowPctBelowOpen = Math.round((((currentWeek.open - currentWeek.low) / currentWeek.open) * 100) * 100) / 100;
+    }
     currentWeek.isBullish = currentWeek.close > currentWeek.open;
     currentWeek.isBearish = currentWeek.close <= currentWeek.open;
   }
@@ -151,14 +153,14 @@ export function buildWeeklyCandles(candles, currentPrice) {
  * @param {Date} refDate - Reference date
  * @param {string} selectedBias - 'auto' | 'bearish' | 'bullish' | 'all'
  */
-export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDate = new Date(), selectedBias = 'auto', topMatches = null) {
-  const { completedWeeks, currentWeek } = buildWeeklyCandles(candles, currentPrice);
+export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDate = new Date(), selectedBias = 'auto', topMatches = null, defaultAutoBias = null) {
+  const now = refDate instanceof Date ? refDate : new Date();
+  const { completedWeeks, currentWeek } = buildWeeklyCandles(candles, currentPrice, now);
 
   if (!currentWeek || completedWeeks.length < 10) {
     return null;
   }
 
-  const now = refDate instanceof Date ? refDate : new Date();
   const currentDow = now.getUTCDay();
   const currentDayIndex = DAY_INDEX_MAP[currentDow] ?? 0; // 0=Mon, 1=Tue, ..., 6=Sun
   const currentDayName = DAY_LABELS[currentDayIndex];
@@ -170,11 +172,12 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
   const currentLowPct = currentWeek.lowPctBelowOpen;
   const spotVsWO = WO > 0 ? ((currentPrice - WO) / WO) * 100 : 0;
 
-  // Auto-detect bias if requested:
-  // If spot is below Weekly Open and technicals are leaning bear, default to bearish assumption
-  const effectiveBias = selectedBias === 'auto'
-    ? (spotVsWO < 0 ? 'bearish' : 'bullish')
-    : selectedBias;
+  // Auto-detect bias: align with overall macro bias verdict if provided, otherwise fall back to spot vs Weekly Open
+  const autoDirection = (defaultAutoBias === 'bearish' || defaultAutoBias === 'bullish')
+    ? defaultAutoBias
+    : (spotVsWO < 0 ? 'bearish' : 'bullish');
+
+  const effectiveBias = selectedBias === 'auto' ? autoDirection : selectedBias;
 
   // Filter historical weeks by selected model
   let cohort = completedWeeks;
@@ -284,7 +287,8 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
       if (m.nextWeek) {
         let nextReturn = 0;
         if (m.nextWeek.days) {
-          const dArr = Object.values(m.nextWeek.days);
+          // Sort chronologically by YYYY-MM-DD (since JS object numeric keys put 0=Sun before 1=Mon!)
+          const dArr = Object.values(m.nextWeek.days).sort((a, b) => a.date.localeCompare(b.date));
           if (dArr.length > 0) {
             const firstOpen = dArr[0].open;
             const lastClose = dArr[dArr.length - 1].close;

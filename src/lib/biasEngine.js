@@ -1,30 +1,21 @@
 /**
- * BTC Bias Engine v4 — Upgraded Verdict System
+ * BTC Bias Engine — Binary Single-Verdict System
  *
- * Outputs ONE clear verdict: BULLISH | BEARISH | CAUTION
+ * Outputs ONE decisive verdict: BULLISH | BEARISH (zero duality)
  *
- * Signal Architecture (max ±100 total, normalized):
- *   1. Trend (20/50 EMA alignment)      ±25  — lagging but very reliable macro direction
- *   2. Market Structure (HH/HL on 1D)   ±20  — price action structure, leading indicator
- *   3. Weekly Open Level                ±18  — institutional Mon 00:00 UTC reference
+ * Signal Architecture (max ±112 raw → normalized to ±100):
+ *   1. Trend (20/50 EMA alignment)      ±25  — macro direction
+ *   2. Market Structure (HH/HL on 1D)   ±20  — swing structure
+ *   3. Weekly Open Level                ±18  — Mon 00:00 UTC reference
  *   4. Prior Week High / Low            ±15  — key breakout/breakdown level
  *   5. Momentum (Vol-confirmed RSI)     ±12  — real-time pressure w/ volume gate
- *   6. Sigma Z-Score (regime-gated)     ±10  — only meaningful in ranging markets
- *   7. Day-of-Week History              ±8   — background context only
- *   8. Monthly Seasonality              ±4   — very minor seasonal tint
- *   TOTAL MAX                           ±112 → normalized to ±100
+ *   6. Sigma Z-Score (regime-gated)     ±10  — mean reversion / trend continuation
+ *   7. Day-of-Week History              ±8   — background context
+ *   8. Monthly Seasonality              ±4   — seasonal context
  *
- * Verdict thresholds (on normalized −100 to +100 score):
- *   score ≥ +20  → BULLISH
- *   score ≤ −20  → BEARISH
- *   otherwise    → CAUTION
- *
- * Key upgrades from v3:
- *   - Market Structure (HH/HL check on last 20 daily closes) — NEW
- *   - Prior Week High/Low breakout/breakdown signal — NEW
- *   - Sigma is now REGIME-GATED: in a bull trend, being at +2σ is NOT penalized
- *     (because BTC regularly rides +2σ in bull trends for weeks)
- *   - Momentum uses VOLUME confirmation: strong move on below-avg volume = discounted
+ * Verdict threshold (normalized score):
+ *   score >= 0 → BULLISH
+ *   score <  0 → BEARISH
  */
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -33,7 +24,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 // ─── Pure Utilities ───────────────────────────────────────────────────────────
 
 function isBullish(candle) { return candle.close > candle.open; }
-function pctReturn(candle) { return ((candle.close - candle.open) / candle.open) * 100; }
+function pctReturn(candle) { return candle.open > 0 ? ((candle.close - candle.open) / candle.open) * 100 : 0; }
 function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
 
 // ─── Indicators ───────────────────────────────────────────────────────────────
@@ -79,7 +70,7 @@ export function calculateSigmas(candles, currentPrice, period = 20) {
       plus1Sigma: Math.round(p * 1.025), minus1Sigma: Math.round(p * 0.975),
       plus2Sigma: Math.round(p * 1.05), minus2Sigma: Math.round(p * 0.95),
       plus3Sigma: Math.round(p * 1.075), minus3Sigma: Math.round(p * 0.925),
-      bandwidthPct: 5.0, zScore: 0,
+      bandwidthPct: 5.0,
     };
   }
   const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
@@ -232,14 +223,14 @@ function analyzePriorWeekLevels(sorted, currentPrice, now) {
     w.candles.push(candle);
   }
 
-  // Find prior week (the week before current)
+  // Find prior week strictly before the current week (resilient even around 00:00 UTC Monday before today's candle arrives)
   const weekKeys = [...weekMap.keys()].sort();
-  const thisKeyIdx = weekKeys.indexOf(thisWeekKey);
-  if (thisKeyIdx < 1) {
+  const priorKeys = weekKeys.filter(k => k < thisWeekKey);
+  if (priorKeys.length === 0) {
     return { pwh: 0, pwl: 0, signal: 'neutral', score: 0, label: 'No prior week data', detail: 'Insufficient history for prior week levels' };
   }
 
-  const priorWeekKey = weekKeys[thisKeyIdx - 1];
+  const priorWeekKey = priorKeys[priorKeys.length - 1];
   const priorWeek = weekMap.get(priorWeekKey);
 
   // Need at least 3 candles to trust the week data
@@ -250,8 +241,8 @@ function analyzePriorWeekLevels(sorted, currentPrice, now) {
   const pwh = priorWeek.high;
   const pwl = priorWeek.low;
   const weekRange = pwh - pwl;
-  const pctFromPwh = ((currentPrice - pwh) / pwh) * 100;
-  const pctFromPwl = ((currentPrice - pwl) / pwl) * 100;
+  const pctFromPwh = pwh > 0 ? ((currentPrice - pwh) / pwh) * 100 : 0;
+  const pctFromPwl = pwl > 0 ? ((currentPrice - pwl) / pwl) * 100 : 0;
   const posInRange = weekRange > 0 ? ((currentPrice - pwl) / weekRange) * 100 : 50;
 
   let signal, score, label, detail;
@@ -330,7 +321,8 @@ export function analyzeMonthlyBias(candles) {
   for (const [, mData] of monthMap) {
     if (mData.candles.length < 10) continue;
     const sortedM = mData.candles.sort((a, b) => a.date.localeCompare(b.date));
-    const monthReturn = ((sortedM[sortedM.length - 1].close - sortedM[0].open) / sortedM[0].open) * 100;
+    const firstOpen = sortedM[0].open;
+    const monthReturn = firstOpen > 0 ? ((sortedM[sortedM.length - 1].close - firstOpen) / firstOpen) * 100 : 0;
     const s = stats[mData.month];
     s.total++; s.returns.push(monthReturn);
     if (monthReturn > 0) s.bullish++;
@@ -351,10 +343,10 @@ export function analyzeMonthlyBias(candles) {
 function _getWeeklyOpenKey(d) {
   const copy = new Date(d);
   copy.setUTCHours(0, 0, 0, 0);
-  copy.setUTCDate(copy.getUTCDate() + 4 - (copy.getUTCDay() || 7));
-  const ys = new Date(Date.UTC(copy.getUTCFullYear(), 0, 1));
-  const wn = Math.ceil((((copy - ys) / 86400000) + 1) / 7);
-  return `${copy.getUTCFullYear()}-W${String(wn).padStart(2, '0')}`;
+  const day = copy.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setUTCDate(copy.getUTCDate() + diff);
+  return copy.toISOString().split('T')[0];
 }
 
 function _getWeeklyOpen(candles, now) {
@@ -528,8 +520,8 @@ export function getTodayBias(candles, currentPrice, referenceDate = null) {
   } else if (isBullTrend && sigmaMetrics.zScore > 1.2) {
     // In a bull trend, upper band = trend continuation
     sigmaScore = 8;
-  } else if (isBearTrend && sigmaMetrics.zScore < -2.2) {
-    // In a bear trend, extreme oversold can bounce but trend prevails — neutral
+  } else if (isBearTrend && sigmaMetrics.zScore < -1.2) {
+    // In a bear trend, oversold dips can bounce briefly but shouldn't generate counter-trend buy signals
     sigmaScore = 0;
   }
   // Else: use the raw scoreImpact from calculateSigmas (which handles the ranging case)
@@ -541,8 +533,11 @@ export function getTodayBias(candles, currentPrice, referenceDate = null) {
     sigmaLabel = 'OB in Bull Trend (normal)';
     sigmaDetail = `${sigmaMetrics.zScoreText} — overbought in bull trend is momentum, not reversal signal`;
   } else if (isBearTrend && sigmaMetrics.zScore < -2.2) {
-    sigmaLabel = 'OS in Bear Trend (dead-cat risk)';
-    sigmaDetail = `${sigmaMetrics.zScoreText} — oversold in bear trend — wait for structure before longing`;
+    sigmaLabel = 'OS in Bear Trend (bounce risk)';
+    sigmaDetail = `${sigmaMetrics.zScoreText} — extreme oversold in bear trend — wait for structure before longing`;
+  } else if (isBearTrend && sigmaMetrics.zScore < -1.2) {
+    sigmaLabel = 'OS Dip in Bear Trend';
+    sigmaDetail = `${sigmaMetrics.zScoreText} — extended below mean inside bear trend; no counter-trend buy edge`;
   }
 
   signals.push({
@@ -601,27 +596,20 @@ export function getTodayBias(candles, currentPrice, referenceDate = null) {
   // Calculate clean, positive 0-100% conviction strength
   const strengthPct = Math.min(98, Math.max(52, Math.round(50 + (Math.abs(normalizedScore) * 0.48))));
 
-  // ── VERDICT REASON (plain English, actionable) ───────────────────────────────
+  // ── VERDICT REASON (concise, plain English) ───────────────────────────────────
   const bullSignals = signals.filter(s => s.state === 'bullish' && Math.abs(s.score) >= 8).map(s => s.name);
   const bearSignals = signals.filter(s => s.state === 'bearish' && Math.abs(s.score) >= 8).map(s => s.name);
 
   let verdictReason;
   if (verdict === 'BULLISH') {
-    verdictReason = `${bullSignals.join(' · ')} all align bullish. Pullbacks toward $${Math.round(ema20).toLocaleString()} (20 EMA) are high-probability long entries. ${pwLevels.pwh > 0 && currentPrice > pwLevels.pwh ? `Trading above Prior Week High $${pwLevels.pwh.toLocaleString()} — trend continuation bias.` : ''}`;
-  } else if (verdict === 'BEARISH') {
-    verdictReason = `${bearSignals.join(' · ')} confirm downside. Rallies into $${Math.round(ema20).toLocaleString()} (20 EMA) are institutional resistance traps. ${pwLevels.pwl > 0 && currentPrice < pwLevels.pwl ? `Broken below Prior Week Low $${pwLevels.pwl.toLocaleString()} — continuation breakdown.` : ''}`;
-  } else if (isBleedTrap) {
-    verdictReason = `Historical DOW stats favor bulls, but real-time structure is bleeding: RSI ${rsi14} · 24h ${change24h.toFixed(2)}% · price ${currentPrice < ema20 ? 'below' : 'near'} 20 EMA. Do NOT blindly trust the calendar. Wait for structure to hold.`;
+    const drivers = bullSignals.length > 0 ? bullSignals.join(' · ') : 'Weighted signals';
+    verdictReason = `${drivers} align bullish. Pullbacks near $${Math.round(ema20).toLocaleString()} (20 EMA) favor long entries.${pwLevels.pwh > 0 && currentPrice > pwLevels.pwh ? ` Holding above Prior Week High $${pwLevels.pwh.toLocaleString()}.` : ''}`;
   } else {
-    const parts = [];
-    if (bullSignals.length) parts.push(`${bullSignals.join(' · ')} favor longs`);
-    if (bearSignals.length) parts.push(`${bearSignals.join(' · ')} favor shorts`);
-    verdictReason = parts.length > 0
-      ? `Mixed signals — ${parts.join(', but ')}. No institutional edge. Trade key levels only: PWH $${pwLevels.pwh?.toLocaleString() || '--'} above, PWL $${pwLevels.pwl?.toLocaleString() || '--'} below.`
-      : `Signals are balanced with no dominant direction. Price is at equilibrium. Wait for a confirmed level break before committing.`;
+    const drivers = bearSignals.length > 0 ? bearSignals.join(' · ') : 'Weighted signals';
+    verdictReason = `${drivers} favor downside. Rallies toward $${Math.round(ema20).toLocaleString()} (20 EMA) face resistance.${pwLevels.pwl > 0 && currentPrice < pwLevels.pwl ? ` Breaking below Prior Week Low $${pwLevels.pwl.toLocaleString()}.` : ''}`;
   }
 
-  const convictionLevel = Math.round(clamp(Math.abs(normalizedScore) / 20, 1, 5));
+  const convictionLevel = strengthPct >= 82 ? 5 : strengthPct >= 72 ? 4 : strengthPct >= 62 ? 3 : strengthPct >= 54 ? 2 : 1;
 
   // ── RETURN OBJECT ─────────────────────────────────────────────────────────────
   return {
@@ -650,7 +638,7 @@ export function getTodayBias(candles, currentPrice, referenceDate = null) {
     // New: Prior Week Levels
     priorWeekLevels: {
       pwh: pwLevels.pwh, pwl: pwLevels.pwl,
-      posInRange: pwLevels.posInRange ? Math.round(pwLevels.posInRange) : null,
+      posInRange: pwLevels.posInRange !== undefined && pwLevels.posInRange !== null ? Math.round(pwLevels.posInRange) : null,
     },
 
     // Historical stats for DOW grid

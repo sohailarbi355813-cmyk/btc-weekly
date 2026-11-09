@@ -62,23 +62,11 @@ export default function WeeklyHighLowMatrix({
       background: '#050505',
       border: '1px solid #1c1c1c',
       borderRadius: 10,
-      padding: '16px 18px',
+      padding: '16px',
       position: 'relative',
       overflow: 'hidden',
       marginBottom: 20,
     }}>
-      {/* Top Ambient Glow */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: '20%',
-        right: '20%',
-        height: 1,
-        background: isBearModel
-          ? 'linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.4), transparent)'
-          : 'linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.4), transparent)',
-      }} />
-
       {/* Header Bar */}
       <div style={{
         display: 'flex',
@@ -87,37 +75,36 @@ export default function WeeklyHighLowMatrix({
         flexWrap: 'wrap',
         gap: 12,
         borderBottom: '1px solid #171717',
-        paddingBottom: 14,
+        paddingBottom: 12,
         marginBottom: 14,
       }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{
               display: 'inline-block',
-              width: 8,
-              height: 8,
+              width: 7,
+              height: 7,
               borderRadius: '50%',
               background: isBearModel ? '#ef4444' : '#22c55e',
-              boxShadow: isBearModel ? '0 0 8px #ef4444' : '0 0 8px #22c55e',
             }} />
             <span style={{
-              fontSize: '0.86rem',
+              fontSize: '0.84rem',
               fontWeight: 800,
-              letterSpacing: '0.05em',
+              letterSpacing: '0.04em',
               textTransform: 'uppercase',
               color: '#ffffff',
               fontFamily: 'var(--font-mono)'
             }}>
-              Weekly High / Low Proximity &amp; Timing Matrix
+              Weekly High / Low Matrix
             </span>
           </div>
           <div style={{ fontSize: '0.70rem', color: '#777777', marginTop: 3 }}>
-            Based on <strong style={{ color: '#ffffff' }}>{sampleSize} {cohortLabel}</strong> ({samplePct}% of {totalCompletedWeeks} completed historical weeks since Jan 2021)
+            <strong style={{ color: '#e5e5e5' }}>{sampleSize} {cohortLabel}</strong> ({samplePct}% of {totalCompletedWeeks} weeks since 2021)
           </div>
         </div>
 
         {/* Bias Selector Toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#0a0a0a', padding: 3, borderRadius: 6, border: '1px solid #222' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#0a0a0a', padding: 3, borderRadius: 6, border: '1px solid #1e1e1e', flexWrap: 'wrap' }}>
           <button
             onClick={() => onBiasChange('bearish')}
             style={{
@@ -135,7 +122,7 @@ export default function WeeklyHighLowMatrix({
               gap: 4,
             }}
           >
-            <IconTrendDown size={11} /> Bearish Model
+            <IconTrendDown size={11} /> Bearish
           </button>
 
           <button
@@ -155,7 +142,7 @@ export default function WeeklyHighLowMatrix({
               gap: 4,
             }}
           >
-            <IconTrendUp size={11} /> Bullish Model
+            <IconTrendUp size={11} /> Bullish
           </button>
 
           <button
@@ -171,7 +158,7 @@ export default function WeeklyHighLowMatrix({
               border: selectedBias === 'auto' ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
               cursor: 'pointer',
             }}
-            title="Auto-detect based on live price vs Weekly Open"
+            title="Sync with macro bias verdict"
           >
             Auto ({effectiveBias.toUpperCase()})
           </button>
@@ -181,7 +168,8 @@ export default function WeeklyHighLowMatrix({
       {/* Target Toggle: The High vs The Low */}
       <div style={{
         display: 'flex',
-        gap: 8,
+        flexWrap: 'wrap',
+        gap: 6,
         marginBottom: 14,
         background: '#090909',
         padding: 4,
@@ -191,7 +179,7 @@ export default function WeeklyHighLowMatrix({
         <button
           onClick={() => setActiveMetricTab('high')}
           style={{
-            flex: 1,
+            flex: '1 1 160px',
             padding: '7px 12px',
             borderRadius: 4,
             fontSize: '0.74rem',
@@ -208,13 +196,13 @@ export default function WeeklyHighLowMatrix({
           }}
         >
           <IconTarget size={13} />
-          <span>THE HIGH (HOW) &middot; {highMetrics.probabilityIsIn}% Chance IN</span>
+          <span>HIGH OF WEEK &middot; {highMetrics.probabilityIsIn}% IN</span>
         </button>
 
         <button
           onClick={() => setActiveMetricTab('low')}
           style={{
-            flex: 1,
+            flex: '1 1 160px',
             padding: '7px 12px',
             borderRadius: 4,
             fontSize: '0.74rem',
@@ -231,16 +219,15 @@ export default function WeeklyHighLowMatrix({
           }}
         >
           <IconTarget size={13} />
-          <span>THE LOW (LOW) &middot; {lowMetrics.probabilityIsIn}% Chance IN</span>
+          <span>LOW OF WEEK &middot; {lowMetrics.probabilityIsIn}% IN</span>
         </button>
       </div>
 
       {/* Main Grid: Probability Dial & Core Stats */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
         gap: 12,
-        marginBottom: 16,
       }}>
         {/* Left Card: Core Probability & Verdict */}
         <div style={{

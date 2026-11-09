@@ -16,8 +16,6 @@ export async function GET() {
   try {
     // 1. Fetch Real Live Price from Bybit Linear
     let livePrice = 0;
-    let high24h = 0;
-    let low24h = 0;
 
     try {
       const tRes = await fetch(
@@ -32,8 +30,6 @@ export async function GET() {
         const t = tj.result?.list?.[0];
         if (t?.lastPrice) {
           livePrice = parseFloat(t.lastPrice);
-          high24h = parseFloat(t.highPrice24h || 0);
-          low24h = parseFloat(t.lowPrice24h || 0);
         }
       }
     } catch (e) {
@@ -54,8 +50,6 @@ export async function GET() {
           const vj = await vRes.json();
           if (vj.lastPrice) {
             livePrice = parseFloat(vj.lastPrice);
-            high24h = parseFloat(vj.highPrice || 0);
-            low24h = parseFloat(vj.lowPrice || 0);
           }
         }
       } catch (e) {}
@@ -129,15 +123,15 @@ export async function GET() {
 
       if (lastCandle.date === todayStr) {
         lastCandle.close = livePrice;
-        lastCandle.high = Math.max(lastCandle.high, livePrice, high24h || livePrice);
-        lastCandle.low = Math.min(lastCandle.low, livePrice, low24h || livePrice);
+        lastCandle.high = Math.max(lastCandle.high, livePrice);
+        lastCandle.low = Math.min(lastCandle.low, livePrice);
       } else {
         // If modern candles don't have today's UTC candle yet, append it
         modernCandles.push({
           date: todayStr,
           open: lastCandle.close,
-          high: Math.max(lastCandle.close, livePrice, high24h || livePrice),
-          low: Math.min(lastCandle.close, livePrice, low24h || livePrice),
+          high: Math.max(lastCandle.close, livePrice),
+          low: Math.min(lastCandle.close, livePrice),
           close: livePrice,
           volume: 25000,
           ts: Date.now(),

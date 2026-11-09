@@ -141,24 +141,14 @@ export default function MarketStructureTable() {
 
   return (
     <div style={{
-      background: '#040404',
-      border: '1px solid #141414',
-      borderRadius: 12,
-      padding: '20px',
+      background: '#050505',
+      border: '1px solid #1a1a1a',
+      borderRadius: 10,
+      padding: '16px',
       position: 'relative',
       overflow: 'hidden',
       marginBottom: 24,
     }}>
-      {/* Top Ambient Glow */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: '25%',
-        right: '25%',
-        height: 1,
-        background: 'linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.4), transparent)',
-      }} />
-
       {/* Header Bar */}
       <div style={{
         display: 'flex',
@@ -166,75 +156,74 @@ export default function MarketStructureTable() {
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: 12,
-        marginBottom: 16,
+        marginBottom: 14,
       }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{
               display: 'inline-block',
-              width: 8,
-              height: 8,
+              width: 7,
+              height: 7,
               borderRadius: '50%',
               background: '#38bdf8',
-              boxShadow: '0 0 10px #38bdf8',
             }} />
             <h2 style={{
               margin: 0,
-              fontSize: '1.05rem',
+              fontSize: '0.95rem',
               fontWeight: 800,
               letterSpacing: '0.04em',
               textTransform: 'uppercase',
               color: '#ffffff',
               fontFamily: 'var(--font-mono)'
             }}>
-              Multi-Timeframe Market Structure Matrix
+              Market Structure Matrix
             </h2>
             <span style={{
-              padding: '2px 8px',
+              padding: '2px 7px',
               borderRadius: 4,
               fontSize: '0.62rem',
-              fontWeight: 800,
-              background: 'rgba(56, 189, 248, 0.15)',
+              fontWeight: 700,
+              background: 'rgba(56, 189, 248, 0.1)',
               color: '#38bdf8',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
               fontFamily: 'var(--font-mono)'
             }}>
-              2-CANDLE CONFIRMATION BOS/MSS
+              1H · 4H · 1D · 1W
             </span>
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#777777', marginTop: 4 }}>
-            Tracks confirmed swing structural hierarchy (HH, HL, LH, LL) and break of structure across HTF (1H, 4H, 1D, 1W).
+          <div style={{ fontSize: '0.72rem', color: '#777777', marginTop: 3 }}>
+            2-candle swing hierarchy (HH/HL &middot; LH/LL) across major timeframes
           </div>
         </div>
 
         {/* Refresh & Stats */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 12,
+            gap: 10,
             background: '#090909',
-            padding: '5px 12px',
+            padding: '5px 10px',
             borderRadius: 6,
             border: '1px solid #1a1a1a',
-            fontSize: '0.70rem',
+            fontSize: '0.68rem',
             fontFamily: 'var(--font-mono)'
           }}>
-            <span style={{ color: '#4ade80' }}>● {data?.bullishCount || 0} Bull</span>
-            <span style={{ color: '#f87171' }}>● {data?.bearishCount || 0} Bear</span>
-            <span style={{ color: '#fbbf24' }}>● {data?.neutralCount || 0} Range</span>
+            <span style={{ color: '#4ade80' }}>{data?.bullishCount || 0} Bull</span>
+            <span style={{ color: '#f87171' }}>{data?.bearishCount || 0} Bear</span>
+            <span style={{ color: '#fbbf24' }}>{data?.neutralCount || 0} Range</span>
           </div>
 
           <button
             onClick={() => fetchStructure(true)}
             disabled={refreshing}
             style={{
-              padding: '6px 12px',
-              background: '#111',
+              padding: '5px 10px',
+              background: '#0d0d0d',
               border: '1px solid #222',
               borderRadius: 6,
               color: '#38bdf8',
-              fontSize: '0.70rem',
+              fontSize: '0.68rem',
               fontFamily: 'var(--font-mono)',
               cursor: refreshing ? 'not-allowed' : 'pointer',
               display: 'flex',
@@ -243,7 +232,7 @@ export default function MarketStructureTable() {
             }}
           >
             <IconRefresh size={12} className={refreshing ? 'spin-icon' : ''} />
-            <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            <span>{refreshing ? 'Syncing...' : 'Refresh'}</span>
           </button>
         </div>
       </div>
@@ -255,19 +244,19 @@ export default function MarketStructureTable() {
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: 10,
-        background: '#070707',
-        border: '1px solid #151515',
+        background: '#080808',
+        border: '1px solid #181818',
         borderRadius: 8,
-        padding: '8px 12px',
-        marginBottom: 16,
+        padding: '8px 10px',
+        marginBottom: 14,
       }}>
         {/* Filter Pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           {[
-            { id: 'all', label: `All Coins (${coins.length})` },
-            { id: 'bullish', label: `Bullish Structure (${data?.bullishCount || 0})` },
-            { id: 'bearish', label: `Bearish Structure (${data?.bearishCount || 0})` },
-            { id: 'confluence', label: '⚡ HTF Alignment (3+ Aligned)' },
+            { id: 'all', label: `All (${coins.length})` },
+            { id: 'bullish', label: `Bullish (${data?.bullishCount || 0})` },
+            { id: 'bearish', label: `Bearish (${data?.bearishCount || 0})` },
+            { id: 'confluence', label: 'HTF Aligned (3+)' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -290,11 +279,11 @@ export default function MarketStructureTable() {
         </div>
 
         {/* Search Input */}
-        <div style={{ position: 'relative', minWidth: 200 }}>
+        <div style={{ position: 'relative', flex: '1 1 180px', maxWidth: 260 }}>
           <IconSearch size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#555' }} />
           <input
             type="text"
-            placeholder="Search coin (e.g. ASTER, SOL, BTC)..."
+            placeholder="Search symbol (e.g. BTC, SOL)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
@@ -477,6 +466,8 @@ export default function MarketStructureTable() {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 8,
                             marginBottom: 10,
                             borderBottom: '1px solid #141414',
                             paddingBottom: 8,

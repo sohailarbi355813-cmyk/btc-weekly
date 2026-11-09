@@ -123,29 +123,27 @@ export function calculateZScore(closes, period = 20) {
 }
 
 /**
- * Aggregates 15m candles into 45m candles (each 3 consecutive bars)
+ * Aggregates N consecutive lower-timeframe candles into higher-timeframe candles (e.g. 3x15m -> 45m, 3x1h -> 3h)
  */
-function aggregate45mCandles(candles15m) {
-  if (!candles15m || candles15m.length < 3) return [];
+function aggregate45mCandles(candles, factor = 3) {
+  if (!candles || candles.length < factor) return [];
   const result = [];
   
-  // Align to 3-bar chunks from latest backwards to keep the most recent bar accurate
-  const remainder = candles15m.length % 3;
-  const aligned = remainder === 0 ? candles15m : candles15m.slice(remainder);
+  // Align from latest backwards to keep the most recent bar aligned cleanly
+  const remainder = candles.length % factor;
+  const aligned = remainder === 0 ? candles : candles.slice(remainder);
 
-  for (let i = 0; i < aligned.length; i += 3) {
-    const b1 = aligned[i];
-    const b2 = aligned[i + 1];
-    const b3 = aligned[i + 2];
-    if (!b1 || !b2 || !b3) continue;
+  for (let i = 0; i < aligned.length; i += factor) {
+    const chunk = aligned.slice(i, i + factor);
+    if (chunk.length < factor) continue;
 
     result.push({
-      time: b1.time,
-      open: b1.open,
-      high: Math.max(b1.high, b2.high, b3.high),
-      low: Math.min(b1.low, b2.low, b3.low),
-      close: b3.close,
-      vol: b1.vol + b2.vol + b3.vol,
+      time: chunk[0].time,
+      open: chunk[0].open,
+      high: Math.max(...chunk.map(b => b.high)),
+      low: Math.min(...chunk.map(b => b.low)),
+      close: chunk[chunk.length - 1].close,
+      vol: chunk.reduce((sum, b) => sum + (b.vol || 0), 0),
     });
   }
   return result;
@@ -160,12 +158,14 @@ export function checkRsiDivergence(candles, rsiValues, isMajor = false) {
   const currentIdx = candles.length - 1;
   const curPrice = candles[currentIdx].close;
   const curRsi = rsiValues[currentIdx];
+  if (curRsi === null || curRsi === undefined) return null;
 
-  // Look back up to 20 bars for local peak or trough
+  // Look back up to 20 bars (skip warmup null RSI bars) for local peak or trough
   let prevPeakIdx = -1;
   let prevTroughIdx = -1;
 
-  for (let i = currentIdx - 2; i >= Math.max(0, currentIdx - 20); i--) {
+  for (let i = currentIdx - 2; i >= Math.max(14, currentIdx - 20); i--) {
+    if (rsiValues[i] === null || rsiValues[i] === undefined) continue;
     if (candles[i].high > candles[i - 1]?.high && candles[i].high > candles[i + 1]?.high) {
       if (prevPeakIdx === -1) prevPeakIdx = i;
     }
@@ -183,7 +183,7 @@ export function checkRsiDivergence(candles, rsiValues, isMajor = false) {
   if (curRsi >= bearThreshold && prevPeakIdx !== -1) {
     const prevPrice = candles[prevPeakIdx].high;
     const prevRsi = rsiValues[prevPeakIdx];
-    if (curPrice > prevPrice && curRsi < prevRsi) {
+    if (prevRsi != null && curPrice > prevPrice && curRsi < prevRsi) {
       return {
         type: 'BEARISH_DIVERGENCE',
         direction: 'BEAR',
@@ -202,7 +202,7 @@ export function checkRsiDivergence(candles, rsiValues, isMajor = false) {
   if (curRsi <= bullThreshold && prevTroughIdx !== -1) {
     const prevPrice = candles[prevTroughIdx].low;
     const prevRsi = rsiValues[prevTroughIdx];
-    if (curPrice < prevPrice && curRsi > prevRsi) {
+    if (prevRsi != null && curPrice < prevPrice && curRsi > prevRsi) {
       return {
         type: 'BULLISH_DIVERGENCE',
         direction: 'BULL',
@@ -225,6 +225,7 @@ export function checkRsiDivergence(candles, rsiValues, isMajor = false) {
  */
 async function fetchCandles(symbol, tfConfig) {
   const is45m = tfConfig.id === '45m';
+  const is3h = tfConfig.id === '3h';
   const queryInterval = is45m ? '15' : tfConfig.interval;
   const limit = is45m ? '90' : '45';
 
@@ -250,7 +251,7 @@ async function fetchCandles(symbol, tfConfig) {
         }));
 
         if (is45m) {
-          return aggregate45mCandles(raw);
+          return aggregate45mCandles(raw, 3);
         }
         return raw;
       }
@@ -260,8 +261,9 @@ async function fetchCandles(symbol, tfConfig) {
   // 2. Binance Vision Fallback
   try {
     const bInterval = is45m ? '15m' : tfConfig.id === '30m' ? '30m' : tfConfig.id === '1h' ? '1h' : tfConfig.id === '2h' ? '2h' : '1h';
+    const bLimit = is3h ? '135' : limit;
     const bRes = await fetch(
-      `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${bInterval}&limit=${limit}`,
+      `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${bInterval}&limit=${bLimit}`,
       {
         headers: { 'User-Agent': 'WolfRSIScanner/2.0' },
         signal: AbortSignal.timeout(3000),
@@ -279,8 +281,8 @@ async function fetchCandles(symbol, tfConfig) {
           vol: parseFloat(k[5]),
         }));
 
-        if (is45m) {
-          return aggregate45mCandles(raw);
+        if (is45m || is3h) {
+          return aggregate45mCandles(raw, 3);
         }
         return raw;
       }

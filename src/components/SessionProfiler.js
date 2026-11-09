@@ -94,27 +94,14 @@ export default function SessionProfiler() {
   return (
     <div style={{ animation: 'fadeInUp 0.35s ease' }}>
       {/* ── 1. Header Card with Live Active Session Radar ── */}
-      <div className="vyaps-card" style={{ background: '#000000', borderColor: '#1a1a1a', marginBottom: 20 }}>
+      <div className="vyaps-card" style={{ background: '#050505', borderColor: '#1a1a1a', marginBottom: 20 }}>
         <div className="vyaps-card-header" style={{ borderColor: '#161616', flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              background: 'rgba(56, 189, 248, 0.12)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
-              borderRadius: 6,
-              padding: '6px 8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <IconRadar size={18} color="#38bdf8" />
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Session HOD / LOD Profiler
             </div>
-            <div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.95rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
-                SESSION PROFILER &amp; PROBABILITY ENGINE
-              </div>
-              <div style={{ fontSize: '0.72rem', color: '#888888' }}>
-                Scanned {meta.daysScanned} days ({meta.totalCandlesScanned} hours) across Asia (00-08 UTC), London (07-15 UTC), NY (13-21 UTC)
-              </div>
+            <div style={{ fontSize: '0.72rem', color: '#888888', marginTop: 2 }}>
+              Asia (00-08) &middot; London (07-15) &middot; NY (13-21 UTC) &middot; {meta.daysScanned}d scan
             </div>
           </div>
 
@@ -123,31 +110,31 @@ export default function SessionProfiler() {
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: `1px solid ${activeSession.color}50`,
-              padding: '5px 10px',
+              background: '#0a0a0a',
+              border: `1px solid ${activeSession.color}40`,
+              padding: '4px 10px',
               borderRadius: 4,
               fontFamily: 'var(--font-mono)',
-              fontSize: '0.74rem'
+              fontSize: '0.72rem'
             }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: activeSession.color, boxShadow: `0 0 8px ${activeSession.color}` }} />
-              <span style={{ color: activeSession.color, fontWeight: 700 }}>{activeSession.code} ACTIVE</span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: activeSession.color }} />
+              <span style={{ color: activeSession.color, fontWeight: 700 }}>{activeSession.code} LIVE</span>
               <span style={{ color: '#888888' }}>({activeSession.hoursRemaining}h left)</span>
             </div>
 
-            <button className="va-tab-btn" onClick={fetchSessionData} title="Refresh Session Scanner" style={{ padding: '0.45rem 0.65rem' }}>
-              <IconRefresh size={13} />
+            <button className="va-tab-btn" onClick={() => fetchSessionData(true)} title="Refresh Session Scanner" style={{ padding: '0.45rem 0.65rem' }}>
+              <IconRefresh size={13} className={retrying ? 'spin-icon' : ''} />
             </button>
           </div>
         </div>
 
         {/* ── Today's Live Playbook Banner ── */}
         <div style={{
-          background: 'linear-gradient(180deg, rgba(56, 189, 248, 0.05) 0%, rgba(0, 0, 0, 0.4) 100%)',
-          border: '1px solid rgba(56, 189, 248, 0.25)',
+          background: '#080808',
+          border: '1px solid #1e1e1e',
           borderRadius: 8,
           margin: '14px 16px',
-          padding: '14px 18px',
+          padding: '14px 16px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -234,24 +221,24 @@ export default function SessionProfiler() {
         </div>
 
         {/* ── Sub Navigation Tabs ── */}
-        <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px 16px', borderBottom: '1px solid #161616' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 16px 14px 16px', borderBottom: '1px solid #161616' }}>
           <button
             className={`va-tab-btn ${activeTab === 'daily' ? 'active' : ''}`}
             onClick={() => setActiveTab('daily')}
           >
-            Weekly Basis Day-by-Day (Mon-Sun)
+            Day-by-Day (Mon-Sun)
           </button>
           <button
             className={`va-tab-btn ${activeTab === 'weekly-cycle' ? 'active' : ''}`}
             onClick={() => setActiveTab('weekly-cycle')}
           >
-            Weekly Cycle (High / Low of Week)
+            Weekly Extremes (HOW / LOW)
           </button>
           <button
             className={`va-tab-btn ${activeTab === 'logs' ? 'active' : ''}`}
             onClick={() => setActiveTab('logs')}
           >
-            30-Day Session History Log ({dailyLogs.length})
+            30-Day History ({dailyLogs.length})
           </button>
         </div>
 
@@ -259,7 +246,7 @@ export default function SessionProfiler() {
         {activeTab === 'daily' && (
           <div style={{ padding: '16px' }}>
             {/* 7 Days Selector */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 20 }}>
+            <div className="session-days-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 8, marginBottom: 18 }}>
               {weeklyByDay.map(day => {
                 const isSelected = day.dow === selectedDow;
                 const isDayToday = day.dow === today.dow;
@@ -334,7 +321,7 @@ export default function SessionProfiler() {
               </div>
 
               {/* Two Side-by-Side Panels: HOD vs LOD */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginBottom: 16 }}>
                 {/* HOD Probabilities */}
                 <div style={{ background: '#050505', border: '1px solid #161616', borderRadius: 6, padding: '14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>

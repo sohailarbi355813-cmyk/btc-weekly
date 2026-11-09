@@ -24,19 +24,19 @@ export function buildWeeklyProfiles(candles) {
 
   for (const candle of sorted) {
     const d = new Date(candle.date + 'T12:00:00Z');
-    const weekKey = getISOWeekKey(d);
+    const weekStart = getWeekMonday(d).toISOString().split('T')[0];
 
-    if (!weekMap.has(weekKey)) {
-      weekMap.set(weekKey, {
-        weekKey,
-        weekStart: getWeekMonday(d).toISOString().split('T')[0],
+    if (!weekMap.has(weekStart)) {
+      weekMap.set(weekStart, {
+        weekKey: weekStart,
+        weekStart,
         days: {},
       });
     }
 
     const dow = d.getUTCDay();
-    const ret = ((candle.close - candle.open) / candle.open) * 100;
-    weekMap.get(weekKey).days[dow] = {
+    const ret = candle.open > 0 ? ((candle.close - candle.open) / candle.open) * 100 : 0;
+    weekMap.get(weekStart).days[dow] = {
       date: candle.date,
       dow,
       dayName: DAY_NAMES[dow],
@@ -47,10 +47,12 @@ export function buildWeeklyProfiles(candles) {
     };
   }
 
-  // Convert to sorted array, filter weeks with at least 3 days of data
-  return Array.from(weekMap.values())
-    .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
-    .filter(w => Object.keys(w.days).length >= 3);
+  // Keep completed historical weeks (>= 3 days) and always preserve the current/latest week (even on Mon/Tue)
+  const sortedWeeks = Array.from(weekMap.values()).sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+  if (sortedWeeks.length === 0) return [];
+  const latestWeek = sortedWeeks[sortedWeeks.length - 1];
+  const completedHistorical = sortedWeeks.slice(0, -1).filter(w => Object.keys(w.days).length >= 3);
+  return [...completedHistorical, latestWeek];
 }
 
 // ─── Get Current Week Profile ──────────────────────────────────────────────────
@@ -109,20 +111,18 @@ function scoreWeekSimilarity(currentWeek, historicalWeek, completedDows) {
 
   if (maxScore === 0) return 0;
 
-  // Bonus: trend shape similarity (direction sequence)
-  const curSequence = completedDows
-    .map(d => currentWeek.days[d]?.bullish)
-    .filter(Boolean);
-  const histSequence = completedDows
-    .map(d => historicalWeek.days[d]?.bullish)
-    .filter(Boolean);
-
+  // Bonus: trend shape similarity (direction sequence across paired days, preserving bear false days)
+  let pairedCount = 0;
   let sequenceMatches = 0;
-  for (let i = 0; i < Math.min(curSequence.length, histSequence.length); i++) {
-    if (curSequence[i] === histSequence[i]) sequenceMatches++;
+  for (const d of completedDows) {
+    const curDay = currentWeek.days[d];
+    const histDay = historicalWeek.days[d];
+    if (!curDay || !histDay) continue;
+    pairedCount++;
+    if (curDay.bullish === histDay.bullish) sequenceMatches++;
   }
-  const seqBonus = completedDows.length > 1
-    ? (sequenceMatches / completedDows.length) * 20
+  const seqBonus = pairedCount > 1
+    ? (sequenceMatches / pairedCount) * 20
     : 0;
 
   return Math.min(100, ((totalScore / maxScore) * 80) + seqBonus);
@@ -167,15 +167,24 @@ export function findSimilarWeeks(weeks, topN = 25, referenceDate = null) {
   // Remaining / future days
   const futureDows = allDows.filter(d => allDows.indexOf(d) > todayIndex);
 
-  // Score all historical weeks (exclude current week itself)
+  // Score all historical weeks (exclude current incomplete week from both matches and nextWeek)
   const historicalWeeks = weeks.slice(0, -1);
 
-  const scored = historicalWeeks.map((week, idx) => ({
-    week,
-    idx,
-    score: scoreWeekSimilarity(currentWeek, week, matchDows),
-    nextWeek: weeks[idx + 1] ?? null,
-  })).filter(w => w.score >= 25);
+  const scored = historicalWeeks.map((week, idx) => {
+    const candidateNext = historicalWeeks[idx + 1] ?? null;
+    // Ensure candidateNext is genuinely the immediate following week (~7 days later)
+    let nextWeek = null;
+    if (candidateNext) {
+      const gapDays = (new Date(candidateNext.weekStart) - new Date(week.weekStart)) / 86400000;
+      if (gapDays > 0 && gapDays <= 10) nextWeek = candidateNext;
+    }
+    return {
+      week,
+      idx,
+      score: scoreWeekSimilarity(currentWeek, week, matchDows),
+      nextWeek,
+    };
+  }).filter(w => w.score >= 25);
 
   // Sort by similarity score descending
   scored.sort((a, b) => b.score - a.score);
@@ -226,6 +235,9 @@ export function findSimilarWeeks(weeks, topN = 25, referenceDate = null) {
     const isClosed = closedDows.includes(dow);
     const isFuture = futureDows.includes(dow);
 
+    const dirBias = weightedBullRate >= 50 ? 'bullish' : 'bearish';
+    const dirRate = dirBias === 'bullish' ? weightedBullRate : 100 - weightedBullRate;
+
     predictions[dow] = {
       dow,
       dayName: DAY_NAMES[dow],
@@ -235,10 +247,11 @@ export function findSimilarWeeks(weeks, topN = 25, referenceDate = null) {
       bearish: dayResults.length - bullish,
       bullishRate: Math.round(bullishRate * 10) / 10,
       weightedBullRate: Math.round(weightedBullRate * 10) / 10,
+      biasRate: Math.round(dirRate * 10) / 10,
       avgReturn: Math.round(avgReturn * 100) / 100,
       maxGain: Math.max(...returns),
       maxLoss: Math.min(...returns),
-      bias: weightedBullRate > 55 ? 'bullish' : weightedBullRate < 45 ? 'bearish' : 'neutral',
+      bias: dirBias,
       confidence: Math.round(Math.min(Math.abs(weightedBullRate - 50) * 2, 100)),
       returns,
       isCompleted: completedDows.includes(dow),
@@ -268,6 +281,8 @@ export function findSimilarWeeks(weeks, topN = 25, referenceDate = null) {
       const weightedBull = dayResults.reduce((sum, d) => sum + (d.day.bullish ? d.score : 0), 0);
       const totalWeight = dayResults.reduce((sum, d) => sum + d.score, 0);
       const weightedBullRate = totalWeight > 0 ? (weightedBull / totalWeight) * 100 : (bullish / dayResults.length) * 100;
+      const nextDirBias = weightedBullRate >= 50 ? 'bullish' : 'bearish';
+      const nextDirRate = nextDirBias === 'bullish' ? weightedBullRate : 100 - weightedBullRate;
 
       nextWeekPredictions[dow] = {
         dow,
@@ -276,10 +291,11 @@ export function findSimilarWeeks(weeks, topN = 25, referenceDate = null) {
         sampleSize: dayResults.length,
         bullishRate: Math.round((bullish / dayResults.length) * 100 * 10) / 10,
         weightedBullRate: Math.round(weightedBullRate * 10) / 10,
+        biasRate: Math.round(nextDirRate * 10) / 10,
         avgReturn: Math.round(avgReturn * 100) / 100,
         maxGain: Math.max(...returns),
         maxLoss: Math.min(...returns),
-        bias: weightedBullRate > 55 ? 'bullish' : weightedBullRate < 45 ? 'bearish' : 'neutral',
+        bias: nextDirBias,
         confidence: Math.round(Math.min(Math.abs(weightedBullRate - 50) * 2, 100)),
         returns,
       };

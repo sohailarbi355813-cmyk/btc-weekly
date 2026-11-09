@@ -65,9 +65,9 @@ export function analyzeCandleStructure(candles, swingSize = 3) {
   for (let i = swingSize * 2; i < candles.length; i++) {
     const c = candles[i];
 
-    // Check newly confirmed pivots at this bar
-    const newPivot = pivots.find((p) => p.idx === i - swingSize);
-    if (newPivot) {
+    // Check newly confirmed pivots at this bar (handles simultaneous high+low pivots on outside bars)
+    const newPivots = pivots.filter((p) => p.idx === i - swingSize);
+    for (const newPivot of newPivots) {
       if (newPivot.type === 'HIGH') {
         if (prevHigh !== null) {
           if (newPivot.price >= prevHigh) {

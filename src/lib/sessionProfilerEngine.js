@@ -108,9 +108,9 @@ export function analyzeSessions(hourlyCandles, customNow = null) {
     const dayLow = Math.min(...list.map(x => x.low));
     const dayOpen = list[0].open;
     const dayClose = list[list.length - 1].close;
-    const dayReturn = ((dayClose - dayOpen) / dayOpen) * 100;
+    const dayReturn = dayOpen > 0 ? ((dayClose - dayOpen) / dayOpen) * 100 : 0;
     const dayRange = dayHigh - dayLow;
-    const dayRangePct = (dayRange / dayLow) * 100;
+    const dayRangePct = dayLow > 0 ? (dayRange / dayLow) * 100 : 0;
 
     let hodCandle = list[0];
     let lodCandle = list[0];
@@ -176,7 +176,9 @@ export function analyzeSessions(hourlyCandles, customNow = null) {
         hod: { Asia: 0, London: 0, NY: 0 },
         lod: { Asia: 0, London: 0, NY: 0 },
         dominantHod: 'None',
+        dominantHodPct: 0,
         dominantLod: 'None',
+        dominantLodPct: 0,
         topSequence: 'N/A',
         topSequencePct: 0,
         avgRangePct: 0,
@@ -360,8 +362,8 @@ export function analyzeSessions(hourlyCandles, customNow = null) {
     weeklyCycle: {
       totalWeeks: completedWeeks,
       byDay: weeklyCycleByDay,
-      recentWeeks: weeklyCycleList.reverse().slice(0, 6),
+      recentWeeks: [...weeklyCycleList].sort((a, b) => b.weekStart.localeCompare(a.weekStart)).slice(0, 6),
     },
-    dailyLogs: dailyLogs.reverse().slice(0, 31), // Last 31 days
+    dailyLogs: [...dailyLogs].reverse().slice(0, 31), // Last 31 days
   };
 }

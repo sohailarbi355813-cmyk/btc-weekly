@@ -416,6 +416,10 @@ body::after {
   to { transform: rotate(360deg); }
 }
 
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 .loading-text {
   color: var(--text-secondary);
   font-size: 0.9rem;
@@ -759,7 +763,7 @@ body::after {
 
 .dow-card.today {
   border-color: var(--accent);
-  box-shadow: 0 0 20px var(--accent-glow), var(--shadow-card);
+  box-shadow: none;
 }
 
 .dow-card.today::before {
@@ -1172,10 +1176,10 @@ body::after {
 }
 
 .tab-btn.active {
-  background: #000000;
+  background: #0b0b0d;
   color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.5);
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  box-shadow: none;
 }
 
 #tab-twin {
@@ -1890,6 +1894,12 @@ body::after {
 .mobile-nav-desc {
   font-size: 0.68rem;
   color: #777777;
+}
+
+@media (max-width: 1080px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2793,18 +2803,24 @@ html, body {
   box-sizing: border-box;
 }
 
-/* Any table that might overflow */
-table {
-  display: block;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  max-width: 100%;
+/* Desktop 7-col strip for Session Profiler days, responsive wrap on mobile */
+@media (min-width: 900px) {
+  .session-days-grid {
+    grid-template-columns: repeat(7, 1fr) !important;
+  }
 }
 
 /* ═══════════════════════════════════════════
    MOBILE RESPONSIVE — 768px and below
 ═══════════════════════════════════════════ */
 @media (max-width: 768px) {
+  /* Prevent table overflow on mobile without breaking desktop table layout */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
   /* VerdictHero card */
   .verdict-hero-card {
     padding: 14px 12px !important;
@@ -3227,5 +3243,9 @@ table {
   .sigma-marker-pill {
     font-size: 0.58rem;
     padding: 1px 5px;
+  }
+  .mobile-bottom-btn {
+    padding: 6px 2px;
+    font-size: 0.62rem;
   }
 }

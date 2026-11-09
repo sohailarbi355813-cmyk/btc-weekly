@@ -437,3 +437,46 @@
   font-weight: 700;
   font-size: 0.9rem;
 }
+
+@media (max-width: 600px) {
+  .macro-container {
+    padding: 10px 8px;
+  }
+  .macro-title-group h2 {
+    font-size: 1.05rem;
+  }
+  .macro-ribbon {
+    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+    gap: 8px;
+  }
+  .ribbon-card {
+    padding: 10px 12px;
+  }
+  .ribbon-value {
+    font-size: 1.1rem;
+  }
+  .macro-panel {
+    padding: 14px 12px;
+  }
+  .panel-title-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .panel-title {
+    font-size: 0.82rem;
+  }
+  .mvrv-big-number {
+    font-size: 2.1rem;
+  }
+  .band-row {
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: 0.68rem;
+  }
+  .etf-section {
+    padding: 14px 12px;
+  }
+  .etf-search-input {
+    width: 100%;
+  }
+}

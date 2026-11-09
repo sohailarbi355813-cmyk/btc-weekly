@@ -6,15 +6,20 @@ import { IconWolf, IconLevels, IconTrendUp, IconTrendDown } from '@/components/I
 export default function WolfKeyLevels({ levelsData }) {
   const [filter, setFilter] = useState('all'); // 'all' | 'daily' | 'weekly' | 'monthly'
 
+  // Filter ladder rows while always preserving the LAST row (before conditional return per Rules of Hooks)
+  const filteredLadder = useMemo(() => {
+    const ladder = levelsData?.ladder || [];
+    if (filter === 'all') return ladder;
+    return ladder.filter(row => row.isLast || row.category === filter || (filter === 'monthly' && row.category === 'yearly'));
+  }, [levelsData, filter]);
+
   if (!levelsData) return null;
 
   const {
     spot,
     utcDate,
-    ladder,
     nearestResistance,
     nearestSupport,
-    dayRange,
     weeklyStats,
     monthlyStats,
     previousWeekStats,
@@ -22,32 +27,31 @@ export default function WolfKeyLevels({ levelsData }) {
     sigmas,
   } = levelsData;
 
-  // Filter ladder rows while always preserving the LAST row
-  const filteredLadder = useMemo(() => {
-    if (filter === 'all') return ladder;
-    return ladder.filter(row => row.isLast || row.category === filter || (filter === 'monthly' && row.category === 'yearly'));
-  }, [ladder, filter]);
+  const resMovePct = spot > 0 && nearestResistance ? ((nearestResistance.price - spot) / spot) * 100 : 0;
+  const supMovePct = spot > 0 && nearestSupport ? ((spot - nearestSupport.price) / spot) * 100 : 0;
 
   return (
-    <div className="wolf-container" style={{ animation: 'fadeInUp 0.4s ease' }}>
-      <div className="wolf-glow-bar" />
-
+    <div className="wolf-container" style={{ animation: 'fadeInUp 0.35s ease' }}>
       <div className="wolf-layout">
-        {/* Left Column: Big Price & Spot Info */}
+        {/* Left Column: Spot Info & Targets */}
         <div className="wolf-left-panel">
           <div>
-            <div className="wolf-brand-row">
-              <div className="wolf-brand-title">
-                WOLF<span className="wolf-cursor" />
-              </div>
-              <div className="wolf-tag-badge">[ KEY LEVELS ]</div>
+            <div style={{
+              fontSize: '0.72rem',
+              fontFamily: 'var(--font-mono)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: 'var(--text-muted)',
+              marginBottom: 4,
+            }}>
+              BTC Key Levels &middot; Spot
             </div>
-
-            <div className="wolf-main-heading">btc levels</div>
             <div className="wolf-big-price">
-              {Number(spot).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+              ${Number(spot).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
             </div>
-            <div className="wolf-price-sub">BTCUSDT perpetual, last price</div>
+            <div className="wolf-price-sub" style={{ marginBottom: 16 }}>
+              Auction Price Ladder &amp; Value Areas
+            </div>
 
             {/* Quick Targets */}
             <div className="wolf-targets-grid">
@@ -57,10 +61,10 @@ export default function WolfKeyLevels({ levelsData }) {
                   <span style={{ color: 'var(--wolf-yellow-bright)' }}>{nearestResistance?.code || 'None'}</span>
                 </div>
                 <div className="wolf-target-val">
-                  {nearestResistance ? `$${Number(nearestResistance.price).toLocaleString('en-US', { minimumFractionDigits: 1 })}` : 'All-time High'}
+                  {nearestResistance ? `$${Number(nearestResistance.price).toLocaleString('en-US', { minimumFractionDigits: 1 })}` : 'Range High'}
                 </div>
                 <div className="wolf-target-diff pos">
-                  {nearestResistance ? `+${Math.abs(nearestResistance.pctDiff).toFixed(2)}% (+$${Math.abs(nearestResistance.diff).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : ''}
+                  {nearestResistance ? `+${Math.abs(resMovePct).toFixed(2)}% (+$${Math.abs(nearestResistance.price - spot).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : ''}
                 </div>
               </div>
 
@@ -73,7 +77,7 @@ export default function WolfKeyLevels({ levelsData }) {
                   {nearestSupport ? `$${Number(nearestSupport.price).toLocaleString('en-US', { minimumFractionDigits: 1 })}` : '--'}
                 </div>
                 <div className="wolf-target-diff neg">
-                  {nearestSupport ? `-${Math.abs(nearestSupport.pctDiff).toFixed(2)}% (-$${Math.abs(nearestSupport.diff).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : ''}
+                  {nearestSupport ? `-${Math.abs(supMovePct).toFixed(2)}% (-$${Math.abs(spot - nearestSupport.price).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : ''}
                 </div>
               </div>
             </div>
@@ -321,16 +325,6 @@ export default function WolfKeyLevels({ levelsData }) {
               );
             })}
           </div>
-        </div>
-      </div>
-
-      {/* Signature Bottom Banner */}
-      <div className="wolf-footer-banner">
-        <div className="wolf-motto">
-          trading the tape, with precision
-        </div>
-        <div className="wolf-disclaimer-tag">
-          wolf key levels &middot; not financial advice
         </div>
       </div>
     </div>

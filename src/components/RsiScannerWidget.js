@@ -163,24 +163,14 @@ export default function RsiScannerWidget() {
 
   return (
     <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 12,
-      padding: '20px',
+      background: '#050505',
+      border: '1px solid #1a1a1a',
+      borderRadius: 10,
+      padding: '16px',
       marginBottom: 24,
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {/* Top Accent Gradient Bar */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 2,
-        background: 'linear-gradient(90deg, #ef4444 0%, #38bdf8 50%, #22c55e 100%)',
-      }} />
-
       {/* ── Header ── */}
       <div style={{
         display: 'flex',
@@ -189,21 +179,20 @@ export default function RsiScannerWidget() {
         flexWrap: 'wrap',
         gap: 12,
         borderBottom: '1px solid var(--border)',
-        paddingBottom: 16,
-        marginBottom: 16,
+        paddingBottom: 14,
+        marginBottom: 14,
       }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{
               display: 'inline-block',
-              width: 8,
-              height: 8,
+              width: 7,
+              height: 7,
               borderRadius: '50%',
               background: '#22c55e',
-              boxShadow: '0 0 10px #22c55e',
             }} />
             <h2 style={{
-              fontSize: '1.05rem',
+              fontSize: '0.95rem',
               fontWeight: 800,
               letterSpacing: '0.04em',
               textTransform: 'uppercase',
@@ -211,24 +200,24 @@ export default function RsiScannerWidget() {
               fontFamily: 'var(--font-mono)',
               margin: 0,
             }}>
-              55 Coins Market Radar · Live RSI Telemetry
+              Market RSI Radar
             </h2>
             <span style={{
-              fontSize: '0.65rem',
-              fontWeight: 800,
-              padding: '2px 8px',
+              fontSize: '0.62rem',
+              fontWeight: 700,
+              padding: '2px 7px',
               borderRadius: 4,
-              background: 'rgba(56, 189, 248, 0.15)',
+              background: 'rgba(56, 189, 248, 0.1)',
               color: 'var(--accent)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
               fontFamily: 'var(--font-mono)',
             }}>
-              55 ASSETS · 5 TIMEFRAMES
+              55 COINS · 5 TFs
             </span>
           </div>
 
-          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Monitors real-time RSI extremes (&ge;70 Overbought, &le;30 Oversold), price levels, and divergences directly on this site.
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 3 }}>
+            Real-time RSI extremes (&ge;70 OB, &le;30 OS) &amp; confirmed divergences
           </div>
         </div>
 
@@ -238,12 +227,12 @@ export default function RsiScannerWidget() {
             onClick={handleTestAlert}
             disabled={testingWebhook}
             style={{
-              padding: '6px 12px',
-              background: 'var(--bg-elevated)',
+              padding: '5px 10px',
+              background: '#0d0d0d',
               border: '1px solid var(--border)',
               borderRadius: 6,
               color: 'var(--accent)',
-              fontSize: '0.72rem',
+              fontSize: '0.70rem',
               fontWeight: 700,
               fontFamily: 'var(--font-mono)',
               cursor: testingWebhook ? 'not-allowed' : 'pointer',
@@ -251,34 +240,33 @@ export default function RsiScannerWidget() {
               alignItems: 'center',
               gap: 6,
             }}
-            title="Test Discord Webhook URL (if configured in .env.local)"
+            title="Send Discord test alert"
           >
-            <IconZap size={13} color="var(--accent)" />
-            <span>{testingWebhook ? 'Testing...' : 'Test Webhook'}</span>
+            <IconZap size={12} color="var(--accent)" />
+            <span>{testingWebhook ? 'Testing...' : 'Test Alert'}</span>
           </button>
 
           <button
             onClick={handleScanNow}
             disabled={scanningNow}
             style={{
-              padding: '6px 14px',
+              padding: '5px 12px',
               background: '#0284c7',
               border: '1px solid #38bdf8',
               borderRadius: 6,
               color: '#ffffff',
-              fontSize: '0.72rem',
+              fontSize: '0.70rem',
               fontWeight: 800,
               fontFamily: 'var(--font-mono)',
               cursor: scanningNow ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              boxShadow: '0 0 12px rgba(56, 189, 248, 0.25)',
             }}
-            title="Run instant real-time scan across all 55 coins on Bybit"
+            title="Run instant scan across 55 coins"
           >
-            <IconRefresh size={13} className={scanningNow ? 'spin-icon' : ''} color="#ffffff" />
-            <span>{scanningNow ? 'Scanning 55 Coins...' : 'Scan Now'}</span>
+            <IconRefresh size={12} className={scanningNow ? 'spin-icon' : ''} color="#ffffff" />
+            <span>{scanningNow ? 'Scanning...' : 'Scan Now'}</span>
           </button>
         </div>
       </div>
@@ -379,7 +367,7 @@ export default function RsiScannerWidget() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.70rem', color: '#eab308', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontWeight: 800 }}>
-              🎯 Divergences
+              Divergences
             </span>
             <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#eab308', fontFamily: 'var(--font-display)' }}>
               {status.divergenceCount || 0}
@@ -429,11 +417,11 @@ export default function RsiScannerWidget() {
           <button
             onClick={() => { setViewMode('signals'); setTerritoryFilter('both'); }}
             style={{
-              padding: '5px 12px',
+              padding: '5px 10px',
               borderRadius: 6,
-              fontSize: '0.72rem',
+              fontSize: '0.70rem',
               fontFamily: 'var(--font-mono)',
-              fontWeight: 800,
+              fontWeight: 700,
               background: viewMode === 'signals' ? 'var(--accent-dim)' : 'transparent',
               color: viewMode === 'signals' ? 'var(--accent)' : 'var(--text-secondary)',
               border: `1px solid ${viewMode === 'signals' ? 'var(--accent)' : 'var(--border)'}`,
@@ -441,16 +429,16 @@ export default function RsiScannerWidget() {
               transition: 'all 0.15s ease',
             }}
           >
-            ⚡ Active Signals ({activeSignalCoins.length})
+            Active Signals ({activeSignalCoins.length})
           </button>
           <button
             onClick={() => { setViewMode('all'); setTerritoryFilter('both'); }}
             style={{
-              padding: '5px 12px',
+              padding: '5px 10px',
               borderRadius: 6,
-              fontSize: '0.72rem',
+              fontSize: '0.70rem',
               fontFamily: 'var(--font-mono)',
-              fontWeight: 800,
+              fontWeight: 700,
               background: viewMode === 'all' ? 'var(--accent-dim)' : 'transparent',
               color: viewMode === 'all' ? 'var(--accent)' : 'var(--text-secondary)',
               border: `1px solid ${viewMode === 'all' ? 'var(--accent)' : 'var(--border)'}`,
@@ -458,16 +446,16 @@ export default function RsiScannerWidget() {
               transition: 'all 0.15s ease',
             }}
           >
-            📋 All 55 Coins Watchlist
+            All 55 Coins
           </button>
           <button
             onClick={() => { setViewMode('majors'); setTerritoryFilter('both'); }}
             style={{
-              padding: '5px 12px',
+              padding: '5px 10px',
               borderRadius: 6,
-              fontSize: '0.72rem',
+              fontSize: '0.70rem',
               fontFamily: 'var(--font-mono)',
-              fontWeight: 800,
+              fontWeight: 700,
               background: viewMode === 'majors' ? 'rgba(234, 179, 8, 0.2)' : 'transparent',
               color: viewMode === 'majors' ? '#eab308' : 'var(--text-secondary)',
               border: `1px solid ${viewMode === 'majors' ? '#eab308' : 'var(--border)'}`,
@@ -475,7 +463,7 @@ export default function RsiScannerWidget() {
               transition: 'all 0.15s ease',
             }}
           >
-            👑 Majors (BTC · ETH · SOL)
+            Majors (BTC · ETH · SOL)
           </button>
         </div>
 
@@ -568,7 +556,7 @@ export default function RsiScannerWidget() {
               cursor: 'pointer',
             }}
           >
-            🎯 Divergence Only {filterDivergenceOnly ? '✓' : ''}
+            Divergence {filterDivergenceOnly ? '✓' : ''}
           </button>
           <button
             onClick={() => setFilterExtremeOnly(!filterExtremeOnly)}
@@ -584,7 +572,7 @@ export default function RsiScannerWidget() {
               cursor: 'pointer',
             }}
           >
-            ⚡ &ge;1.8&sigma; Sigma {filterExtremeOnly ? '✓' : ''}
+            &ge;1.8&sigma; Band {filterExtremeOnly ? '✓' : ''}
           </button>
           {territoryFilter !== 'both' && (
             <button
@@ -636,13 +624,13 @@ export default function RsiScannerWidget() {
             <IconRadar size={28} color="var(--accent)" style={{ marginBottom: 8, opacity: 0.6 }} />
             <div>No coins currently match the selected filter criteria.</div>
             <div style={{ fontSize: '0.70rem', color: 'var(--text-muted)', marginTop: 4 }}>
-              Click <strong>&quot;All 55 Coins Watchlist&quot;</strong> above or click <strong>&quot;Scan Now&quot;</strong> to refresh live market feeds.
+              Click <strong>&quot;All 55 Coins&quot;</strong> above or click <strong>&quot;Scan Now&quot;</strong> to refresh live market feeds.
             </div>
           </div>
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
             gap: 10,
           }}>
             {displayedCoins.map((item, idx) => {
@@ -798,7 +786,7 @@ export default function RsiScannerWidget() {
                       alignItems: 'center',
                       justifyContent: 'space-between',
                     }}>
-                      <span>⚠️ {item.divergence.label}</span>
+                      <span>{item.divergence.label}</span>
                       <span>{item.divergence.barsAgo} bars ago</span>
                     </div>
                   )}
