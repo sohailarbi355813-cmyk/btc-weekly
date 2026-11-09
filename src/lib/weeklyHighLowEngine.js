@@ -139,8 +139,8 @@ export function buildWeeklyCandles(candles, currentPrice, refDate = null) {
     currentWeek.isBearish = currentWeek.close <= currentWeek.open;
   }
 
-  // All completed historical weeks (exclude ongoing current week)
-  const completedWeeks = allWeeks.slice(0, -1);
+  // All completed historical weeks (exclude ongoing current week & partial <3d boundary weeks)
+  const completedWeeks = allWeeks.slice(0, -1).filter(w => w.candleCount >= 3);
 
   return { completedWeeks, currentWeek };
 }
@@ -237,10 +237,12 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
   const medianHighPct = Math.round(getPercentile(allHighPcts, 50) * 100) / 100;
   const p25HighPct = Math.round(getPercentile(allHighPcts, 25) * 100) / 100;
   const p75HighPct = Math.round(getPercentile(allHighPcts, 75) * 100) / 100;
+  const p90HighPct = Math.round(getPercentile(allHighPcts, 90) * 100) / 100;
 
   const medianLowPct = Math.round(getPercentile(allLowPcts, 50) * 100) / 100;
   const p25LowPct = Math.round(getPercentile(allLowPcts, 25) * 100) / 100;
   const p75LowPct = Math.round(getPercentile(allLowPcts, 75) * 100) / 100;
+  const p90LowPct = Math.round(getPercentile(allLowPcts, 90) * 100) / 100;
 
   // How many historical weeks had a high that exceeded the current week's high?
   const weeksWithHighFurther = cohort.filter(w => w.highPctAboveOpen > currentHighPct).length;
@@ -264,8 +266,35 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
   // ── 4. Target Projections ────────────────────────────────────────────────
   const projectedHighTarget = Math.round(WO * (1 + (medianHighPct / 100)));
   const projectedHighMax = Math.round(WO * (1 + (p75HighPct / 100)));
+  const projectedHighExtreme = Math.round(WO * (1 + (p90HighPct / 100)));
   const projectedLowTarget = Math.round(WO * (1 - (medianLowPct / 100)));
   const projectedLowMax = Math.round(WO * (1 - (p75LowPct / 100)));
+  const projectedLowExtreme = Math.round(WO * (1 - (p90LowPct / 100)));
+
+  // Directional target strictly validated against current spot price
+  const roundedSpot = Math.round(currentPrice);
+  let targetGuidance;
+  if (effectiveBias === 'bearish') {
+    if (projectedLowTarget < roundedSpot) {
+      targetGuidance = { direction: 'bearish', status: 'median', target: projectedLowTarget, breachedTarget: null, label: 'weekly low median' };
+    } else if (projectedLowMax < roundedSpot) {
+      targetGuidance = { direction: 'bearish', status: 'p75', target: projectedLowMax, breachedTarget: projectedLowTarget, label: '75th pct extended low' };
+    } else if (projectedLowExtreme < roundedSpot) {
+      targetGuidance = { direction: 'bearish', status: 'p90', target: projectedLowExtreme, breachedTarget: projectedLowMax, label: '90th pct tail low' };
+    } else {
+      targetGuidance = { direction: 'bearish', status: 'exceeded', target: null, breachedTarget: projectedLowExtreme, label: '90th pct drawdown exceeded' };
+    }
+  } else {
+    if (projectedHighTarget > roundedSpot) {
+      targetGuidance = { direction: 'bullish', status: 'median', target: projectedHighTarget, breachedTarget: null, label: 'weekly high median' };
+    } else if (projectedHighMax > roundedSpot) {
+      targetGuidance = { direction: 'bullish', status: 'p75', target: projectedHighMax, breachedTarget: projectedHighTarget, label: '75th pct extended high' };
+    } else if (projectedHighExtreme > roundedSpot) {
+      targetGuidance = { direction: 'bullish', status: 'p90', target: projectedHighExtreme, breachedTarget: projectedHighMax, label: '90th pct tail high' };
+    } else {
+      targetGuidance = { direction: 'bullish', status: 'exceeded', target: null, breachedTarget: projectedHighExtreme, label: '90th pct expansion exceeded' };
+    }
+  }
 
   // ── 5. MATCHED HISTORICAL WEEKS & SUBSEQUENT WEEK PROJECTIONS ──────────
   let matchedStats = null;
@@ -317,23 +346,13 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
         sumLowExt += mc.lowPctBelowOpen;
       }
 
-      let peakHighDayIndex = 0;
-      let maxHighDayCount = -1;
-      for (let i = 0; i < 7; i++) {
-        if (matchedHighDayCounts[i] > maxHighDayCount) {
-          maxHighDayCount = matchedHighDayCounts[i];
-          peakHighDayIndex = i;
-        }
-      }
+      const maxHighDayCount = Math.max(...matchedHighDayCounts);
+      const tiedHighDays = DAY_LABELS.filter((_, idx) => matchedHighDayCounts[idx] === maxHighDayCount);
+      const peakHighDayLabel = tiedHighDays.slice(0, 3).join(' / ') + (tiedHighDays.length > 3 ? ` (+${tiedHighDays.length - 3})` : '');
 
-      let peakLowDayIndex = 0;
-      let maxLowDayCount = -1;
-      for (let i = 0; i < 7; i++) {
-        if (matchedLowDayCounts[i] > maxLowDayCount) {
-          maxLowDayCount = matchedLowDayCounts[i];
-          peakLowDayIndex = i;
-        }
-      }
+      const maxLowDayCount = Math.max(...matchedLowDayCounts);
+      const tiedLowDays = DAY_LABELS.filter((_, idx) => matchedLowDayCounts[idx] === maxLowDayCount);
+      const peakLowDayLabel = tiedLowDays.slice(0, 3).join(' / ') + (tiedLowDays.length > 3 ? ` (+${tiedLowDays.length - 3})` : '');
 
       const matchedHighsInByNow = matchedCandles.filter(mc => mc.highDayIndex <= currentDayIndex).length;
       const matchedHighsInByNowPct = Math.round((matchedHighsInByNow / totalMatched) * 100);
@@ -349,16 +368,17 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
       const subAvgReturn = subTotal > 0
         ? Math.round((subsequentWeeks.reduce((acc, s) => acc + s.returnPct, 0) / subTotal) * 100) / 100
         : 0;
+      const subIsBear = subBearCount > subBullCount || (subBearCount === subBullCount && subAvgReturn < 0);
 
       matchedStats = {
         totalMatched,
-        peakHighDay: DAY_LABELS[peakHighDayIndex],
+        peakHighDay: peakHighDayLabel,
         peakHighCount: maxHighDayCount,
         peakHighPct: Math.round((maxHighDayCount / totalMatched) * 100),
         highsInByNowPct: matchedHighsInByNowPct,
         highsInByNowCount: matchedHighsInByNow,
 
-        peakLowDay: DAY_LABELS[peakLowDayIndex],
+        peakLowDay: peakLowDayLabel,
         peakLowCount: maxLowDayCount,
         peakLowPct: Math.round((maxLowDayCount / totalMatched) * 100),
         lowsInByNowPct: matchedLowsInByNowPct,
@@ -371,8 +391,8 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
           total: subTotal,
           bearPct: subBearPct,
           bullPct: subBullPct,
-          bias: subBearPct >= subBullPct ? 'BEARISH' : 'BULLISH',
-          biasRate: subBearPct >= subBullPct ? subBearPct : subBullPct,
+          bias: subIsBear ? 'BEARISH' : 'BULLISH',
+          biasRate: subIsBear ? subBearPct : subBullPct,
           avgReturn: subAvgReturn,
         }
       };
@@ -381,6 +401,7 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
 
   return {
     matchedStats,
+    targetGuidance,
     effectiveBias,
     selectedBias,
     cohortLabel,
@@ -407,8 +428,10 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
       pctCappedAtOrBelow: pctHighCapped,
       medianPct: medianHighPct,
       p75Pct: p75HighPct,
+      p90Pct: p90HighPct,
       projectedTarget: projectedHighTarget,
       projectedMax: projectedHighMax,
+      projectedExtreme: projectedHighExtreme,
       timingDistribution: highTimingDistribution,
       verdictText: highIsInProbability >= 65
         ? `High Probability (${highIsInProbability}%) High is IN`
@@ -424,8 +447,10 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
       pctFloorAtOrAbove: pctLowFloor,
       medianPct: medianLowPct,
       p75Pct: p75LowPct,
+      p90Pct: p90LowPct,
       projectedTarget: projectedLowTarget,
       projectedMax: projectedLowMax,
+      projectedExtreme: projectedLowExtreme,
       timingDistribution: lowTimingDistribution,
       verdictText: lowIsInProbability >= 65
         ? `High Probability (${lowIsInProbability}%) Low is IN`

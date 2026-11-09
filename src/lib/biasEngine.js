@@ -601,12 +601,19 @@ export function getTodayBias(candles, currentPrice, referenceDate = null) {
   const bearSignals = signals.filter(s => s.state === 'bearish' && Math.abs(s.score) >= 8).map(s => s.name);
 
   let verdictReason;
+  const ema20Round = Math.round(ema20).toLocaleString();
   if (verdict === 'BULLISH') {
     const drivers = bullSignals.length > 0 ? bullSignals.join(' · ') : 'Weighted signals';
-    verdictReason = `${drivers} align bullish. Pullbacks near $${Math.round(ema20).toLocaleString()} (20 EMA) favor long entries.${pwLevels.pwh > 0 && currentPrice > pwLevels.pwh ? ` Holding above Prior Week High $${pwLevels.pwh.toLocaleString()}.` : ''}`;
+    const emaGuidance = currentPrice >= ema20
+      ? `Pullbacks near $${ema20Round} (20 EMA) favor long entries.`
+      : `Reclaiming $${ema20Round} (20 EMA) overhead confirms upside continuation.`;
+    verdictReason = `${drivers} align bullish. ${emaGuidance}${pwLevels.pwh > 0 && currentPrice > pwLevels.pwh ? ` Holding above Prior Week High $${pwLevels.pwh.toLocaleString()}.` : ''}`;
   } else {
     const drivers = bearSignals.length > 0 ? bearSignals.join(' · ') : 'Weighted signals';
-    verdictReason = `${drivers} favor downside. Rallies toward $${Math.round(ema20).toLocaleString()} (20 EMA) face resistance.${pwLevels.pwl > 0 && currentPrice < pwLevels.pwl ? ` Breaking below Prior Week Low $${pwLevels.pwl.toLocaleString()}.` : ''}`;
+    const emaGuidance = currentPrice <= ema20
+      ? `Rallies toward $${ema20Round} (20 EMA) face resistance.`
+      : `Losing $${ema20Round} (20 EMA) support below accelerates downside.`;
+    verdictReason = `${drivers} favor downside. ${emaGuidance}${pwLevels.pwl > 0 && currentPrice < pwLevels.pwl ? ` Breaking below Prior Week Low $${pwLevels.pwl.toLocaleString()}.` : ''}`;
   }
 
   const convictionLevel = strengthPct >= 82 ? 5 : strengthPct >= 72 ? 4 : strengthPct >= 62 ? 3 : strengthPct >= 54 ? 2 : 1;

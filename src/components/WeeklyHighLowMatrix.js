@@ -46,6 +46,7 @@ export default function WeeklyHighLowMatrix({
     highMetrics,
     lowMetrics,
     matchedStats,
+    targetGuidance,
   } = probData;
 
   const isBearModel = effectiveBias === 'bearish';
@@ -319,14 +320,14 @@ export default function WeeklyHighLowMatrix({
             </div>
 
             <div>
-              <span style={{ color: '#777', textTransform: 'uppercase' }}>Typical {effectiveBias.toUpperCase()} Target:</span>
+              <span style={{ color: '#777', textTransform: 'uppercase' }}>Median {effectiveBias} {isHighTab ? 'High' : 'Low'}:</span>
               <div style={{ color: '#38bdf8', fontWeight: 700, fontSize: '0.88rem' }}>
                 {formatPrice(activeMetrics.projectedTarget)}
                 <span style={{ fontSize: '0.66rem', color: '#888', marginLeft: 4 }}>
                   ({isHighTab ? `+${activeMetrics.medianPct}%` : `-${activeMetrics.medianPct}%`})
                 </span>
               </div>
-              <div style={{ color: '#555', fontSize: '0.62rem' }}>Max (75th%): {formatPrice(activeMetrics.projectedMax)}</div>
+              <div style={{ color: '#555', fontSize: '0.62rem' }}>75th% {isHighTab ? 'High' : 'Low'}: {formatPrice(activeMetrics.projectedMax)}</div>
             </div>
           </div>
         </div>
@@ -444,11 +445,61 @@ export default function WeeklyHighLowMatrix({
             </div>
             <div>
               <div style={{ fontSize: '0.76rem', color: '#e5e5e5', lineHeight: 1.3 }}>
-                {effectiveBias === 'bearish' ? (
-                  <>Institutional bias is <strong style={{ color: '#f87171' }}>BEARISH</strong>. Structure favors short positioning with downside target toward <strong style={{ color: '#ffffff' }}>{formatPrice(activeMetrics.projectedTarget)}</strong>.</>
-                ) : (
-                  <>Institutional bias is <strong style={{ color: '#4ade80' }}>BULLISH</strong>. Structure favors accumulation with expansion target toward <strong style={{ color: '#ffffff' }}>{formatPrice(activeMetrics.projectedTarget)}</strong>.</>
-                )}
+                {(() => {
+                  const g = targetGuidance || (effectiveBias === 'bearish'
+                    ? (lowMetrics.projectedTarget < currentWeek.price
+                      ? { direction: 'bearish', status: 'median', target: lowMetrics.projectedTarget, breachedTarget: null, label: 'weekly low median' }
+                      : lowMetrics.projectedMax < currentWeek.price
+                      ? { direction: 'bearish', status: 'p75', target: lowMetrics.projectedMax, breachedTarget: lowMetrics.projectedTarget, label: '75th pct extended low' }
+                      : { direction: 'bearish', status: 'exceeded', target: null, breachedTarget: lowMetrics.projectedMax, label: 'drawdown exceeded' })
+                    : (highMetrics.projectedTarget > currentWeek.price
+                      ? { direction: 'bullish', status: 'median', target: highMetrics.projectedTarget, breachedTarget: null, label: 'weekly high median' }
+                      : highMetrics.projectedMax > currentWeek.price
+                      ? { direction: 'bullish', status: 'p75', target: highMetrics.projectedMax, breachedTarget: highMetrics.projectedTarget, label: '75th pct extended high' }
+                      : { direction: 'bullish', status: 'exceeded', target: null, breachedTarget: highMetrics.projectedMax, label: 'expansion exceeded' }));
+
+                  if (effectiveBias === 'bearish') {
+                    if (g.status === 'exceeded' || !g.target || g.target >= currentWeek.price) {
+                      return (
+                        <>
+                          Institutional bias is <strong style={{ color: '#f87171' }}>BEARISH</strong>. Historical weekly drawdown extremes already exceeded below spot &mdash; trailing short trend active (week low <strong style={{ color: '#ffffff' }}>{formatPrice(currentWeek.low)}</strong>).
+                        </>
+                      );
+                    }
+                    if (g.breachedTarget) {
+                      return (
+                        <>
+                          Institutional bias is <strong style={{ color: '#f87171' }}>BEARISH</strong>. Median low ({formatPrice(g.breachedTarget)}) already breached &mdash; next downside target toward <strong style={{ color: '#ffffff' }}>{formatPrice(g.target)}</strong> ({g.label}).
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        Institutional bias is <strong style={{ color: '#f87171' }}>BEARISH</strong>. Structure favors short positioning with downside target toward <strong style={{ color: '#ffffff' }}>{formatPrice(g.target)}</strong> ({g.label}).
+                      </>
+                    );
+                  }
+
+                  if (g.status === 'exceeded' || !g.target || g.target <= currentWeek.price) {
+                    return (
+                      <>
+                        Institutional bias is <strong style={{ color: '#4ade80' }}>BULLISH</strong>. Historical weekly expansion extremes already surpassed above spot &mdash; breakout continuation active (week high <strong style={{ color: '#ffffff' }}>{formatPrice(currentWeek.high)}</strong>).
+                      </>
+                    );
+                  }
+                  if (g.breachedTarget) {
+                    return (
+                      <>
+                        Institutional bias is <strong style={{ color: '#4ade80' }}>BULLISH</strong>. Median high ({formatPrice(g.breachedTarget)}) already surpassed &mdash; next upside target toward <strong style={{ color: '#ffffff' }}>{formatPrice(g.target)}</strong> ({g.label}).
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      Institutional bias is <strong style={{ color: '#4ade80' }}>BULLISH</strong>. Structure favors accumulation with upside target toward <strong style={{ color: '#ffffff' }}>{formatPrice(g.target)}</strong> ({g.label}).
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>

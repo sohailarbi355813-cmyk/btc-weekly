@@ -31,11 +31,11 @@ export function calculateWolfKeyLevels(candles, currentPrice) {
   const PDL = prevCandle.low;
   const PDC = prevCandle.close;
 
-  // Previous Day POC & Value Area (Estimated using standard Typical Price & 70% Value Area)
+  // Previous Day POC & Value Area (Estimated using standard Typical Price & 70% Value Area, clamped within PDH/PDL)
   const pPOC = (prevCandle.high + prevCandle.low + prevCandle.close) / 3;
   const dayRange = PDH - PDL;
-  const pVAH = pPOC + (dayRange * 0.35);
-  const pVAL = pPOC - (dayRange * 0.35);
+  const pVAH = Math.min(pPOC + (dayRange * 0.35), PDH);
+  const pVAL = Math.max(pPOC - (dayRange * 0.35), PDL);
 
   // 2. Weekly Levels
   // Current Week Monday Open
@@ -156,12 +156,13 @@ export function calculateWolfKeyLevels(candles, currentPrice) {
   // price is -3.56% BELOW that level (Resistance).
   // When price is above a level (e.g. support at 78,000), price is +3.27% ABOVE that level (Support).
   const processedLevels = rawLevels.map(lvl => {
-    const diff = spot - lvl.price;
-    const pctDiff = lvl.price > 0 ? ((spot - lvl.price) / lvl.price) * 100 : 0;
-    const isAbove = lvl.price > spot;
+    const roundedPrice = Math.round(lvl.price * 10) / 10;
+    const diff = spot - roundedPrice;
+    const pctDiff = roundedPrice > 0 ? ((spot - roundedPrice) / roundedPrice) * 100 : 0;
+    const isAbove = roundedPrice > spot;
     return {
       ...lvl,
-      price: Math.round(lvl.price * 10) / 10,
+      price: roundedPrice,
       diff: Math.round(diff * 10) / 10,
       pctDiff: Math.round(pctDiff * 100) / 100,
       isAbove,

@@ -166,7 +166,7 @@ export default function MacroWhalesEtf() {
       <div className="macro-ribbon">
         <div className="ribbon-card">
           <span className="ribbon-label">Whales Position L/S Ratio</span>
-          <span className="ribbon-value val-green">
+          <span className={`ribbon-value ${whales?.position?.longPct >= 50 ? 'val-green' : 'val-red'}`}>
             {whales?.position?.ratio ? `${whales.position.ratio.toFixed(2)}x` : '--'}
           </span>
           <span className="ribbon-sub">
