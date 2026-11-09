@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { getTodayBias } from '@/lib/biasEngine';
+import { getTodayBias, analyzeDayOfWeek } from '@/lib/biasEngine';
 import { calculateWolfKeyLevels } from '@/lib/wolfLevelsEngine';
 import { buildWeeklyProfiles, findSimilarWeeks } from '@/lib/weekPatternEngine';
 import { calculateWeeklyHighLowProbabilities } from '@/lib/weeklyHighLowEngine';
@@ -41,13 +41,14 @@ function VerdictHero({ bias, data, clientDate }) {
   const verdict = bias.verdict; // 'BULLISH' | 'BEARISH' | 'CAUTION'
   const color = bias.verdictColor;
   const score = bias.score;
-  const conviction = bias.convictionLevel; // 1-5
+  const effectiveStrength = bias.strengthPct || Math.min(98, Math.max(52, Math.round(50 + Math.abs(score) * 0.48)));
+  const convictionDots = effectiveStrength >= 82 ? 5 : effectiveStrength >= 72 ? 4 : effectiveStrength >= 62 ? 3 : effectiveStrength >= 54 ? 2 : 1;
 
   const formattedDate = clientDate
     ? clientDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : bias.date || '';
 
-  const convictionLabel = ['', 'Very Low', 'Low', 'Moderate', 'High', 'Very High'][conviction] || 'Moderate';
+  const convictionLabel = effectiveStrength >= 82 ? 'Very High' : effectiveStrength >= 72 ? 'High' : effectiveStrength >= 62 ? 'Moderate' : effectiveStrength >= 54 ? 'Mild' : 'Developing';
 
   const verdictBg = verdict === 'BULLISH'
     ? 'rgba(34,197,94,0.07)'
@@ -113,7 +114,7 @@ function VerdictHero({ bias, data, clientDate }) {
             </span>
             <div className="verdict-conviction-dots">
               {[1,2,3,4,5].map(i => (
-                <div key={i} className="conviction-dot" style={{ background: i <= conviction ? color : 'rgba(255,255,255,0.08)' }} />
+                <div key={i} className="conviction-dot" style={{ background: i <= convictionDots ? color : 'rgba(255,255,255,0.08)' }} />
               ))}
             </div>
             <span className="verdict-conviction-text" style={{ color }}>
@@ -145,13 +146,13 @@ function VerdictHero({ bias, data, clientDate }) {
         <div className="verdict-score-meter-wrap">
           <div className="verdict-score-circle" style={{ borderColor: color, boxShadow: `0 0 20px ${color}30`, background: `${color}0d` }}>
             <span style={{ color }}>
-              {bias.strengthPct || Math.min(98, Math.max(52, Math.round(50 + Math.abs(score) * 0.48)))}%
+              {effectiveStrength}%
             </span>
-            <span style={{ fontSize: '0.58rem', letterSpacing: '0.08em', color: '#9ca3af' }}>{verdict} STRENGTH</span>
+            <span style={{ fontSize: '0.62rem', letterSpacing: '0.08em', color: '#9ca3af', fontWeight: 700 }}>STRENGTH</span>
           </div>
           <div className="verdict-score-subtext">
             <span style={{ color: color, fontWeight: 800 }}>{verdict} BIAS</span><br />
-            Conviction: {convictionLabel}
+            Conviction: <strong style={{ color: '#ffffff' }}>{convictionLabel}</strong>
           </div>
         </div>
       </div>
@@ -192,14 +193,17 @@ function VerdictHero({ bias, data, clientDate }) {
             : '#94a3b8';
           const statusColor = sm.color || markerColor;
 
+          const minus3 = sm.minus3Sigma || Math.round(sm.mean - 3 * (sm.stdDev || (sm.mean * 0.025)));
+          const plus3 = sm.plus3Sigma || Math.round(sm.mean + 3 * (sm.stdDev || (sm.mean * 0.025)));
+
           const anchors = [
-            { pct: 0, label: '-3σ', val: null },
+            { pct: 0, label: '-3σ', val: minus3, color: '#22c55e' },
             { pct: 16.66, label: '-2σ', val: sm.minus2Sigma, color: '#4ade80' },
             { pct: 33.33, label: '-1σ', val: sm.minus1Sigma, color: '#38bdf8' },
             { pct: 50.00, label: 'Mean (μ)', val: sm.mean, color: '#9ca3af' },
             { pct: 66.66, label: '+1σ', val: sm.plus1Sigma, color: '#fb923c' },
             { pct: 83.33, label: '+2σ', val: sm.plus2Sigma, color: '#f87171' },
-            { pct: 100, label: '+3σ', val: null },
+            { pct: 100, label: '+3σ', val: plus3, color: '#ef4444' },
           ];
 
           return (
@@ -509,6 +513,7 @@ export default function Home() {
 
   if (!bias || !data) return null;
 
+  const dowStats2025 = data?.candles ? analyzeDayOfWeek(data.candles, '2025-01-01') : null;
   const dowStatsArr = Object.values(bias.allDowStats);
   const totalCandles = data.count;
   const totalBullish = data.candles.filter(c => c.close > c.open).length;
@@ -682,38 +687,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ── DOW GRID ── */}
-          <div className="dow-section">
-            <div className="section-header">
-              <div className="section-title"><IconCalendar size={16} color="var(--accent)" /> Day-of-Week Historical Rates</div>
-              <div className="section-subtitle">5-year base rate by day — context only, not the final verdict</div>
-            </div>
-            <div className="dow-grid">
-              {dowStatsArr.map(d => {
-                const isToday = d.day === bias.dow;
-                const isBullEdge = d.bullishRate >= 50;
-                const edgePct = isBullEdge ? d.bullishRate : (d.bearishRate || (100 - d.bullishRate));
-                const bColor = isBullEdge ? 'var(--bullish)' : 'var(--bearish)';
-                const badgeText = isBullEdge ? 'BULLISH' : 'BEARISH';
-                return (
-                  <div key={d.day} className={`dow-card${isToday ? ' today' : ''}`}>
-                    <div className="dow-card-day">{DAY_SHORT[d.day]}</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: bColor, fontFamily: 'var(--font-display)', marginBottom: 4 }}>
-                      {edgePct.toFixed(0)}%
-                    </div>
-                    <div className={`dow-bias-badge ${badgeText.toLowerCase()}`}>{badgeText}</div>
-                    <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 6 }}>
-                      avg {d.avgReturn > 0 ? '+' : ''}{d.avgReturn.toFixed(2)}%
-                    </div>
-                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                      {d.bullish}G / {d.bearish}R
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
           {/* ── TABS ── */}
           <div className="tab-bar">
             <button id="tab-levels" className={`tab-btn ${activeTab === 'levels' ? 'active' : ''}`} onClick={() => navigateToSection('levels')}>
@@ -752,6 +725,7 @@ export default function Home() {
                 weeklyHighLowData={weeklyHighLowData}
                 selectedWeeklyBias={weeklyProbBias}
                 onWeeklyBiasChange={handleWeeklyProbBiasChange}
+                dowStats2025={dowStats2025}
                 formatPrice={formatPrice}
               />
             )}

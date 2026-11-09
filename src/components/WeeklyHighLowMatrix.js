@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import {
@@ -372,12 +372,12 @@ export default function WeeklyHighLowMatrix({
               <IconClock size={13} />
             </div>
             <div>
-              <div style={{ fontSize: '0.78rem', color: '#e5e5e5', lineHeight: 1.3 }}>
+              <div style={{ fontSize: '0.80rem', color: '#e5e5e5', lineHeight: 1.35 }}>
                 {matchedStats ? (
                   <>
                     <strong style={{ color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
                       {isHighTab ? matchedStats.highsInByNowPct : matchedStats.lowsInByNowPct}%
-                    </strong> ({isHighTab ? matchedStats.highsInByNowCount : matchedStats.lowsInByNowCount}/{matchedStats.totalMatched}) of matched similar weeks had the {isHighTab ? 'high' : 'low'} in by <strong style={{ color: '#38bdf8' }}>{currentWeek.currentDayName}</strong>
+                    </strong> ({isHighTab ? matchedStats.highsInByNowCount : matchedStats.lowsInByNowCount} of {matchedStats.totalMatched} matched weeks) had the {isHighTab ? 'high' : 'low'} in by <strong style={{ color: '#38bdf8' }}>{currentWeek.currentDayName}</strong>
                   </>
                 ) : (
                   <>
@@ -385,9 +385,11 @@ export default function WeeklyHighLowMatrix({
                   </>
                 )}
               </div>
-              <div style={{ fontSize: '0.66rem', color: '#777', marginTop: 2 }}>
+              <div style={{ fontSize: '0.72rem', color: '#cbd5e1', marginTop: 4, lineHeight: 1.35 }}>
                 {matchedStats ? (
-                  <>Peak {isHighTab ? 'high' : 'low'} day was <strong style={{ color: '#aaa' }}>{isHighTab ? matchedStats.peakHighDay : matchedStats.peakLowDay}</strong> ({isHighTab ? matchedStats.peakHighPct : matchedStats.peakLowPct}% of matched) with avg extension {isHighTab ? `+${matchedStats.avgHighExt}%` : `-${matchedStats.avgLowExt}%`}</>
+                  <>
+                    <strong style={{ color: '#38bdf8' }}>Dominant {isHighTab ? 'High' : 'Low'} Day:</strong> <strong style={{ color: isHighTab ? '#f87171' : '#4ade80' }}>{isHighTab ? matchedStats.peakHighDay : matchedStats.peakLowDay}</strong> &mdash; <strong>{isHighTab ? matchedStats.peakHighCount : matchedStats.peakLowCount} of {matchedStats.totalMatched} weeks ({isHighTab ? matchedStats.peakHighPct : matchedStats.peakLowPct}%)</strong> set their {isHighTab ? 'high' : 'low'} on {isHighTab ? matchedStats.peakHighDay : matchedStats.peakLowDay} (avg extension {isHighTab ? `+${matchedStats.avgHighExt}%` : `-${matchedStats.avgLowExt}%`})
+                  </>
                 ) : (
                   <>{activeMetrics.pctInLater}% of {effectiveBias} weeks put the {isHighTab ? 'high' : 'low'} in later in the week</>
                 )}
@@ -466,116 +468,6 @@ export default function WeeklyHighLowMatrix({
         </div>
       </div>
 
-      {/* ── Day-by-Day Historical Timing Histogram ── */}
-      <div style={{
-        background: '#080808',
-        border: '1px solid #171717',
-        borderRadius: 6,
-        padding: '12px 14px',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 10,
-          fontSize: '0.68rem',
-          fontFamily: 'var(--font-mono)',
-          color: '#888',
-        }}>
-          <span style={{ textTransform: 'uppercase' }}>
-            HISTORICAL DAY-OF-WEEK {isHighTab ? 'HIGH' : 'LOW'} FORMATION DISTRIBUTION ({sampleSize} WEEKS)
-          </span>
-          <span style={{ color: '#555' }}>
-            Current Day: <strong style={{ color: '#38bdf8' }}>{currentWeek.currentDayName}</strong>
-          </span>
-        </div>
-
-        {/* 7 Days Bar Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(7, 1fr)',
-          gap: 6,
-        }}>
-          {activeMetrics.timingDistribution.map((item) => {
-            const isHighest = item.pct === Math.max(...activeMetrics.timingDistribution.map(d => d.pct));
-            return (
-              <div
-                key={item.day}
-                style={{
-                  background: item.isToday ? '#151515' : '#0c0c0c',
-                  border: item.isToday
-                    ? '1px solid #38bdf8'
-                    : isHighest
-                    ? '1px solid rgba(255, 255, 255, 0.2)'
-                    : '1px solid #141414',
-                  borderRadius: 4,
-                  padding: '6px 4px',
-                  textAlign: 'center',
-                  position: 'relative',
-                }}
-              >
-                {item.isToday && (
-                  <div style={{
-                    position: 'absolute',
-                    top: -6,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    background: '#38bdf8',
-                    color: '#000',
-                    fontSize: '0.52rem',
-                    fontWeight: 900,
-                    padding: '0 4px',
-                    borderRadius: 2,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                  }}>
-                    Live
-                  </div>
-                )}
-
-                <div style={{
-                  fontSize: '0.64rem',
-                  fontWeight: 700,
-                  color: item.isToday ? '#ffffff' : '#888',
-                  fontFamily: 'var(--font-mono)',
-                  marginBottom: 4,
-                }}>
-                  {item.day}
-                </div>
-
-                {/* Vertical percentage bar */}
-                <div style={{
-                  height: 38,
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  justifyContent: 'center',
-                  marginBottom: 4,
-                }}>
-                  <div style={{
-                    width: '60%',
-                    height: `${Math.max(item.pct * 2, 6)}%`,
-                    maxHeight: '100%',
-                    background: isHighTab
-                      ? (item.isToday ? '#38bdf8' : isHighest ? '#f87171' : '#262626')
-                      : (item.isToday ? '#38bdf8' : isHighest ? '#4ade80' : '#262626'),
-                    borderRadius: 2,
-                    transition: 'height 0.3s ease',
-                  }} />
-                </div>
-
-                <div style={{
-                  fontSize: '0.68rem',
-                  fontWeight: 800,
-                  color: isHighest ? '#ffffff' : '#aaa',
-                  fontFamily: 'var(--font-mono)'
-                }}>
-                  {item.pct}%
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }

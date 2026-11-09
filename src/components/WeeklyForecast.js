@@ -38,6 +38,7 @@ export default function WeeklyForecast({
   weeklyHighLowData,
   selectedWeeklyBias = 'auto',
   onWeeklyBiasChange,
+  dowStats2025 = null,
   formatPrice = defaultFormatPrice,
 }) {
   if (!weekPattern) {
@@ -60,6 +61,45 @@ export default function WeeklyForecast({
         onBiasChange={onWeeklyBiasChange}
         formatPrice={formatPrice}
       />
+
+      {/* ── Average Return Per Day of the Week (Calculated from Start of 2025 to Present) ── */}
+      {dowStats2025 && (
+        <div className="section-card" style={{ marginBottom: 24, background: '#050505', border: '1px solid #1c1c1c' }}>
+          <div className="section-header" style={{ marginBottom: 12 }}>
+            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <IconCalendar size={16} color="var(--accent)" />
+              <span>Avg Return Per Day of the Week</span>
+            </div>
+            <div className="section-subtitle">
+              Calculated from start of 2025 to present &mdash; current market regime only
+            </div>
+          </div>
+          <div className="dow-grid">
+            {Object.values(dowStats2025).map(d => {
+              const isToday = d.day === weekPattern.todayDow;
+              const isBullEdge = d.bullishRate >= 50;
+              const edgePct = isBullEdge ? d.bullishRate : (d.bearishRate || (100 - d.bullishRate));
+              const bColor = isBullEdge ? 'var(--bullish)' : 'var(--bearish)';
+              const badgeText = isBullEdge ? 'BULLISH' : 'BEARISH';
+              return (
+                <div key={d.day} className={`dow-card${isToday ? ' today' : ''}`}>
+                  <div className="dow-card-day">{DAY_SHORT[d.day]}</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: bColor, fontFamily: 'var(--font-display)', marginBottom: 4 }}>
+                    {edgePct.toFixed(0)}%
+                  </div>
+                  <div className={`dow-bias-badge ${badgeText.toLowerCase()}`}>{badgeText}</div>
+                  <div style={{ fontSize: '0.70rem', color: d.avgReturn >= 0 ? '#4ade80' : '#f87171', fontWeight: 700, fontFamily: 'var(--font-mono)', marginTop: 6 }}>
+                    avg {d.avgReturn > 0 ? '+' : ''}{d.avgReturn.toFixed(2)}%
+                  </div>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                    {d.bullish}G / {d.bearish}R ({d.total}d)
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── 1. Current Week Timeline ── */}
       <div className="section-header" style={{ marginBottom: 14 }}>

@@ -2832,13 +2832,16 @@ table {
     box-sizing: border-box;
   }
   .verdict-score-circle {
-    width: 60px !important;
-    height: 60px !important;
-    border-width: 2px !important;
+    width: 82px !important;
+    height: 82px !important;
+    min-width: 82px !important;
+    min-height: 82px !important;
+    border-width: 2.5px !important;
     flex-shrink: 0;
+    padding: 2px;
   }
   .verdict-score-circle span:first-child {
-    font-size: 1.2rem !important;
+    font-size: 1.35rem !important;
   }
 
   /* Sigma bar on mobile */
@@ -3000,13 +3003,15 @@ table {
     font-size: clamp(1.4rem, 11vw, 2rem) !important;
   }
 
-  /* Score circle even smaller on tiny screens */
+  /* Score circle comfortable size on tiny screens */
   .verdict-score-circle {
-    width: 52px !important;
-    height: 52px !important;
+    width: 76px !important;
+    height: 76px !important;
+    min-width: 76px !important;
+    min-height: 76px !important;
   }
   .verdict-score-circle span:first-child {
-    font-size: 1.0rem !important;
+    font-size: 1.25rem !important;
   }
 
   /* Sigma bar prices: even smaller */
@@ -3201,15 +3206,26 @@ table {
   margin-top: 1px;
 }
 
+.sigma-anchor-col:first-child {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.sigma-anchor-col:last-child {
+  align-items: flex-end;
+  text-align: right;
+}
+
 @media (max-width: 600px) {
-  .sigma-anchor-col:nth-child(1),
-  .sigma-anchor-col:nth-child(7) {
-    display: none;
-  }
   .sigma-anchor-price {
-    font-size: 0.55rem;
+    font-size: 0.48rem;
+    letter-spacing: -0.02em;
   }
   .sigma-anchor-label {
-    font-size: 0.55rem;
+    font-size: 0.50rem;
+  }
+  .sigma-marker-pill {
+    font-size: 0.58rem;
+    padding: 1px 5px;
   }
 }

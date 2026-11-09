@@ -1,4 +1,4 @@
-﻿/**
+/**
  * BTC Bias Engine v4 — Upgraded Verdict System
  *
  * Outputs ONE clear verdict: BULLISH | BEARISH | CAUTION
@@ -78,6 +78,7 @@ export function calculateSigmas(candles, currentPrice, period = 20) {
       color: '#38bdf8', scoreImpact: 0, dailyStdDevPct: 2.5,
       plus1Sigma: Math.round(p * 1.025), minus1Sigma: Math.round(p * 0.975),
       plus2Sigma: Math.round(p * 1.05), minus2Sigma: Math.round(p * 0.95),
+      plus3Sigma: Math.round(p * 1.075), minus3Sigma: Math.round(p * 0.925),
       bandwidthPct: 5.0, zScore: 0,
     };
   }
@@ -121,6 +122,7 @@ export function calculateSigmas(candles, currentPrice, period = 20) {
     dailyStdDevPct: Math.round(dailyStdDevPct * 100) / 100,
     plus1Sigma: Math.round(mean + stdDev), minus1Sigma: Math.round(mean - stdDev),
     plus2Sigma: Math.round(mean + 2 * stdDev), minus2Sigma: Math.round(mean - 2 * stdDev),
+    plus3Sigma: Math.round(mean + 3 * stdDev), minus3Sigma: Math.round(mean - 3 * stdDev),
     bandwidthPct: Math.round(bandwidthPct * 100) / 100,
   };
 }
@@ -286,12 +288,13 @@ function analyzePriorWeekLevels(sorted, currentPrice, now) {
 
 // ─── Historical Analysis (kept for DOW grid display) ─────────────────────────
 
-export function analyzeDayOfWeek(candles) {
+export function analyzeDayOfWeek(candles, startDate = null) {
   const stats = {};
   for (let d = 0; d < 7; d++) {
     stats[d] = { day: d, dayName: DAY_NAMES[d], total: 0, bullish: 0, bearish: 0, returns: [], avgReturn: 0, bullishRate: 0, bearishRate: 0, bias: 'neutral', strength: 0 };
   }
-  const sorted = [...candles].sort((a, b) => a.date.localeCompare(b.date));
+  const filtered = startDate ? candles.filter(c => c.date >= startDate) : candles;
+  const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
   for (const candle of sorted) {
     const dow = new Date(candle.date + 'T12:00:00Z').getUTCDay();
     const ret = pctReturn(candle);
