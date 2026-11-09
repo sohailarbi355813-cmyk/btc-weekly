@@ -69,13 +69,11 @@ async function runScanCycle() {
       console.log(`🎯 Active filter config: OVERSOLD ONLY`);
     } else {
       targetCoins = [...results.overboughtCoins, ...results.oversoldCoins];
-    }
-
-    // Always include any active divergences on Majors (BTC, ETH, SOL)
-    if (results.divergenceCoins && results.divergenceCoins.length > 0) {
-      for (const d of results.divergenceCoins) {
-        if (!targetCoins.some(t => t.symbol === d.symbol && t.timeframe === d.timeframe)) {
-          targetCoins.push(d);
+      if (results.divergenceCoins && results.divergenceCoins.length > 0) {
+        for (const d of results.divergenceCoins) {
+          if (!targetCoins.some(t => t.symbol === d.symbol && t.timeframe === d.timeframe)) {
+            targetCoins.push(d);
+          }
         }
       }
     }
@@ -119,6 +117,7 @@ async function runScanCycle() {
 
     // Persist status for web app telemetry
     saveStatus({
+      engineVersion: results.engineVersion,
       lastScanTime: Date.now(),
       lastScanTimeFormatted: new Date().toISOString(),
       scanIteration,

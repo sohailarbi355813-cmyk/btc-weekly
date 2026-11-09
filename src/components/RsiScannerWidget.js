@@ -54,7 +54,7 @@ export default function RsiScannerWidget() {
       if (json.success) {
         setMessage({
           type: 'success',
-          text: `Scan complete! Found ${json.overboughtCount || 0} Overbought, ${json.oversoldCount || 0} Oversold across 55 coins.`,
+          text: `Scan complete! Found ${json.overboughtCount || 0} Overbought (\u226570), ${json.oversoldCount || 0} Oversold (\u226430), and ${json.divergenceCount || 0} Divergences across 55 coins.`,
         });
         fetchStatus();
       } else {
@@ -138,11 +138,11 @@ export default function RsiScannerWidget() {
         const matchesName = item.name?.toLowerCase().includes(q);
         if (!matchesSym && !matchesDisp && !matchesName) return false;
       }
-      // Territory filter (applicable in signals view or if explicitly selected)
-      if (territoryFilter === 'overbought' && item.rsi < 70 && !item.divergence?.type?.includes('BEARISH')) {
+      // Territory filter strictly enforces OB >= 70 and OS <= 30
+      if (territoryFilter === 'overbought' && item.rsi < 70) {
         return false;
       }
-      if (territoryFilter === 'oversold' && item.rsi > 30 && !item.divergence?.type?.includes('BULLISH')) {
+      if (territoryFilter === 'oversold' && item.rsi > 30) {
         return false;
       }
       // Divergence filter
@@ -743,7 +743,7 @@ export default function RsiScannerWidget() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3, fontSize: '0.68rem', fontFamily: 'var(--font-mono)' }}>
                       <span style={{ color: 'var(--text-muted)' }}>RSI (14)</span>
                       <span style={{ color: rsiColor, fontWeight: 900 }}>
-                        {item.rsi} {isOB ? '· OVERBOUGHT' : isOS ? '· OVERSOLD' : ''}
+                        {item.rsi} {isOB ? '· OVERBOUGHT' : isOS ? '· OVERSOLD' : item.divergence ? (item.divergence.direction === 'BEAR' ? '· BEAR DIV' : '· BULL DIV') : ''}
                       </span>
                     </div>
 
@@ -785,9 +785,13 @@ export default function RsiScannerWidget() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 8,
                     }}>
                       <span>{item.divergence.label}</span>
-                      <span>{item.divergence.barsAgo} bars ago</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>
+                        {item.divergence.prevRsi != null && item.divergence.curRsi != null ? `${item.divergence.prevRsi}\u2192${item.divergence.curRsi} \u00B7 ` : ''}{item.divergence.barsAgo} bars ago
+                      </span>
                     </div>
                   )}
                 </div>

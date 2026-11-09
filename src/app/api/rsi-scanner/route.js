@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
-import { scanAllAltsRSI, filterCooldownAlerts, SCAN_TIMEFRAMES } from '@/lib/rsiScannerEngine';
+import { scanAllAltsRSI, filterCooldownAlerts, SCAN_TIMEFRAMES, RSI_SCANNER_ENGINE_VERSION } from '@/lib/rsiScannerEngine';
 import { sendDiscordRsiAlerts, sendTestDiscordAlert } from '@/lib/discordNotifier';
 import fs from 'fs';
 import path from 'path';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const STATUS_FILE = path.join(process.cwd(), '.rsi-scanner-status.json');
 const CONFIG_FILE = path.join(process.cwd(), '.rsi-scanner-config.json');
@@ -45,8 +48,13 @@ export async function GET(request) {
     // On-demand explicit scan
     if (action === 'scan') {
       const results = await scanAllAltsRSI();
-      const allTerritory = [...results.overboughtCoins, ...results.oversoldCoins];
-      const alertable = filterCooldownAlerts(allTerritory);
+      const allSignals = [...results.overboughtCoins, ...results.oversoldCoins];
+      for (const d of results.divergenceCoins || []) {
+        if (!allSignals.some((t) => t.symbol === d.symbol && t.timeframe === d.timeframe)) {
+          allSignals.push(d);
+        }
+      }
+      const alertable = filterCooldownAlerts(allSignals);
 
       let sentAlerts = 0;
       if (alertable.length > 0 && process.env.DISCORD_WEBHOOK_URL) {
@@ -71,8 +79,12 @@ export async function GET(request) {
     // Default: return cached or run auto-scan on initial load if no cache exists
     let cachedStatus = loadStatus();
 
-    // Auto-scan if no cache exists yet so the website doesn't appear empty
-    if (!cachedStatus || (!cachedStatus.allCoins?.length && !cachedStatus.overboughtCoins?.length)) {
+    // Auto-scan if no cache exists yet or scanner logic version changed
+    if (
+      !cachedStatus ||
+      cachedStatus.engineVersion !== RSI_SCANNER_ENGINE_VERSION ||
+      (!cachedStatus.allCoins?.length && !cachedStatus.overboughtCoins?.length && !cachedStatus.oversoldCoins?.length)
+    ) {
       const results = await scanAllAltsRSI();
       cachedStatus = {
         ...results,
@@ -129,12 +141,11 @@ export async function POST(request) {
         targetCoins = results.oversoldCoins;
       } else {
         targetCoins = [...results.overboughtCoins, ...results.oversoldCoins];
-      }
-
-      if (results.divergenceCoins && results.divergenceCoins.length > 0) {
-        for (const d of results.divergenceCoins) {
-          if (!targetCoins.some((t) => t.symbol === d.symbol && t.timeframe === d.timeframe)) {
-            targetCoins.push(d);
+        if (results.divergenceCoins && results.divergenceCoins.length > 0) {
+          for (const d of results.divergenceCoins) {
+            if (!targetCoins.some((t) => t.symbol === d.symbol && t.timeframe === d.timeframe)) {
+              targetCoins.push(d);
+            }
           }
         }
       }

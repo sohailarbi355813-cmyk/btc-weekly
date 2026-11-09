@@ -26,16 +26,24 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
     const chunk = alerts.slice(i, i + CHUNK_SIZE);
 
     const embeds = chunk.map((item) => {
-      const isOB = item.territory === 'OVERBOUGHT';
+      const isTrueOB = item.rsi >= 70;
+      const isTrueOS = item.rsi <= 30;
+      const isBearSide = item.territory === 'OVERBOUGHT' || item.territory === 'BEARISH_DIV' || item.divergence?.direction === 'BEAR';
       const isMajor = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].includes(item.symbol) || item.isMajor;
       const color = item.divergence
-        ? (isOB ? 0xDC2626 : 0x16A34A)
-        : isOB
+        ? (isBearSide ? 0xDC2626 : 0x16A34A)
+        : isTrueOB
         ? (item.rsi >= 80 ? 0x991B1B : item.rsi >= 75 ? 0xDC2626 : 0xEF4444)
         : (item.rsi <= 20 ? 0x065F46 : item.rsi <= 25 ? 0x059669 : 0x10B981);
 
       const symbolTag = item.displaySymbol || `${item.symbol}.P`;
       const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${item.symbol}.P`;
+
+      const rsiTag = isTrueOB
+        ? `${item.severity || 'ELEVATED'} OVERBOUGHT (\u226570)`
+        : isTrueOS
+        ? `${item.severity || 'ELEVATED'} OVERSOLD (\u226430)`
+        : `${isBearSide ? 'Bearish Div' : 'Bullish Div'} \u00B7 Neutral Band`;
 
       const fields = [
         {
@@ -44,8 +52,8 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
           inline: true,
         },
         {
-          name: isOB ? '🔥 RSI (14)' : '❄️ RSI (14)',
-          value: `**${item.rsi}** (${item.isDivergence ? 'Divergence' : item.severity} ${isOB ? 'OB' : 'OS'})`,
+          name: isBearSide ? '🔥 RSI (14)' : '❄️ RSI (14)',
+          value: `**${item.rsi}** (${rsiTag})`,
           inline: true,
         },
         {
@@ -59,8 +67,8 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
         fields.push({
           name: '🎯 RSI Divergence Structure',
           value: `⚠️ **${item.divergence.label}** (${item.divergence.barsAgo} bars ago)\n` +
-                 (item.divergence.prevPrice ? `Swing Pivot: \`${formatPrice(item.divergence.prevPrice)}\` ➔ Current: \`${formatPrice(item.price)}\`\n` : '') +
-                 (item.divergence.prevRsi ? `Pivot RSI: \`${item.divergence.prevRsi}\` ➔ Current RSI: \`${item.rsi}\`` : ''),
+                 (item.divergence.prevPrice ? `Swing Pivot: \`${formatPrice(item.divergence.prevPrice)}\` ➔ \`${formatPrice(item.divergence.curPrice || item.price)}\`\n` : '') +
+                 (item.divergence.prevRsi ? `Pivot RSI: \`${item.divergence.prevRsi}\` ➔ \`${item.divergence.curRsi}\` (Now: \`${item.rsi}\`)` : ''),
           inline: false,
         });
       }
@@ -90,18 +98,18 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
       const majorPrefix = isMajor ? '👑 [MAJOR] ' : '';
 
       const title = item.divergence
-        ? (isOB
-            ? `🔴 ${majorPrefix}${symbolTag} (${item.name}) • RSI BEARISH DIVERGENCE${sigmaTag}${extremeTag}`
-            : `🟢 ${majorPrefix}${symbolTag} (${item.name}) • RSI BULLISH DIVERGENCE${sigmaTag}${extremeTag}`)
-        : (isOB
+        ? (isBearSide
+            ? `🔴 ${majorPrefix}${symbolTag} (${item.name}) • RSI BEARISH DIVERGENCE${isTrueOB ? ' + OVERBOUGHT' : ''}${sigmaTag}${extremeTag}`
+            : `🟢 ${majorPrefix}${symbolTag} (${item.name}) • RSI BULLISH DIVERGENCE${isTrueOS ? ' + OVERSOLD' : ''}${sigmaTag}${extremeTag}`)
+        : (isTrueOB
             ? `🔴 ${majorPrefix}${symbolTag} (${item.name}) • RSI OVERBOUGHT${sigmaTag}${extremeTag}`
             : `🟢 ${majorPrefix}${symbolTag} (${item.name}) • RSI OVERSOLD${sigmaTag}${extremeTag}`);
 
       const description = item.divergence
-        ? `🎯 **${symbolTag}** has printed a **${item.divergence.label}** on the **${item.timeframe.toUpperCase()}** timeframe!\nPrice is at **${item.sigmaMetrics?.zScoreText || 'N/A'}** (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary). ${item.sigmaMetrics?.isExtremeGaussian ? '🔥 **High probability reversal confluence!**' : 'Watch for confirmation.'}`
-        : (isOB
-            ? `**${symbolTag}** is trading in **RSI Overbought territory** at **${item.sigmaMetrics?.zScoreText || 'N/A'}** above 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`
-            : `**${symbolTag}** is trading in **RSI Oversold territory** at **${item.sigmaMetrics?.zScoreText || 'N/A'}** below 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion bounce probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`);
+        ? `🎯 **${symbolTag}** printed **${item.divergence.label}** on **${item.timeframe.toUpperCase()}** (Pivot RSI \`${item.divergence.prevRsi}\` ➔ \`${item.divergence.curRsi}\`, current RSI \`${item.rsi}\`).\nPrice is at **${item.sigmaMetrics?.zScoreText || 'N/A'}** (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary). ${item.sigmaMetrics?.isExtremeGaussian ? '🔥 **High probability reversal confluence!**' : 'Watch for confirmation.'}`
+        : (isTrueOB
+            ? `**${symbolTag}** is trading in **RSI Overbought territory** (\u226570) at **${item.sigmaMetrics?.zScoreText || 'N/A'}** above 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`
+            : `**${symbolTag}** is trading in **RSI Oversold territory** (\u226430) at **${item.sigmaMetrics?.zScoreText || 'N/A'}** below 20 SMA (${item.sigmaMetrics?.gaussianPct || 0}% Gaussian Boundary).\n${item.sigmaMetrics?.isExtremeGaussian ? '🎯 **Statistical mean-reversion bounce probability is strongly elevated (>95% Gaussian boundary).**' : '⚠️ Within normal volatility band—look for structural confirmation.'}`);
 
       return {
         title,
@@ -157,7 +165,7 @@ export async function sendTestDiscordAlert(webhookUrl = DISCORD_WEBHOOK_URL) {
       'The multi-timeframe RSI Overbought/Oversold Scanner is live and actively scanning every 5 minutes.\n\n' +
       '• **Monitored Timeframes:** `30m`, `45m`, `1h`, `2h`, `3h` (Strictly exclusive)\n' +
       '• **Watchlist:** 55 Whitelisted Altcoins (Including `XPLUSDT.P`, `SOLUSDT.P`, `ETHUSDT.P`, etc.)\n' +
-      '• **Thresholds:** Overbought $\\ge 70$ | Oversold $\\le 30$\n' +
+      '• **Thresholds:** Overbought \u2265 70 | Oversold \u2264 30\n' +
       '• **Scan Frequency:** Every 5 minutes with anti-spam cooldown protection.',
     color: 0x38bdf8,
     fields: [

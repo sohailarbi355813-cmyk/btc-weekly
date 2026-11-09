@@ -3,11 +3,13 @@ import { ALTS_WHITELIST, MAJOR_SYMBOLS } from './altsData.js';
 // Allowed timeframes strictly as requested: 30m, 45m, 1h, 2h, 3h
 export const SCAN_TIMEFRAMES = [
   { id: '30m', label: '30 Minutes', interval: '30', native: true },
-  { id: '45m', label: '45 Minutes', interval: '15', native: false, aggregateFrom: 15, aggregateCount: 3 },
+  { id: '45m', label: '45 Minutes', interval: '15', native: false, aggregateMinutes: 45 },
   { id: '1h',  label: '1 Hour',      interval: '60', native: true },
   { id: '2h',  label: '2 Hours',     interval: '120', native: true },
-  { id: '3h',  label: '3 Hours',     interval: '180', native: true },
+  { id: '3h',  label: '3 Hours',     interval: '60', native: false, aggregateMinutes: 180 },
 ];
+
+export const RSI_SCANNER_ENGINE_VERSION = 2;
 
 export const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
 
@@ -123,22 +125,32 @@ export function calculateZScore(closes, period = 20) {
 }
 
 /**
- * Aggregates N consecutive lower-timeframe candles into higher-timeframe candles (e.g. 3x15m -> 45m, 3x1h -> 3h)
+ * Aggregates lower-timeframe candles into exact UTC-aligned higher-timeframe bars
+ * (e.g. 15m -> 45m aligned to 00:00/00:45/01:30 UTC; 1h -> 3h aligned to 00:00/03:00/06:00 UTC)
  */
-function aggregate45mCandles(candles, factor = 3) {
-  if (!candles || candles.length < factor) return [];
-  const result = [];
-  
-  // Align from latest backwards to keep the most recent bar aligned cleanly
-  const remainder = candles.length % factor;
-  const aligned = remainder === 0 ? candles : candles.slice(remainder);
+function aggregateCandlesByMinutes(candles, targetMinutes = 45) {
+  if (!candles || candles.length < 3) return [];
+  const bucketMs = targetMinutes * 60 * 1000;
+  const buckets = new Map();
 
-  for (let i = 0; i < aligned.length; i += factor) {
-    const chunk = aligned.slice(i, i + factor);
-    if (chunk.length < factor) continue;
+  for (const c of candles) {
+    const bucketStart = Math.floor(c.time / bucketMs) * bucketMs;
+    if (!buckets.has(bucketStart)) {
+      buckets.set(bucketStart, []);
+    }
+    buckets.get(bucketStart).push(c);
+  }
+
+  const keys = Array.from(buckets.keys()).sort((a, b) => a - b);
+  const result = [];
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    const chunk = buckets.get(k).sort((a, b) => a.time - b.time);
+    const isPartialLeadingEdge = i === 0 && chunk.length < 3;
+    if (isPartialLeadingEdge) continue;
 
     result.push({
-      time: chunk[0].time,
+      time: k,
       open: chunk[0].open,
       high: Math.max(...chunk.map(b => b.high)),
       low: Math.min(...chunk.map(b => b.low)),
@@ -150,70 +162,122 @@ function aggregate45mCandles(candles, factor = 3) {
 }
 
 /**
- * Check for RSI Divergence on top of Overbought / Oversold
- * Includes high-conviction detection for BTC, ETH, SOL and all watchlist alts
+ * Check for confirmed, extreme-anchored RSI Divergence
+ * - Requires genuine 2-left / 2-right swing pivots (no 1-bar micro-wick noise)
+ * - Bearish Divergence requires Pivot 1 RSI >= 70 (Overbought anchor) + Price HH (>= +0.2%) + RSI LH (<= -2.5 pts)
+ * - Bullish Divergence requires Pivot 1 RSI <= 30 (Oversold anchor) + Price LL (<= -0.2%) + RSI HL (>= +2.5 pts)
  */
 export function checkRsiDivergence(candles, rsiValues, isMajor = false) {
-  if (!candles || candles.length < 15 || !rsiValues || rsiValues.length < 15) return null;
+  if (!candles || candles.length < 40 || !rsiValues || rsiValues.length < 40) return null;
   const currentIdx = candles.length - 1;
-  const curPrice = candles[currentIdx].close;
   const curRsi = rsiValues[currentIdx];
   if (curRsi === null || curRsi === undefined) return null;
 
-  // Look back up to 20 bars (skip warmup null RSI bars) for local peak or trough
-  let prevPeakIdx = -1;
-  let prevTroughIdx = -1;
+  const peaks = [];
+  const troughs = [];
 
-  for (let i = currentIdx - 2; i >= Math.max(14, currentIdx - 20); i--) {
+  // Identify genuine confirmed local swing pivots (left = 2, right = 2), skipping RSI warmup
+  for (let i = Math.max(20, currentIdx - 60); i <= currentIdx - 2; i++) {
     if (rsiValues[i] === null || rsiValues[i] === undefined) continue;
-    if (candles[i].high > candles[i - 1]?.high && candles[i].high > candles[i + 1]?.high) {
-      if (prevPeakIdx === -1) prevPeakIdx = i;
-    }
-    if (candles[i].low < candles[i - 1]?.low && candles[i].low < candles[i + 1]?.low) {
-      if (prevTroughIdx === -1) prevTroughIdx = i;
-    }
-  }
+    const h = candles[i].high;
+    const l = candles[i].low;
 
-  // Thresholds: Majors (BTC, ETH, SOL) use wider sensitivity (>=55 for Bear Div, <=45 for Bull Div)
-  // Standard alts use >=60 for Bear Div, <=40 for Bull Div
-  const bearThreshold = isMajor ? 55.0 : 60.0;
-  const bullThreshold = isMajor ? 45.0 : 40.0;
+    const isPeak =
+      h >= candles[i - 1].high &&
+      h >= candles[i - 2].high &&
+      h >= candles[i + 1].high &&
+      h >= candles[i + 2].high &&
+      (h > candles[i - 1].high || h > candles[i - 2].high) &&
+      (h > candles[i + 1].high || h > candles[i + 2].high);
 
-  // Bearish Divergence: Price Higher High, RSI Lower High
-  if (curRsi >= bearThreshold && prevPeakIdx !== -1) {
-    const prevPrice = candles[prevPeakIdx].high;
-    const prevRsi = rsiValues[prevPeakIdx];
-    if (prevRsi != null && curPrice > prevPrice && curRsi < prevRsi) {
-      return {
-        type: 'BEARISH_DIVERGENCE',
-        direction: 'BEAR',
-        label: 'Bearish Divergence (HH Price / LH RSI)',
-        barsAgo: currentIdx - prevPeakIdx,
-        curRsi: Number(curRsi.toFixed(1)),
-        prevRsi: Number(prevRsi.toFixed(1)),
-        curPrice,
-        prevPrice,
-        isMajor,
-      };
+    if (isPeak) {
+      peaks.push({ idx: i, price: h, rsi: rsiValues[i] });
+    }
+
+    const isTrough =
+      l <= candles[i - 1].low &&
+      l <= candles[i - 2].low &&
+      l <= candles[i + 1].low &&
+      l <= candles[i + 2].low &&
+      (l < candles[i - 1].low || l < candles[i - 2].low) &&
+      (l < candles[i + 1].low || l < candles[i + 2].low);
+
+    if (isTrough) {
+      troughs.push({ idx: i, price: l, rsi: rsiValues[i] });
     }
   }
 
-  // Bullish Divergence: Price Lower Low, RSI Higher Low
-  if (curRsi <= bullThreshold && prevTroughIdx !== -1) {
-    const prevPrice = candles[prevTroughIdx].low;
-    const prevRsi = rsiValues[prevTroughIdx];
-    if (prevRsi != null && curPrice < prevPrice && curRsi > prevRsi) {
-      return {
-        type: 'BULLISH_DIVERGENCE',
-        direction: 'BULL',
-        label: 'Bullish Divergence (LL Price / HL RSI)',
-        barsAgo: currentIdx - prevTroughIdx,
-        curRsi: Number(curRsi.toFixed(1)),
-        prevRsi: Number(prevRsi.toFixed(1)),
-        curPrice,
-        prevPrice,
-        isMajor,
-      };
+  // Bearish Divergence: P1 -> P2 (P2 must be highest high since P1, P1 >= 70 OB)
+  if (peaks.length >= 2 && curRsi >= 50.0) {
+    const p2 = peaks[peaks.length - 1];
+    const barsAgo = currentIdx - p2.idx;
+    if (barsAgo >= 2 && barsAgo <= 10) {
+      for (let k = peaks.length - 2; k >= Math.max(0, peaks.length - 4); k--) {
+        const p1 = peaks[k];
+        const span = p2.idx - p1.idx;
+        if (span < 3 || span > 35) continue;
+
+        const hasHigherBarSinceP1 = candles
+          .slice(p1.idx + 1)
+          .some((c, off) => (p1.idx + 1 + off !== p2.idx) && c.high > p2.price * 1.001);
+
+        if (
+          !hasHigherBarSinceP1 &&
+          p1.rsi >= RSI_OVERBOUGHT_THRESHOLD &&
+          p2.price >= p1.price * 1.002 &&
+          (p1.rsi - p2.rsi) >= 2.5
+        ) {
+          return {
+            type: 'BEARISH_DIVERGENCE',
+            direction: 'BEAR',
+            label: 'Bearish Divergence (HH Price / LH RSI)',
+            barsAgo,
+            curRsi: Number(p2.rsi.toFixed(1)),
+            liveRsi: Number(curRsi.toFixed(1)),
+            prevRsi: Number(p1.rsi.toFixed(1)),
+            curPrice: p2.price,
+            prevPrice: p1.price,
+            isMajor,
+          };
+        }
+      }
+    }
+  }
+
+  // Bullish Divergence: T1 -> T2 (T2 must be lowest low since T1, T1 <= 30 OS)
+  if (troughs.length >= 2 && curRsi <= 50.0) {
+    const t2 = troughs[troughs.length - 1];
+    const barsAgo = currentIdx - t2.idx;
+    if (barsAgo >= 2 && barsAgo <= 10) {
+      for (let k = troughs.length - 2; k >= Math.max(0, troughs.length - 4); k--) {
+        const t1 = troughs[k];
+        const span = t2.idx - t1.idx;
+        if (span < 3 || span > 35) continue;
+
+        const hasLowerBarSinceT1 = candles
+          .slice(t1.idx + 1)
+          .some((c, off) => (t1.idx + 1 + off !== t2.idx) && c.low < t2.price * 0.999);
+
+        if (
+          !hasLowerBarSinceT1 &&
+          t1.rsi <= RSI_OVERSOLD_THRESHOLD &&
+          t2.price <= t1.price * 0.998 &&
+          (t2.rsi - t1.rsi) >= 2.5
+        ) {
+          return {
+            type: 'BULLISH_DIVERGENCE',
+            direction: 'BULL',
+            label: 'Bullish Divergence (LL Price / HL RSI)',
+            barsAgo,
+            curRsi: Number(t2.rsi.toFixed(1)),
+            liveRsi: Number(curRsi.toFixed(1)),
+            prevRsi: Number(t1.rsi.toFixed(1)),
+            curPrice: t2.price,
+            prevPrice: t1.price,
+            isMajor,
+          };
+        }
+      }
     }
   }
 
@@ -221,26 +285,25 @@ export function checkRsiDivergence(candles, rsiValues, isMajor = false) {
 }
 
 /**
- * Fetch candles for a coin and timeframe from Bybit (with Binance fallback)
+ * Fetch ~200 perpetual candles for a coin and timeframe from Bybit Linear (with Binance Vision fallback)
  */
 async function fetchCandles(symbol, tfConfig) {
-  const is45m = tfConfig.id === '45m';
-  const is3h = tfConfig.id === '3h';
-  const queryInterval = is45m ? '15' : tfConfig.interval;
-  const limit = is45m ? '90' : '45';
+  const isAggregated = !tfConfig.native && tfConfig.aggregateMinutes > 0;
+  const queryInterval = tfConfig.interval;
+  const limit = isAggregated ? '600' : '200';
 
-  // 1. Bybit Linear
+  // 1. Bybit Linear Perpetuals
   try {
     const res = await fetch(
       `https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=${queryInterval}&limit=${limit}`,
       {
         headers: { 'User-Agent': 'WolfRSIScanner/2.0' },
-        signal: AbortSignal.timeout(3500),
+        signal: AbortSignal.timeout(4500),
       }
     );
     if (res.ok) {
       const json = await res.json();
-      if (json.result?.list && json.result.list.length >= 20) {
+      if (json.result?.list && json.result.list.length >= 40) {
         const raw = json.result.list.slice().reverse().map((k) => ({
           time: parseInt(k[0]),
           open: parseFloat(k[1]),
@@ -250,8 +313,8 @@ async function fetchCandles(symbol, tfConfig) {
           vol: parseFloat(k[5]),
         }));
 
-        if (is45m) {
-          return aggregate45mCandles(raw, 3);
+        if (isAggregated) {
+          return aggregateCandlesByMinutes(raw, tfConfig.aggregateMinutes);
         }
         return raw;
       }
@@ -260,18 +323,18 @@ async function fetchCandles(symbol, tfConfig) {
 
   // 2. Binance Vision Fallback
   try {
-    const bInterval = is45m ? '15m' : tfConfig.id === '30m' ? '30m' : tfConfig.id === '1h' ? '1h' : tfConfig.id === '2h' ? '2h' : '1h';
-    const bLimit = is3h ? '135' : limit;
+    const bIntervalMap = { '15': '15m', '30': '30m', '60': '1h', '120': '2h' };
+    const bInterval = bIntervalMap[queryInterval] || '1h';
     const bRes = await fetch(
-      `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${bInterval}&limit=${bLimit}`,
+      `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${bInterval}&limit=${limit}`,
       {
         headers: { 'User-Agent': 'WolfRSIScanner/2.0' },
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(4000),
       }
     );
     if (bRes.ok) {
       const bList = await bRes.json();
-      if (Array.isArray(bList) && bList.length >= 20) {
+      if (Array.isArray(bList) && bList.length >= 40) {
         const raw = bList.map((k) => ({
           time: parseInt(k[0]),
           open: parseFloat(k[1]),
@@ -281,8 +344,8 @@ async function fetchCandles(symbol, tfConfig) {
           vol: parseFloat(k[5]),
         }));
 
-        if (is45m || is3h) {
-          return aggregate45mCandles(raw, 3);
+        if (isAggregated) {
+          return aggregateCandlesByMinutes(raw, tfConfig.aggregateMinutes);
         }
         return raw;
       }
@@ -344,32 +407,42 @@ export async function scanAllAltsRSI() {
           isMajor,
         };
 
-        if (divergence) {
-          const isBearDiv = divergence.type === 'BEARISH_DIVERGENCE';
-          const divItem = {
-            ...resultItem,
-            territory: isBearDiv ? 'OVERBOUGHT' : 'OVERSOLD',
-            severity: isMajor ? 'MAJOR_DIVERGENCE' : 'DIVERGENCE',
-            isDivergence: true,
-          };
-          divergenceCoins.push(divItem);
+        const obSeverity = roundedRsi >= 80 ? 'EXTREME' : roundedRsi >= 75 ? 'HIGH' : 'ELEVATED';
+        const osSeverity = roundedRsi <= 20 ? 'EXTREME' : roundedRsi <= 25 ? 'HIGH' : 'ELEVATED';
 
-          if (isBearDiv) {
-            overboughtCoins.push(divItem);
-          } else {
-            oversoldCoins.push(divItem);
-          }
-        } else if (resultItem.isOverbought) {
+        if (resultItem.isOverbought) {
           overboughtCoins.push({
             ...resultItem,
             territory: 'OVERBOUGHT',
-            severity: roundedRsi >= 80 ? 'EXTREME' : roundedRsi >= 75 ? 'HIGH' : 'ELEVATED',
+            severity: obSeverity,
+            isDivergence: Boolean(divergence),
           });
         } else if (resultItem.isOversold) {
           oversoldCoins.push({
             ...resultItem,
             territory: 'OVERSOLD',
-            severity: roundedRsi <= 20 ? 'EXTREME' : roundedRsi <= 25 ? 'HIGH' : 'ELEVATED',
+            severity: osSeverity,
+            isDivergence: Boolean(divergence),
+          });
+        }
+
+        if (divergence) {
+          const isBearDiv = divergence.type === 'BEARISH_DIVERGENCE';
+          const divTerritory = resultItem.isOverbought
+            ? 'OVERBOUGHT'
+            : resultItem.isOversold
+            ? 'OVERSOLD'
+            : (isBearDiv ? 'BEARISH_DIV' : 'BULLISH_DIV');
+
+          divergenceCoins.push({
+            ...resultItem,
+            territory: divTerritory,
+            severity: resultItem.isOverbought
+              ? obSeverity
+              : resultItem.isOversold
+              ? osSeverity
+              : (isMajor ? 'MAJOR_DIVERGENCE' : 'DIVERGENCE'),
+            isDivergence: true,
           });
         }
 
@@ -406,6 +479,7 @@ export async function scanAllAltsRSI() {
   oversoldCoins.sort((a, b) => a.rsi - b.rsi);
 
   return {
+    engineVersion: RSI_SCANNER_ENGINE_VERSION,
     scanTime,
     totalScanned: allScanned.length,
     totalCoins: ALTS_WHITELIST.length,
