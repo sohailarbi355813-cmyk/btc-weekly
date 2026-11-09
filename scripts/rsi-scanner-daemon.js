@@ -12,10 +12,33 @@
  * Runs every 5 minutes.
  */
 
-import { scanAllAltsRSI, filterCooldownAlerts, purgeOldCooldowns } from '../src/lib/rsiScannerEngine.js';
+import { scanAllAltsRSI, filterCooldownAlerts, purgeOldCooldowns, getDiscordWebhookUrl } from '../src/lib/rsiScannerEngine.js';
 import { sendDiscordRsiAlerts } from '../src/lib/discordNotifier.js';
 import fs from 'fs';
 import path from 'path';
+
+function loadEnvLocal() {
+  if (process.env.DISCORD_WEBHOOK_URL) return;
+  try {
+    const envPath = path.join(process.cwd(), '.env.local');
+    if (!fs.existsSync(envPath)) return;
+    const raw = fs.readFileSync(envPath, 'utf-8');
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx <= 0) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      val = val.replace(/^["']|["']$/g, '');
+      if (key && !(key in process.env)) {
+        process.env[key] = val;
+      }
+    }
+  } catch (e) {}
+}
+
+loadEnvLocal();
 
 const SCAN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const STATUS_FILE = path.join(process.cwd(), '.rsi-scanner-status.json');
@@ -108,6 +131,8 @@ async function runScanCycle() {
       if (alertRes.success) {
         totalAlertsSentLifetime += alertRes.count;
         console.log(`📨 Successfully delivered ${alertRes.count} alert(s) to Discord! Total lifetime: ${totalAlertsSentLifetime}`);
+      } else {
+        console.error(`❌ Discord alert delivery issue: ${alertRes.error || 'Unknown error'} (Sent: ${alertRes.count || 0}, Failed: ${alertRes.failedCount || 0})`);
       }
     } else if (targetCoins.length > 0) {
       console.log(`⏳ ${targetCoins.length} signal(s) present, but suppressed by cooldown (already alerted recently).`);
@@ -146,6 +171,11 @@ async function runScanCycle() {
 
 // Initial immediate scan
 console.log('🚀 Initializing Wolf RSI Discord Alert Scanner Daemon...');
+if (!getDiscordWebhookUrl()) {
+  console.warn('⚠️ DISCORD_WEBHOOK_URL is not configured in .env.local or environment variables. Discord alerts are paused until configured.');
+} else {
+  console.log('🔔 Discord webhook telemetry is ARMED.');
+}
 runScanCycle();
 
 // Schedule recurring 5-minute loop

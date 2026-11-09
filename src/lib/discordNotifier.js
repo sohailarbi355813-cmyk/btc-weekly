@@ -1,4 +1,4 @@
-import { DISCORD_WEBHOOK_URL } from './rsiScannerEngine.js';
+import { getDiscordWebhookUrl } from './rsiScannerEngine.js';
 
 /**
  * Format price cleanly based on magnitude
@@ -14,13 +14,29 @@ function formatPrice(n) {
 /**
  * Send RSI Overbought / Oversold Alert Embeds to Discord Webhook
  */
-export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_URL) {
-  if (!alerts || alerts.length === 0) return { success: true, count: 0 };
+export async function sendDiscordRsiAlerts(alerts, webhookUrl) {
+  if (!alerts || alerts.length === 0) {
+    return { success: true, count: 0, failedCount: 0, error: null };
+  }
 
-  const url = webhookUrl || DISCORD_WEBHOOK_URL;
+  const url = webhookUrl
+    ? String(webhookUrl).trim().replace(/^["']|["']$/g, '')
+    : getDiscordWebhookUrl();
+
+  if (!url) {
+    return {
+      success: false,
+      count: 0,
+      failedCount: alerts.length,
+      error: 'DISCORD_WEBHOOK_URL is not configured in environment variables.',
+    };
+  }
+
   const CHUNK_SIZE = 4; // Safe chunk size to stay well under Discord's 6,000 total character payload limit
 
   let sentCount = 0;
+  let failedCount = 0;
+  let lastError = null;
 
   for (let i = 0; i < alerts.length; i += CHUNK_SIZE) {
     const chunk = alerts.slice(i, i + CHUNK_SIZE);
@@ -138,10 +154,14 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
       if (res.ok || res.status === 204) {
         sentCount += chunk.length;
       } else {
+        failedCount += chunk.length;
         const errText = await res.text().catch(() => '');
+        lastError = `Discord HTTP ${res.status}${errText ? `: ${errText.slice(0, 160)}` : ''}`;
         console.error('Discord webhook responded with error:', res.status, res.statusText, errText);
       }
     } catch (err) {
+      failedCount += chunk.length;
+      lastError = err?.message || 'Network error posting to Discord webhook';
       console.error('Failed to post to Discord webhook:', err);
     }
 
@@ -151,14 +171,30 @@ export async function sendDiscordRsiAlerts(alerts, webhookUrl = DISCORD_WEBHOOK_
     }
   }
 
-  return { success: true, count: sentCount };
+  return {
+    success: failedCount === 0 && sentCount > 0,
+    count: sentCount,
+    failedCount,
+    error: lastError,
+  };
 }
 
 /**
  * Send a Test Alert Embed to verify the Discord connection
  */
-export async function sendTestDiscordAlert(webhookUrl = DISCORD_WEBHOOK_URL) {
-  const url = webhookUrl || DISCORD_WEBHOOK_URL;
+export async function sendTestDiscordAlert(webhookUrl) {
+  const url = webhookUrl
+    ? String(webhookUrl).trim().replace(/^["']|["']$/g, '')
+    : getDiscordWebhookUrl();
+
+  if (!url) {
+    return {
+      ok: false,
+      status: 0,
+      error: 'DISCORD_WEBHOOK_URL is not configured in environment variables.',
+    };
+  }
+
   const testEmbed = {
     title: '🐺 Wolf RSI Scanner • Webhook Active & Verified',
     description:
@@ -187,15 +223,32 @@ export async function sendTestDiscordAlert(webhookUrl = DISCORD_WEBHOOK_URL) {
     timestamp: new Date().toISOString(),
   };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: 'Wolf RSI Scanner',
-      avatar_url: 'https://cdn-icons-png.flaticon.com/512/2534/2534204.png',
-      embeds: [testEmbed],
-    }),
-  });
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'Wolf RSI Scanner',
+        avatar_url: 'https://cdn-icons-png.flaticon.com/512/2534/2534204.png',
+        embeds: [testEmbed],
+      }),
+    });
 
-  return res.ok || res.status === 204;
+    if (res.ok || res.status === 204) {
+      return { ok: true, status: res.status, error: null };
+    }
+
+    const errText = await res.text().catch(() => '');
+    return {
+      ok: false,
+      status: res.status,
+      error: `Discord HTTP ${res.status}${errText ? `: ${errText.slice(0, 160)}` : ''}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      error: err?.message || 'Network error calling Discord webhook',
+    };
+  }
 }

@@ -52,19 +52,33 @@ export default function RsiScannerWidget() {
       });
       const json = await res.json();
       if (json.success) {
+        const signalSummary = `Scan complete! ${json.overboughtCount || 0} OB (\u226570), ${json.oversoldCount || 0} OS (\u226430), ${json.divergenceCount || 0} Divs.`;
+        let discordSummary = '';
+        if (!json.webhookConfigured) {
+          discordSummary = ' Discord skipped (DISCORD_WEBHOOK_URL not set on server).';
+        } else if (json.discordError) {
+          discordSummary = ` Discord error: ${json.discordError}`;
+        } else if ((json.alertsDispatched || 0) > 0) {
+          discordSummary = ` Sent ${json.alertsDispatched} alert(s) to Discord!`;
+        } else if ((json.cooldownSuppressedCount || 0) > 0) {
+          discordSummary = ` ${json.cooldownSuppressedCount} signal(s) in 15m Discord cooldown.`;
+        } else {
+          discordSummary = ' No new extreme signals for Discord.';
+        }
+
         setMessage({
-          type: 'success',
-          text: `Scan complete! Found ${json.overboughtCount || 0} Overbought (\u226570), ${json.oversoldCount || 0} Oversold (\u226430), and ${json.divergenceCount || 0} Divergences across 55 coins.`,
+          type: json.discordError ? 'error' : 'success',
+          text: signalSummary + discordSummary,
         });
         fetchStatus();
       } else {
-        setMessage({ type: 'error', text: 'Scan failed' });
+        setMessage({ type: 'error', text: json.error || 'Scan failed' });
       }
     } catch (err) {
       setMessage({ type: 'error', text: 'Scan error: ' + err.message });
     } finally {
       setScanningNow(false);
-      setTimeout(() => setMessage(null), 5000);
+      setTimeout(() => setMessage(null), 8000);
     }
   };
 
@@ -79,7 +93,7 @@ export default function RsiScannerWidget() {
       });
       const json = await res.json();
       if (json.success) {
-        setMessage({ type: 'success', text: 'Discord test embed delivered successfully!' });
+        setMessage({ type: 'success', text: json.message || 'Discord test embed delivered successfully!' });
       } else {
         setMessage({ type: 'error', text: json.message || 'Webhook failed' });
       }
@@ -87,7 +101,7 @@ export default function RsiScannerWidget() {
       setMessage({ type: 'error', text: 'Error: ' + err.message });
     } finally {
       setTestingWebhook(false);
-      setTimeout(() => setMessage(null), 6000);
+      setTimeout(() => setMessage(null), 8000);
     }
   };
 
@@ -214,6 +228,27 @@ export default function RsiScannerWidget() {
             }}>
               55 COINS · 5 TFs
             </span>
+            {data && (
+              <span
+                style={{
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  padding: '2px 7px',
+                  borderRadius: 4,
+                  fontFamily: 'var(--font-mono)',
+                  background: data.webhookConfigured ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                  color: data.webhookConfigured ? '#4ade80' : '#f87171',
+                  border: `1px solid ${data.webhookConfigured ? 'rgba(34, 197, 94, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                }}
+                title={
+                  data.webhookConfigured
+                    ? 'DISCORD_WEBHOOK_URL is configured on this server'
+                    : 'DISCORD_WEBHOOK_URL is missing in server environment variables'
+                }
+              >
+                {data.webhookConfigured ? 'DISCORD ARMED' : 'DISCORD NOT SET'}
+              </span>
+            )}
           </div>
 
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 3 }}>
@@ -278,12 +313,49 @@ export default function RsiScannerWidget() {
           borderRadius: 6,
           marginBottom: 14,
           fontSize: '0.76rem',
+          lineHeight: 1.45,
+          overflowWrap: 'anywhere',
           fontFamily: 'var(--font-mono)',
           background: message.type === 'success' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
           color: message.type === 'success' ? '#4ade80' : '#f87171',
           border: `1px solid ${message.type === 'success' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
         }}>
           {message.text}
+        </div>
+      )}
+
+      {/* Webhook Configuration / Delivery Diagnostic Notice */}
+      {data && data.webhookConfigured === false && (
+        <div style={{
+          padding: '10px 12px',
+          borderRadius: 6,
+          marginBottom: 14,
+          fontSize: '0.72rem',
+          lineHeight: 1.45,
+          overflowWrap: 'anywhere',
+          fontFamily: 'var(--font-mono)',
+          background: 'rgba(245, 158, 11, 0.10)',
+          color: '#fbbf24',
+          border: '1px solid rgba(245, 158, 11, 0.35)',
+        }}>
+          <strong>Discord Webhook Not Configured on Server:</strong> Add <code style={{ color: '#fde68a' }}>DISCORD_WEBHOOK_URL</code> in Vercel <em>Project Settings &rarr; Environment Variables</em> and redeploy. To run alerts even when this tab is closed, ping <code style={{ color: '#fde68a' }}>/api/rsi-scanner?action=scan</code> every 5m.
+        </div>
+      )}
+
+      {data && data.webhookConfigured && status?.discordError && (
+        <div style={{
+          padding: '10px 12px',
+          borderRadius: 6,
+          marginBottom: 14,
+          fontSize: '0.72rem',
+          lineHeight: 1.45,
+          overflowWrap: 'anywhere',
+          fontFamily: 'var(--font-mono)',
+          background: 'rgba(239, 68, 68, 0.10)',
+          color: '#f87171',
+          border: '1px solid rgba(239, 68, 68, 0.35)',
+        }}>
+          <strong>Discord Delivery Error:</strong> {status.discordError}
         </div>
       )}
 

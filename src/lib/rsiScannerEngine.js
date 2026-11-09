@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { ALTS_WHITELIST, MAJOR_SYMBOLS } from './altsData.js';
 
 // Allowed timeframes strictly as requested: 30m, 45m, 1h, 2h, 3h
@@ -11,15 +13,46 @@ export const SCAN_TIMEFRAMES = [
 
 export const RSI_SCANNER_ENGINE_VERSION = 2;
 
-export const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
+export function getDiscordWebhookUrl() {
+  const raw = process.env.DISCORD_WEBHOOK_URL || '';
+  return raw.trim().replace(/^["']|["']$/g, '');
+}
+
+export const DISCORD_WEBHOOK_URL = getDiscordWebhookUrl();
 
 export const RSI_OVERBOUGHT_THRESHOLD = 70.0;
 export const RSI_OVERSOLD_THRESHOLD = 30.0;
 
 // Alert Cooldown Map: prevent spamming the same alert every 5 minutes
-// key: `${symbol}:${timeframe}:${territory}` => timestamp of last alert
+// key: `${symbol}:${timeframe}:${territory}` => timestamp & rsi of last alert
+const COOLDOWN_DIR = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) ? '/tmp' : process.cwd();
+const COOLDOWN_FILE = path.join(COOLDOWN_DIR, '.rsi-scanner-cooldowns.json');
 const alertCooldownMap = new Map();
 const COOLDOWN_DURATION_MS = 15 * 60 * 1000; // 15 minutes cooldown per coin-timeframe-territory
+let cooldownLoaded = false;
+
+function loadCooldownsFromDisk() {
+  if (cooldownLoaded) return;
+  cooldownLoaded = true;
+  try {
+    if (fs.existsSync(COOLDOWN_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(COOLDOWN_FILE, 'utf-8'));
+      const now = Date.now();
+      for (const [k, v] of Object.entries(parsed || {})) {
+        if (v && typeof v.timestamp === 'number' && (now - v.timestamp) < COOLDOWN_DURATION_MS * 2) {
+          alertCooldownMap.set(k, v);
+        }
+      }
+    }
+  } catch (e) {}
+}
+
+function saveCooldownsToDisk() {
+  try {
+    const obj = Object.fromEntries(alertCooldownMap.entries());
+    fs.writeFileSync(COOLDOWN_FILE, JSON.stringify(obj), 'utf-8');
+  } catch (e) {}
+}
 
 /**
  * Wilder's Smoothed RSI (Standard TradingView 14-period formula)
@@ -500,8 +533,10 @@ export async function scanAllAltsRSI() {
  * Allows re-alerting if RSI escalates deeper into extreme or prints a new divergence
  */
 export function filterCooldownAlerts(items) {
+  loadCooldownsFromDisk();
   const now = Date.now();
   const alertable = [];
+  let changed = false;
 
   for (const item of items) {
     const key = `${item.symbol}:${item.timeframe}:${item.territory}${item.isDivergence ? ':div' : ''}`;
@@ -510,6 +545,7 @@ export function filterCooldownAlerts(items) {
     if (!record || (now - record.timestamp > COOLDOWN_DURATION_MS)) {
       alertCooldownMap.set(key, { timestamp: now, rsi: item.rsi });
       alertable.push(item);
+      changed = true;
     } else if (
       // Escalation rule: if oversold drops >=2.5 pts deeper, or overbought rises >=2.5 pts higher
       (item.territory === 'OVERSOLD' && item.rsi <= record.rsi - 2.5) ||
@@ -517,9 +553,11 @@ export function filterCooldownAlerts(items) {
     ) {
       alertCooldownMap.set(key, { timestamp: now, rsi: item.rsi });
       alertable.push(item);
+      changed = true;
     }
   }
 
+  if (changed) saveCooldownsToDisk();
   return alertable;
 }
 
@@ -527,11 +565,15 @@ export function filterCooldownAlerts(items) {
  * Clean stale entries from alertCooldownMap
  */
 export function purgeOldCooldowns() {
+  loadCooldownsFromDisk();
   const now = Date.now();
+  let changed = false;
   for (const [key, record] of alertCooldownMap.entries()) {
     const ts = typeof record === 'object' ? record.timestamp : record;
     if (now - ts > COOLDOWN_DURATION_MS * 2) {
       alertCooldownMap.delete(key);
+      changed = true;
     }
   }
+  if (changed) saveCooldownsToDisk();
 }

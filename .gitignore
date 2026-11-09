@@ -24,6 +24,8 @@
 .DS_Store
 *.pem
 .rsi-scanner-status.json
+.rsi-scanner-config.json
+.rsi-scanner-cooldowns.json
 
 # debug
 npm-debug.log*
