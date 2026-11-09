@@ -9,7 +9,6 @@ import {
   IconTarget,
   IconScale,
   IconCheck,
-  IconAlertTriangle,
 } from '@/components/Icons';
 
 export default function WeeklyHighLowMatrix({
@@ -50,13 +49,87 @@ export default function WeeklyHighLowMatrix({
   } = probData;
 
   const isBearModel = effectiveBias === 'bearish';
-  const isBullModel = effectiveBias === 'bullish';
 
   const activeMetrics = activeMetricTab === 'high' ? highMetrics : lowMetrics;
   const isHighTab = activeMetricTab === 'high';
 
   // Sample percentage of total weeks
   const samplePct = Math.round((sampleSize / totalCompletedWeeks) * 100);
+
+  const highPredSource = matchedStats?.highSummary
+    ? { summary: matchedStats.highSummary, total: matchedStats.totalMatched, scope: 'matched weeks', ext: `+${matchedStats.avgHighExt}%` }
+    : highMetrics?.timingSummary
+    ? { summary: highMetrics.timingSummary, total: sampleSize, scope: `${effectiveBias} weeks`, ext: `+${highMetrics.avgPct ?? highMetrics.medianPct}%` }
+    : null;
+
+  const lowPredSource = matchedStats?.lowSummary
+    ? { summary: matchedStats.lowSummary, total: matchedStats.totalMatched, scope: 'matched weeks', ext: `-${matchedStats.avgLowExt}%` }
+    : lowMetrics?.timingSummary
+    ? { summary: lowMetrics.timingSummary, total: sampleSize, scope: `${effectiveBias} weeks`, ext: `-${lowMetrics.avgPct ?? lowMetrics.medianPct}%` }
+    : null;
+
+  const renderExtremePrediction = (kind, src, isHighlighted) => {
+    if (!src?.summary) return null;
+    const s = src.summary;
+    const isHigh = kind === 'High';
+    const accent = isHigh ? '#f87171' : '#4ade80';
+    const badgeBg = isHigh ? 'rgba(239, 68, 68, 0.14)' : 'rgba(34, 197, 94, 0.14)';
+    const badgeBorder = isHigh ? 'rgba(248, 113, 113, 0.35)' : 'rgba(74, 222, 128, 0.35)';
+    const cardBorder = isHighlighted
+      ? (isHigh ? 'rgba(248, 113, 113, 0.4)' : 'rgba(74, 222, 128, 0.4)')
+      : '#1a1a1e';
+    const avgNote = !s.tiedDays.includes(s.avgDay) && s.avgDay !== s.majorityByDay ? ` \u00B7 avg day ${s.avgDay}` : '';
+
+    return (
+      <div style={{
+        background: '#050505',
+        border: `1px solid ${cardBorder}`,
+        borderRadius: 6,
+        padding: '7px 10px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, fontSize: '0.73rem', color: '#e5e5e5', lineHeight: 1.35 }}>
+          <span style={{
+            fontSize: '0.60rem',
+            fontWeight: 800,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.05em',
+            color: accent,
+            background: badgeBg,
+            border: `1px solid ${badgeBorder}`,
+            borderRadius: 4,
+            padding: '1px 5px',
+            flexShrink: 0,
+          }}>
+            {kind.toUpperCase()}
+          </span>
+          {!s.isTie ? (
+            <span>
+              Chances are this week puts <strong style={{ color: accent }}>{kind}</strong> in on <strong style={{ color: accent }}>{s.peakDay}</strong>
+            </span>
+          ) : (
+            <span>
+              {kind} favors <strong style={{ color: accent }}>{s.peakDay}</strong> ({s.majorityByPct}% in by <strong style={{ color: '#ffffff' }}>{s.majorityByDay}</strong>)
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: '0.67rem', color: '#9ca3af', marginTop: 3, lineHeight: 1.35 }}>
+          {s.hasSingleMajority ? (
+            <>
+              <strong style={{ color: '#e5e5e5' }}>{s.peakCount} of {src.total}</strong> {src.scope} ({s.peakPct}%) set {kind.toLowerCase()} on {s.peakDay} &middot; avg {src.ext}
+            </>
+          ) : !s.isTie ? (
+            <>
+              <strong style={{ color: '#e5e5e5' }}>{s.peakCount} of {src.total}</strong> ({s.peakPct}%) on {s.peakDay} &middot; <strong style={{ color: '#e5e5e5' }}>{s.majorityByCount} of {src.total}</strong> ({s.majorityByPct}%) in by {s.majorityByDay} &middot; avg {src.ext}
+            </>
+          ) : (
+            <>
+              <strong style={{ color: '#e5e5e5' }}>{s.peakCount} of {src.total}</strong> ({s.peakPct}%) each &middot; <strong style={{ color: '#e5e5e5' }}>{s.majorityByCount} of {src.total}</strong> ({s.majorityByPct}%) in by {s.majorityByDay}{avgNote} &middot; avg {src.ext}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{
@@ -359,7 +432,7 @@ export default function WeeklyHighLowMatrix({
             }}>
               <IconClock size={13} />
             </div>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '0.80rem', color: '#e5e5e5', lineHeight: 1.35 }}>
                 {matchedStats ? (
                   <>
@@ -373,14 +446,9 @@ export default function WeeklyHighLowMatrix({
                   </>
                 )}
               </div>
-              <div style={{ fontSize: '0.72rem', color: '#cbd5e1', marginTop: 4, lineHeight: 1.35 }}>
-                {matchedStats ? (
-                  <>
-                    <strong style={{ color: '#38bdf8' }}>Dominant {isHighTab ? 'High' : 'Low'} Day:</strong> <strong style={{ color: isHighTab ? '#f87171' : '#4ade80' }}>{isHighTab ? matchedStats.peakHighDay : matchedStats.peakLowDay}</strong> &mdash; <strong>{isHighTab ? matchedStats.peakHighCount : matchedStats.peakLowCount} of {matchedStats.totalMatched} weeks ({isHighTab ? matchedStats.peakHighPct : matchedStats.peakLowPct}%)</strong> set their {isHighTab ? 'high' : 'low'} on {isHighTab ? matchedStats.peakHighDay : matchedStats.peakLowDay} (avg extension {isHighTab ? `+${matchedStats.avgHighExt}%` : `-${matchedStats.avgLowExt}%`})
-                  </>
-                ) : (
-                  <>{activeMetrics.pctInLater}% of {effectiveBias} weeks put the {isHighTab ? 'high' : 'low'} in later in the week</>
-                )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 7 }}>
+                {renderExtremePrediction('High', highPredSource, isHighTab)}
+                {renderExtremePrediction('Low', lowPredSource, !isHighTab)}
               </div>
             </div>
           </div>
@@ -401,7 +469,7 @@ export default function WeeklyHighLowMatrix({
             }}>
               <IconScale size={13} />
             </div>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '0.78rem', color: '#e5e5e5', lineHeight: 1.3 }}>
                 {matchedStats?.subsequent ? (
                   <>
@@ -443,7 +511,7 @@ export default function WeeklyHighLowMatrix({
             }}>
               <IconCheck size={13} />
             </div>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '0.76rem', color: '#e5e5e5', lineHeight: 1.3 }}>
                 {(() => {
                   const g = targetGuidance || (effectiveBias === 'bearish'

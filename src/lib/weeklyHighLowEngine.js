@@ -30,6 +30,55 @@ function getPercentile(arr, p) {
   return sorted[lower] * (1 - weight) + sorted[upper] * weight;
 }
 
+function summarizeExtremeTiming(dayCounts, totalCount) {
+  if (!dayCounts || totalCount <= 0) return null;
+  const counts = DAY_LABELS.map((_, idx) => dayCounts[idx] || 0);
+  const maxCount = Math.max(...counts);
+  const tiedDays = DAY_LABELS.filter((_, idx) => counts[idx] === maxCount);
+  const isTie = tiedDays.length > 1;
+  const peakDay = tiedDays.slice(0, 3).join(' / ') + (tiedDays.length > 3 ? ` (+${tiedDays.length - 3})` : '');
+  const peakPct = Math.round((maxCount / totalCount) * 100);
+
+  let weightedIdxSum = 0;
+  let cumCount = 0;
+  const majorityThreshold = Math.floor(totalCount / 2) + 1; // strict > 50% (e.g. 5 of 8)
+  let majorityByDay = DAY_LABELS[6];
+  let majorityByCount = totalCount;
+  let majorityByIdx = 6;
+  let foundMajority = false;
+
+  for (let i = 0; i < 7; i++) {
+    weightedIdxSum += i * counts[i];
+    cumCount += counts[i];
+    if (!foundMajority && cumCount >= majorityThreshold) {
+      majorityByDay = DAY_LABELS[i];
+      majorityByCount = cumCount;
+      majorityByIdx = i;
+      foundMajority = true;
+    }
+  }
+
+  const avgDayIdx = Math.min(6, Math.max(0, Math.round(weightedIdxSum / totalCount)));
+  const avgDay = DAY_LABELS[avgDayIdx];
+  const majorityByPct = Math.round((majorityByCount / totalCount) * 100);
+
+  return {
+    peakDay,
+    peakCount: maxCount,
+    peakPct,
+    isTie,
+    tiedDays,
+    hasSingleMajority: !isTie && maxCount >= majorityThreshold,
+    avgDay,
+    avgDayIdx,
+    majorityByDay,
+    majorityByCount,
+    majorityByPct,
+    majorityByIdx,
+    majorityThreshold,
+  };
+}
+
 /**
  * Groups daily candles into Monday-to-Sunday weekly candles
  */
@@ -346,13 +395,8 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
         sumLowExt += mc.lowPctBelowOpen;
       }
 
-      const maxHighDayCount = Math.max(...matchedHighDayCounts);
-      const tiedHighDays = DAY_LABELS.filter((_, idx) => matchedHighDayCounts[idx] === maxHighDayCount);
-      const peakHighDayLabel = tiedHighDays.slice(0, 3).join(' / ') + (tiedHighDays.length > 3 ? ` (+${tiedHighDays.length - 3})` : '');
-
-      const maxLowDayCount = Math.max(...matchedLowDayCounts);
-      const tiedLowDays = DAY_LABELS.filter((_, idx) => matchedLowDayCounts[idx] === maxLowDayCount);
-      const peakLowDayLabel = tiedLowDays.slice(0, 3).join(' / ') + (tiedLowDays.length > 3 ? ` (+${tiedLowDays.length - 3})` : '');
+      const highSummary = summarizeExtremeTiming(matchedHighDayCounts, totalMatched);
+      const lowSummary = summarizeExtremeTiming(matchedLowDayCounts, totalMatched);
 
       const matchedHighsInByNow = matchedCandles.filter(mc => mc.highDayIndex <= currentDayIndex).length;
       const matchedHighsInByNowPct = Math.round((matchedHighsInByNow / totalMatched) * 100);
@@ -372,17 +416,19 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
 
       matchedStats = {
         totalMatched,
-        peakHighDay: peakHighDayLabel,
-        peakHighCount: maxHighDayCount,
-        peakHighPct: Math.round((maxHighDayCount / totalMatched) * 100),
+        peakHighDay: highSummary.peakDay,
+        peakHighCount: highSummary.peakCount,
+        peakHighPct: highSummary.peakPct,
         highsInByNowPct: matchedHighsInByNowPct,
         highsInByNowCount: matchedHighsInByNow,
+        highSummary,
 
-        peakLowDay: peakLowDayLabel,
-        peakLowCount: maxLowDayCount,
-        peakLowPct: Math.round((maxLowDayCount / totalMatched) * 100),
+        peakLowDay: lowSummary.peakDay,
+        peakLowCount: lowSummary.peakCount,
+        peakLowPct: lowSummary.peakPct,
         lowsInByNowPct: matchedLowsInByNowPct,
         lowsInByNowCount: matchedLowsInByNow,
+        lowSummary,
 
         avgHighExt: Math.round((sumHighExt / totalMatched) * 100) / 100,
         avgLowExt: Math.round((sumLowExt / totalMatched) * 100) / 100,
@@ -398,6 +444,11 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
       };
     }
   }
+
+  const cohortHighSummary = summarizeExtremeTiming(highDayCounts, sampleSize);
+  const cohortLowSummary = summarizeExtremeTiming(lowDayCounts, sampleSize);
+  const cohortAvgHighPct = Math.round((allHighPcts.reduce((a, b) => a + b, 0) / sampleSize) * 100) / 100;
+  const cohortAvgLowPct = Math.round((allLowPcts.reduce((a, b) => a + b, 0) / sampleSize) * 100) / 100;
 
   return {
     matchedStats,
@@ -427,12 +478,14 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
       pctFurtherAboveOpen: pctHighFurther,
       pctCappedAtOrBelow: pctHighCapped,
       medianPct: medianHighPct,
+      avgPct: cohortAvgHighPct,
       p75Pct: p75HighPct,
       p90Pct: p90HighPct,
       projectedTarget: projectedHighTarget,
       projectedMax: projectedHighMax,
       projectedExtreme: projectedHighExtreme,
       timingDistribution: highTimingDistribution,
+      timingSummary: cohortHighSummary,
       verdictText: highIsInProbability >= 65
         ? `High Probability (${highIsInProbability}%) High is IN`
         : highIsInProbability <= 40
@@ -446,12 +499,14 @@ export function calculateWeeklyHighLowProbabilities(candles, currentPrice, refDa
       pctFurtherBelowOpen: pctLowFurther,
       pctFloorAtOrAbove: pctLowFloor,
       medianPct: medianLowPct,
+      avgPct: cohortAvgLowPct,
       p75Pct: p75LowPct,
       p90Pct: p90LowPct,
       projectedTarget: projectedLowTarget,
       projectedMax: projectedLowMax,
       projectedExtreme: projectedLowExtreme,
       timingDistribution: lowTimingDistribution,
+      timingSummary: cohortLowSummary,
       verdictText: lowIsInProbability >= 65
         ? `High Probability (${lowIsInProbability}%) Low is IN`
         : lowIsInProbability <= 40
