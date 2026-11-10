@@ -161,8 +161,8 @@ export function calculateZScore(closes, period = 20) {
  * Aggregates lower-timeframe candles into exact UTC-aligned higher-timeframe bars
  * (e.g. 15m -> 45m aligned to 00:00/00:45/01:30 UTC; 1h -> 3h aligned to 00:00/03:00/06:00 UTC)
  */
-function aggregateCandlesByMinutes(candles, targetMinutes = 45) {
-  if (!candles || candles.length < 3) return [];
+export function aggregateCandlesByMinutes(candles, targetMinutes = 45, minLeadingBars = 3) {
+  if (!candles || candles.length < minLeadingBars) return [];
   const bucketMs = targetMinutes * 60 * 1000;
   const buckets = new Map();
 
@@ -179,7 +179,7 @@ function aggregateCandlesByMinutes(candles, targetMinutes = 45) {
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
     const chunk = buckets.get(k).sort((a, b) => a.time - b.time);
-    const isPartialLeadingEdge = i === 0 && chunk.length < 3;
+    const isPartialLeadingEdge = i === 0 && chunk.length < minLeadingBars;
     if (isPartialLeadingEdge) continue;
 
     result.push({
