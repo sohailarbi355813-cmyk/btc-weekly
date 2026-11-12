@@ -3245,10 +3245,20 @@ html, body {
     padding: 1px 5px;
   }
   .mobile-bottom-bar {
-    padding: 5px 4px calc(5px + env(safe-area-inset-bottom, 0px));
+    padding: 5px 6px calc(5px + env(safe-area-inset-bottom, 0px));
+    overflow-x: auto;
+    justify-content: flex-start;
+    gap: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .mobile-bottom-bar::-webkit-scrollbar {
+    display: none;
   }
   .mobile-bottom-btn {
-    padding: 5px 2px;
+    flex: 0 0 auto;
+    min-width: 52px;
+    padding: 5px 6px;
     font-size: 0.58rem;
     white-space: nowrap;
     letter-spacing: -0.02em;

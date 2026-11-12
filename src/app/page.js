@@ -11,11 +11,12 @@ import WeeklyForecast from '@/components/WeeklyForecast';
 import SessionProfiler from '@/components/SessionProfiler';
 import RsiScannerWidget from '@/components/RsiScannerWidget';
 import MondayRangeScanner from '@/components/MondayRangeScanner';
+import EmaVwapConfluence from '@/components/EmaVwapConfluence';
 import MarketStructureTable from '@/components/MarketStructureTable';
 import {
   IconScale, IconRadar, IconBarChart, IconRefresh, IconZap,
   IconAlertTriangle, IconShield, IconWolf, IconBlackFlag,
-  IconMenu, IconX, IconCalendar, IconClock, IconLevels,
+  IconMenu, IconX, IconCalendar, IconClock, IconLevels, IconLayers,
 } from '@/components/Icons';
 
 const PRIMARY_SIGNAL_IDS = ['trend', 'structure', 'weekly_open', 'momentum'];
@@ -512,6 +513,7 @@ export default function Home() {
                 { id: 'pattern', label: 'Forecast', Icon: IconCalendar },
                 { id: 'rsi', label: 'RSI', Icon: IconZap },
                 { id: 'monday', label: 'Mon Range', Icon: IconLevels },
+                { id: 'confluence', label: 'EMA×VWAP', Icon: IconLayers },
                 { id: 'structure', label: 'Structure', Icon: IconScale },
                 { id: 'macro', label: 'Whales', Icon: IconBarChart },
               ].map(({ id, label, Icon, iconColor }) => (
@@ -567,6 +569,7 @@ export default function Home() {
                 { id: 'pattern', Icon: IconCalendar, title: 'Weekly Forecast & HOW/LOW', desc: 'High/Low Probabilities & Cycle Match' },
                 { id: 'rsi', Icon: IconZap, title: 'RSI Alerts', desc: 'Overbought / Oversold Scanner' },
                 { id: 'monday', Icon: IconLevels, title: 'Monday Range + RSI', desc: 'Mon H/L Sweeps & Break-In Setups' },
+                { id: 'confluence', Icon: IconLayers, title: 'EMA 200 × VWAP', desc: 'Top 100 Perps · 1h/2h/3h/4h Confluence' },
                 { id: 'structure', Icon: IconScale, title: 'Market Structure', desc: '1H, 4H, 1D, 1W · 2-Candle Confirmation' },
                 { id: 'macro', Icon: IconBarChart, title: 'Whales · MVRV · ETFs', desc: 'Positioning, Valuation & Flows' },
               ].map(({ id, Icon, title, desc }) => (
@@ -637,6 +640,10 @@ export default function Home() {
               <IconLevels size={15} color={activeTab === 'monday' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'monday' ? '#38bdf8' : undefined }}>Monday Range</span>
             </button>
+            <button id="tab-confluence" className={`tab-btn ${activeTab === 'confluence' ? 'active' : ''}`} onClick={() => navigateToSection('confluence')}>
+              <IconLayers size={15} color={activeTab === 'confluence' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'confluence' ? '#38bdf8' : undefined }}>EMA 200 × VWAP</span>
+            </button>
             <button id="tab-structure" className={`tab-btn ${activeTab === 'structure' ? 'active' : ''}`} onClick={() => navigateToSection('structure')}>
               <IconScale size={15} color={activeTab === 'structure' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'structure' ? '#38bdf8' : undefined }}>Market Structure</span>
@@ -660,6 +667,7 @@ export default function Home() {
             {activeTab === 'macro' && <MacroWhalesEtf />}
             {activeTab === 'rsi' && <RsiScannerWidget />}
             {activeTab === 'monday' && <MondayRangeScanner />}
+            {activeTab === 'confluence' && <EmaVwapConfluence />}
             {activeTab === 'structure' && <MarketStructureTable />}
           </div>
 
@@ -675,6 +683,7 @@ export default function Home() {
           { id: 'macro', Icon: IconBarChart, label: 'Whales' },
           { id: 'rsi', Icon: IconZap, label: 'RSI' },
           { id: 'monday', Icon: IconLevels, label: 'Mon H/L' },
+          { id: 'confluence', Icon: IconLayers, label: 'EMA×VWAP' },
           { id: 'structure', Icon: IconScale, label: 'Structure' },
         ].map(({ id, Icon, label }) => (
           <button key={id} className={`mobile-bottom-btn ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
