@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { IconLayers, IconRadar, IconRefresh } from '@/components/Icons';
 
 const SPREAD_OPTIONS = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0];
+const CMP_SPREAD_OPTIONS = [null, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0];
 const TF_ORDER = ['4h', '3h', '2h', '1h'];
 const ANCHOR_ORDER = ['week', 'month', 'quarter', 'year'];
 const ANCHOR_SHORT = {
@@ -94,7 +95,10 @@ function getZoneRoleMeta(zoneRole, distFromSpotPct) {
   };
 }
 
-function buildFilteredTfMatches(coin, { maxSpreadPct, selectedTf, selectedAnchor, zoneFilter, onlyStacked }) {
+function buildFilteredTfMatches(
+  coin,
+  { maxSpreadPct, maxCmpSpreadPct = null, selectedTf, selectedAnchor, zoneFilter, onlyStacked }
+) {
   const tfCandidates = selectedTf === 'all' ? TF_ORDER : [selectedTf];
   const matches = [];
 
@@ -119,6 +123,9 @@ function buildFilteredTfMatches(coin, { maxSpreadPct, selectedTf, selectedAnchor
     const clusterMid = (clusterLow + clusterHigh) / 2;
     const distFromSpotPct = Number((((clusterMid - coin.price) / coin.price) * 100).toFixed(2));
     const absSpotDistPct = Number(Math.abs(distFromSpotPct).toFixed(2));
+
+    if (maxCmpSpreadPct !== null && absSpotDistPct > maxCmpSpreadPct) continue;
+
     const zoneRole =
       absSpotDistPct <= 1.5 ? 'TESTING' : distFromSpotPct > 0 ? 'RESISTANCE' : 'SUPPORT';
 
@@ -160,8 +167,9 @@ export default function EmaVwapConfluence() {
   const [scanningNow, setScanningNow] = useState(false);
   const [message, setMessage] = useState(null);
 
-  // Filter State (default <= 2.0% matches INJ 4h EMA200 vs Monthly VWAP 1.87% example)
+  // Filter State (default <= 2.0% indicator spread; CMP spread defaults to null / None)
   const [maxSpreadPct, setMaxSpreadPct] = useState(2.0);
+  const [maxCmpSpreadPct, setMaxCmpSpreadPct] = useState(null);
   const [selectedTf, setSelectedTf] = useState('all'); // 'all' | '1h' | '2h' | '3h' | '4h'
   const [selectedAnchor, setSelectedAnchor] = useState('all'); // 'all' | 'week' | 'month' | 'quarter' | 'year'
   const [zoneFilter, setZoneFilter] = useState('all'); // 'all' | 'testing' | 'support' | 'resistance'
@@ -231,6 +239,7 @@ export default function EmaVwapConfluence() {
     for (const coin of alignedCoins) {
       const matchesAtTol = buildFilteredTfMatches(coin, {
         maxSpreadPct,
+        maxCmpSpreadPct,
         selectedTf: 'all',
         selectedAnchor: 'all',
         zoneFilter: 'all',
@@ -248,9 +257,9 @@ export default function EmaVwapConfluence() {
     }
 
     return { alignedAtTol, tightCount, stackedCount };
-  }, [alignedCoins, maxSpreadPct]);
+  }, [alignedCoins, maxSpreadPct, maxCmpSpreadPct]);
 
-  // Displayed coins with full dynamic TF + Anchor + Spread + Zone + Search filtering
+  // Displayed coins with full dynamic TF + Anchor + Ind Spread + CMP Spread + Zone + Search filtering
   const displayedItems = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     const out = [];
@@ -265,6 +274,7 @@ export default function EmaVwapConfluence() {
 
       const matchingEntries = buildFilteredTfMatches(coin, {
         maxSpreadPct,
+        maxCmpSpreadPct,
         selectedTf,
         selectedAnchor,
         zoneFilter,
@@ -302,6 +312,7 @@ export default function EmaVwapConfluence() {
     alignedCoins,
     searchQuery,
     maxSpreadPct,
+    maxCmpSpreadPct,
     selectedTf,
     selectedAnchor,
     zoneFilter,
@@ -319,6 +330,7 @@ export default function EmaVwapConfluence() {
 
   return (
     <div
+      className="confluence-wrap"
       style={{
         background: '#050505',
         border: '1px solid #1a1a1a',
@@ -438,6 +450,7 @@ export default function EmaVwapConfluence() {
           {majorsContext.map((m) => {
             const activeMatches = buildFilteredTfMatches(m, {
               maxSpreadPct,
+              maxCmpSpreadPct,
               selectedTf: 'all',
               selectedAnchor: 'all',
               zoneFilter: 'all',
@@ -514,9 +527,10 @@ export default function EmaVwapConfluence() {
 
       {/* 4 Summary Cards */}
       <div
+        className="confluence-summary-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 155px), 1fr))',
           gap: 10,
           marginBottom: 14,
         }}
@@ -527,6 +541,7 @@ export default function EmaVwapConfluence() {
             setZoneFilter('all');
             setSelectedTf('all');
             setSelectedAnchor('all');
+            setMaxCmpSpreadPct(null);
           }}
           style={{
             background: 'rgba(56, 189, 248, 0.10)',
@@ -617,13 +632,12 @@ export default function EmaVwapConfluence() {
         </div>
       </div>
 
-      {/* Controls Bar 1: Spread Tolerance & Timeframe */}
+      {/* Controls Bar 1: Indicator Spread, CMP Spread & Timeframe */}
       <div
+        className="confluence-controls-bar"
         style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
+          flexDirection: 'column',
           gap: 10,
           marginBottom: 10,
           padding: '10px 12px',
@@ -632,54 +646,143 @@ export default function EmaVwapConfluence() {
           borderRadius: 8,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            MAX SPREAD:
-          </span>
-          {SPREAD_OPTIONS.map((pct) => (
-            <button
-              key={pct}
-              onClick={() => setMaxSpreadPct(pct)}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 10,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', minWidth: 0 }}>
+            <span
               style={{
-                padding: '4px 9px',
-                borderRadius: 5,
-                fontSize: '0.68rem',
+                fontSize: '0.66rem',
+                color: 'var(--text-muted)',
                 fontFamily: 'var(--font-mono)',
                 fontWeight: 700,
-                background: maxSpreadPct === pct ? 'var(--accent)' : 'var(--bg-card)',
-                color: maxSpreadPct === pct ? '#000000' : 'var(--text-secondary)',
-                border: `1px solid ${maxSpreadPct === pct ? 'var(--accent)' : 'var(--border)'}`,
-                cursor: 'pointer',
+              }}
+              title="Spread between EMA 200 and Anchored VWAP"
+            >
+              IND SPREAD:
+            </span>
+            {SPREAD_OPTIONS.map((pct) => (
+              <button
+                key={pct}
+                onClick={() => setMaxSpreadPct(pct)}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: 5,
+                  fontSize: '0.67rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  background: maxSpreadPct === pct ? 'var(--accent)' : 'var(--bg-card)',
+                  color: maxSpreadPct === pct ? '#000000' : 'var(--text-secondary)',
+                  border: `1px solid ${maxSpreadPct === pct ? 'var(--accent)' : 'var(--border)'}`,
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                }}
+              >
+                &le;{pct.toFixed(1)}%
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', minWidth: 0 }}>
+            <span
+              style={{
+                fontSize: '0.66rem',
+                color: 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 700,
               }}
             >
-              &le;{pct.toFixed(1)}%
-            </button>
-          ))}
+              TF:
+            </span>
+            {['all', '1h', '2h', '3h', '4h'].map((tf) => (
+              <button
+                key={tf}
+                onClick={() => setSelectedTf(tf)}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: 5,
+                  fontSize: '0.67rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  background: selectedTf === tf ? 'var(--accent)' : 'var(--bg-card)',
+                  color: selectedTf === tf ? '#000000' : 'var(--text-secondary)',
+                  border: `1px solid ${selectedTf === tf ? 'var(--accent)' : 'var(--border)'}`,
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                }}
+              >
+                {tf.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            TF:
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            flexWrap: 'wrap',
+            paddingTop: 8,
+            borderTop: '1px dashed rgba(255, 255, 255, 0.08)',
+            minWidth: 0,
+          }}
+        >
+          <span
+            style={{
+              fontSize: '0.66rem',
+              color: maxCmpSpreadPct !== null ? '#4ade80' : 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 700,
+            }}
+            title="Optional max distance from Current Market Price (CMP) to the EMA-VWAP confluence cluster"
+          >
+            CMP SPREAD:
           </span>
-          {['all', '1h', '2h', '3h', '4h'].map((tf) => (
-            <button
-              key={tf}
-              onClick={() => setSelectedTf(tf)}
-              style={{
-                padding: '4px 9px',
-                borderRadius: 5,
-                fontSize: '0.68rem',
-                fontFamily: 'var(--font-mono)',
-                fontWeight: 700,
-                background: selectedTf === tf ? 'var(--accent)' : 'var(--bg-card)',
-                color: selectedTf === tf ? '#000000' : 'var(--text-secondary)',
-                border: `1px solid ${selectedTf === tf ? 'var(--accent)' : 'var(--border)'}`,
-                cursor: 'pointer',
-              }}
-            >
-              {tf.toUpperCase()}
-            </button>
-          ))}
+          {CMP_SPREAD_OPTIONS.map((pct) => {
+            const isSelected = maxCmpSpreadPct === pct;
+            const isNone = pct === null;
+            return (
+              <button
+                key={isNone ? 'none' : pct}
+                onClick={() => setMaxCmpSpreadPct(pct)}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: 5,
+                  fontSize: '0.67rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  background: isSelected
+                    ? isNone
+                      ? 'rgba(148, 163, 184, 0.22)'
+                      : '#22c55e'
+                    : 'var(--bg-card)',
+                  color: isSelected
+                    ? isNone
+                      ? '#ffffff'
+                      : '#000000'
+                    : 'var(--text-secondary)',
+                  border: `1px solid ${
+                    isSelected
+                      ? isNone
+                        ? '#94a3b8'
+                        : '#4ade80'
+                      : 'var(--border)'
+                  }`,
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                }}
+              >
+                {isNone ? 'None' : `≤${pct.toFixed(1)}%`}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -827,7 +930,11 @@ export default function EmaVwapConfluence() {
           Showing <strong style={{ color: 'var(--text-primary)' }}>{displayedItems.length}</strong> Confluence Setups
         </span>
         <span>
-          Spread &le;{maxSpreadPct.toFixed(1)}% &middot; TF: {selectedTf.toUpperCase()} &middot; VWAP: {selectedAnchor.toUpperCase()}
+          IND &le;{maxSpreadPct.toFixed(1)}% &middot;{' '}
+          <strong style={{ color: maxCmpSpreadPct !== null ? '#4ade80' : 'var(--text-muted)' }}>
+            CMP: {maxCmpSpreadPct === null ? 'NONE' : `≤${maxCmpSpreadPct.toFixed(1)}%`}
+          </strong>{' '}
+          &middot; TF: {selectedTf.toUpperCase()} &middot; VWAP: {selectedAnchor.toUpperCase()}
         </span>
       </div>
 
@@ -864,14 +971,40 @@ export default function EmaVwapConfluence() {
           <IconLayers size={28} color="var(--accent)" style={{ marginBottom: 8, opacity: 0.6 }} />
           <div>No coins currently match this EMA 200 &times; Anchored VWAP filter.</div>
           <div style={{ fontSize: '0.70rem', marginTop: 6 }}>
-            Try widening Max Spread to <strong>&le;2.0%</strong> or <strong>&le;3.0%</strong>, or reset TF / VWAP Anchor to <strong>ALL</strong>.
+            Try setting CMP Spread to <strong>None</strong>, widening IND Spread, or resetting TF / VWAP Anchor to <strong>ALL</strong>.
           </div>
+          <button
+            onClick={() => {
+              setMaxCmpSpreadPct(null);
+              setMaxSpreadPct(2.0);
+              setSelectedTf('all');
+              setSelectedAnchor('all');
+              setZoneFilter('all');
+              setOnlyStacked(false);
+              setSearchQuery('');
+            }}
+            style={{
+              marginTop: 12,
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid var(--accent)',
+              background: 'var(--accent-dim)',
+              color: 'var(--accent)',
+              fontSize: '0.70rem',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Reset Filters
+          </button>
         </div>
       ) : (
         <div
+          className="confluence-cards-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
             gap: 12,
           }}
         >
@@ -889,10 +1022,11 @@ export default function EmaVwapConfluence() {
                   border: `1px solid ${isStacked ? 'rgba(234, 179, 8, 0.5)' : zoneMeta.border}`,
                   borderLeft: `3px solid ${zoneMeta.accent}`,
                   borderRadius: 8,
-                  padding: '13px 14px',
+                  padding: '13px 12px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 10,
+                  minWidth: 0,
                 }}
               >
                 {/* Row 1: Symbol, Vol Rank, Spot Price & Chart */}
@@ -1139,9 +1273,10 @@ export default function EmaVwapConfluence() {
 
                 {/* Row 4: Full 4-VWAP Snapshot on Active Timeframe */}
                 <div
+                  className="confluence-vwap-grid"
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
                     gap: 5,
                     fontFamily: 'var(--font-mono)',
                   }}
@@ -1163,12 +1298,23 @@ export default function EmaVwapConfluence() {
                           borderRadius: 5,
                           padding: '5px 4px',
                           textAlign: 'center',
+                          minWidth: 0,
                         }}
                       >
                         <div style={{ fontSize: '0.54rem', color: isMatched ? '#38bdf8' : '#64748b', fontWeight: 700 }}>
                           {ANCHOR_SHORT[anchorKey]}
                         </div>
-                        <div style={{ fontSize: '0.64rem', fontWeight: 800, color: isMatched ? '#ffffff' : '#cbd5e1', marginTop: 1 }}>
+                        <div
+                          style={{
+                            fontSize: '0.64rem',
+                            fontWeight: 800,
+                            color: isMatched ? '#ffffff' : '#cbd5e1',
+                            marginTop: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
                           {formatCoinPrice(val, coin.decimals)}
                         </div>
                         <div style={{ fontSize: '0.52rem', color: isMatched ? '#4ade80' : '#64748b', marginTop: 1 }}>
@@ -1186,3 +1332,4 @@ export default function EmaVwapConfluence() {
     </div>
   );
 }
+

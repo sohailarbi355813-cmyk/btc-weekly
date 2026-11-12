@@ -3264,4 +3264,25 @@ html, body {
     letter-spacing: -0.02em;
     max-width: none;
   }
+  .confluence-wrap {
+    padding: 12px 10px !important;
+  }
+  .confluence-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .confluence-controls-bar {
+    padding: 9px 10px !important;
+    gap: 8px !important;
+  }
+  .confluence-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .confluence-vwap-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }
