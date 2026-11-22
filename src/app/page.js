@@ -514,7 +514,6 @@ export default function Home() {
                 { id: 'rsi', label: 'RSI', Icon: IconZap },
                 { id: 'monday', label: 'Mon Range', Icon: IconLevels },
                 { id: 'confluence', label: 'EMA×VWAP', Icon: IconLayers },
-                { id: 'structure', label: 'Structure', Icon: IconScale },
                 { id: 'macro', label: 'Whales', Icon: IconBarChart },
               ].map(({ id, label, Icon, iconColor }) => (
                 <button key={id} className={`header-nav-link ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
@@ -570,7 +569,6 @@ export default function Home() {
                 { id: 'rsi', Icon: IconZap, title: 'RSI Alerts', desc: 'Overbought / Oversold Scanner' },
                 { id: 'monday', Icon: IconLevels, title: 'Monday Range + RSI', desc: 'Mon H/L Sweeps & Break-In Setups' },
                 { id: 'confluence', Icon: IconLayers, title: 'EMA 200 × VWAP', desc: 'Top 100 Perps · 1h/2h/3h/4h Confluence' },
-                { id: 'structure', Icon: IconScale, title: 'Market Structure', desc: '1H, 4H, 1D, 1W · 2-Candle Confirmation' },
                 { id: 'macro', Icon: IconBarChart, title: 'Whales · MVRV · ETFs', desc: 'Positioning, Valuation & Flows' },
               ].map(({ id, Icon, title, desc }) => (
                 <button key={id} className={`mobile-nav-item ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
@@ -644,10 +642,6 @@ export default function Home() {
               <IconLayers size={15} color={activeTab === 'confluence' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'confluence' ? '#38bdf8' : undefined }}>EMA 200 × VWAP</span>
             </button>
-            <button id="tab-structure" className={`tab-btn ${activeTab === 'structure' ? 'active' : ''}`} onClick={() => navigateToSection('structure')}>
-              <IconScale size={15} color={activeTab === 'structure' ? '#38bdf8' : undefined} />
-              <span style={{ color: activeTab === 'structure' ? '#38bdf8' : undefined }}>Market Structure</span>
-            </button>
           </div>
 
           {/* ── Tab Content ── */}
@@ -662,13 +656,14 @@ export default function Home() {
                 onWeeklyBiasChange={setWeeklyProbBias}
                 dowStats2025={dowStats2025}
                 formatPrice={formatPrice}
+                bias={bias}
+                currentPrice={data.currentPrice}
               />
             )}
             {activeTab === 'macro' && <MacroWhalesEtf />}
             {activeTab === 'rsi' && <RsiScannerWidget />}
             {activeTab === 'monday' && <MondayRangeScanner />}
             {activeTab === 'confluence' && <EmaVwapConfluence />}
-            {activeTab === 'structure' && <MarketStructureTable />}
           </div>
 
         </div>
@@ -684,7 +679,6 @@ export default function Home() {
           { id: 'rsi', Icon: IconZap, label: 'RSI' },
           { id: 'monday', Icon: IconLevels, label: 'Mon H/L' },
           { id: 'confluence', Icon: IconLayers, label: 'EMA×VWAP' },
-          { id: 'structure', Icon: IconScale, label: 'Structure' },
         ].map(({ id, Icon, label }) => (
           <button key={id} className={`mobile-bottom-btn ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
             <Icon size={18} /><span>{label}</span>

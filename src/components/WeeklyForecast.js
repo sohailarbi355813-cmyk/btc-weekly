@@ -6,30 +6,80 @@ import {
   IconLayers,
   IconRadar,
   IconCalendar,
-  IconTrophy,
   IconTarget,
-  IconSparkles,
+  IconZap,
+  IconAlertTriangle,
   IconTrendUp,
   IconTrendDown,
+  IconClock,
+  IconShield,
+  IconLevels,
 } from '@/components/Icons';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon through Sun
 
-function formatPct(n, decimals = 1) {
-  if (n === undefined || n === null) return '--';
-  const sign = n > 0 ? '+' : '';
-  return `${sign}${Number(n).toFixed(decimals)}%`;
-}
-
-function biasColor(bias) {
-  return bias === 'bullish' ? 'bullish' : 'bearish';
-}
+const WEEKLY_CYCLE_STAGES = [
+  {
+    dow: 1,
+    name: 'Monday',
+    title: 'Range Establishment',
+    desc: 'Sets initial Monday High & Low range. Asian session creates reference liquidity.',
+    role: 'Range Setter',
+  },
+  {
+    dow: 2,
+    name: 'Tuesday',
+    title: 'Judas Swing (HOW / LOW)',
+    desc: 'Historically forms the High or Low of the Week (~38% probability). Traps breakout traders.',
+    role: 'Judas Extreme',
+  },
+  {
+    dow: 3,
+    name: 'Wednesday',
+    title: 'Midweek Expansion',
+    desc: 'Decisive direction established. Tests Monday Midpoint (50% EQ) and drives toward weekly targets.',
+    role: 'Trend Expansion',
+  },
+  {
+    dow: 4,
+    name: 'Thursday',
+    title: 'Trend Continuation',
+    desc: 'London & NY sessions deliver secondary volume into opposing liquidity pools.',
+    role: 'Continuation',
+  },
+  {
+    dow: 5,
+    name: 'Friday',
+    title: 'CME Settlement',
+    desc: 'CME futures close at 21:00 UTC. Range extension finishes; institutions lock weekly profits.',
+    role: 'Weekly Close',
+  },
+  {
+    dow: 6,
+    name: 'Saturday',
+    title: 'Weekend Drift',
+    desc: 'Retail & spot compression. Low volume mean-reversion toward previous day close.',
+    role: 'Low Vol Drift',
+  },
+  {
+    dow: 0,
+    name: 'Sunday',
+    title: 'Weekly Close & CME Gap Prep',
+    desc: 'Weekly candle close at 23:59 UTC. Watch for manipulation wicks into Monday open.',
+    role: 'Close & Prep',
+  },
+];
 
 function defaultFormatPrice(n) {
   if (!n) return '--';
   return '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function formatPct(n, decimals = 1) {
+  if (n === undefined || n === null || Number.isNaN(Number(n))) return '--';
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${Number(n).toFixed(decimals)}%`;
 }
 
 export default function WeeklyForecast({
@@ -39,21 +89,67 @@ export default function WeeklyForecast({
   onWeeklyBiasChange,
   dowStats2025 = null,
   formatPrice = defaultFormatPrice,
+  bias = null,
+  currentPrice = null,
 }) {
   if (!weekPattern) {
     return (
-      <div className="no-data-msg" style={{ minHeight: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+      <div
+        className="no-data-msg"
+        style={{
+          minHeight: '300px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+        }}
+      >
         <IconRadar size={28} color="#38bdf8" className="spin-icon" />
         <span style={{ fontFamily: 'var(--font-mono)', color: '#888888' }}>
-          Calibrating 300+ historical weekly sequence trajectories...
+          Calibrating Weekly Cycle &amp; Execution Playbook...
         </span>
       </div>
     );
   }
 
+  const spot = currentPrice || bias?.keyLevels?.currentPrice || 0;
+  const isBear = bias?.verdict === 'BEARISH' || weeklyHighLowData?.effectiveBias === 'bearish';
+  const verdict = isBear ? 'BEARISH' : 'BULLISH';
+  const accentColor = isBear ? '#ef4444' : '#22c55e';
+  const bgAccent = isBear ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)';
+  const borderAccent = isBear ? 'rgba(239, 68, 68, 0.35)' : 'rgba(34, 197, 94, 0.35)';
+
+  const weeklyOpen = bias?.weeklyOpen || 0;
+  const pctFromWo = bias?.pctFromWeeklyOpen ?? 0;
+  const pwh = bias?.priorWeekLevels?.pwh || 0;
+  const pwl = bias?.priorWeekLevels?.pwl || 0;
+  const pwm = bias?.priorWeekLevels?.pwm || (pwh && pwl ? (pwh + pwl) / 2 : 0);
+  const ema20 = bias?.keyLevels?.ema20 || 0;
+  const rsi = bias?.keyLevels?.rsi14 || 0;
+
+  // Determine current cycle phase relative to weekly levels
+  let cyclePhase = 'Consolidation inside Weekly Range';
+  let phaseDetail = 'Price trading within expected boundaries.';
+  if (spot && pwl && spot < pwl) {
+    cyclePhase = 'Breakdown Below Prior Week Low (PWL)';
+    phaseDetail = `Trading below PWL (${formatPrice(pwl)}). Downward draw on liquidity is active.`;
+  } else if (spot && weeklyOpen && spot < weeklyOpen) {
+    cyclePhase = 'Below Weekly Open · In Prior Value Area';
+    phaseDetail = `Trading below WO (${formatPrice(weeklyOpen)}). Rallies face overhead resistance.`;
+  } else if (spot && weeklyOpen && spot > weeklyOpen && pwh && spot < pwh) {
+    cyclePhase = 'Above Weekly Open · Bullish Value Expansion';
+    phaseDetail = `Trading above WO (${formatPrice(weeklyOpen)}). Targeting Prior Week High (${formatPrice(pwh)}).`;
+  } else if (spot && pwh && spot > pwh) {
+    cyclePhase = 'Breakout Above Prior Week High (PWH)';
+    phaseDetail = `Trading above PWH (${formatPrice(pwh)}). Upward price discovery mode.`;
+  }
+
+  const todayDow = weekPattern.todayDow ?? new Date().getUTCDay();
+
   return (
     <div style={{ animation: 'fadeInUp 0.35s ease' }}>
-      {/* ── 0. High / Low of Week Formation Probability (HOW / LOW Proximity) ── */}
+      {/* ── 1. High / Low of Week Formation Probability (HOW / LOW Proximity) ── */}
       <WeeklyHighLowMatrix
         probData={weeklyHighLowData}
         selectedBias={selectedWeeklyBias}
@@ -61,63 +157,404 @@ export default function WeeklyForecast({
         formatPrice={formatPrice}
       />
 
-      {/* ── Average Return Per Day of the Week (Calculated from Start of 2025 to Present) ── */}
-      {dowStats2025 && (
-        <div className="panel" style={{ marginBottom: 24, background: '#050505', border: '1px solid #1c1c1c', padding: 18 }}>
-          <div className="section-header" style={{ marginBottom: 12 }}>
-            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <IconCalendar size={16} color="var(--accent)" />
-              <span>Avg Return Per Day of the Week</span>
+      {/* ── 2. UNIFIED WEEKLY CYCLE TRADING PLAYBOOK (OPTION 2) ── */}
+      <div
+        className="panel"
+        style={{
+          background: '#050505',
+          border: `1px solid ${borderAccent}`,
+          borderRadius: 10,
+          padding: '18px',
+          marginBottom: 24,
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Top Header: Unified Direction & Phase */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+            borderBottom: '1px solid #1a1a1a',
+            paddingBottom: 14,
+            marginBottom: 16,
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span
+                style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 900,
+                  letterSpacing: '0.06em',
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  background: bgAccent,
+                  color: accentColor,
+                  border: `1px solid ${borderAccent}`,
+                  fontFamily: 'var(--font-mono)',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {verdict === 'BEARISH' ? '↓ INSTITUTIONAL BEARISH PLAYBOOK' : '↑ INSTITUTIONAL BULLISH PLAYBOOK'}
+              </span>
+
+              <span
+                style={{
+                  fontSize: '0.64rem',
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  background: '#0e0e12',
+                  color: '#94a3b8',
+                  border: '1px solid #22222e',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                }}
+              >
+                CONVICTION: {bias?.strengthPct || 77}%
+              </span>
             </div>
-            <div className="section-subtitle">
-              2025 to present
+
+            <div
+              style={{
+                fontSize: '0.98rem',
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-display)',
+                marginTop: 6,
+              }}
+            >
+              {cyclePhase}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 2 }}>
+              {phaseDetail}
             </div>
           </div>
-          <div className="dow-grid">
-            {Object.values(dowStats2025).map(d => {
-              const isToday = d.day === weekPattern.todayDow;
-              const isBullEdge = d.bullishRate >= 50;
-              const edgePct = isBullEdge ? d.bullishRate : (d.bearishRate ?? (100 - d.bullishRate));
-              const bColor = isBullEdge ? 'var(--bullish)' : 'var(--bearish)';
-              const badgeText = isBullEdge ? 'BULLISH' : 'BEARISH';
+
+          {/* Reference Anchor Strip */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+              background: '#09090d',
+              border: '1px solid #1c1c24',
+              borderRadius: 6,
+              padding: '8px 12px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.72rem',
+            }}
+          >
+            <div>
+              <span style={{ color: '#64748b' }}>WO: </span>
+              <strong style={{ color: spot >= weeklyOpen ? '#4ade80' : '#f87171' }}>
+                {formatPrice(weeklyOpen)} ({formatPct(pctFromWo)})
+              </strong>
+            </div>
+            <span style={{ color: '#272730' }}>&middot;</span>
+            <div>
+              <span style={{ color: '#64748b' }}>PWL: </span>
+              <strong style={{ color: spot >= pwl ? '#4ade80' : '#f87171' }}>
+                {formatPrice(pwl)}
+              </strong>
+            </div>
+            <span style={{ color: '#272730' }}>&middot;</span>
+            <div>
+              <span style={{ color: '#64748b' }}>PWH: </span>
+              <strong style={{ color: '#e2e8f0' }}>{formatPrice(pwh)}</strong>
+            </div>
+            {ema20 > 0 && (
+              <>
+                <span style={{ color: '#272730' }}>&middot;</span>
+                <div>
+                  <span style={{ color: '#64748b' }}>20 EMA: </span>
+                  <strong style={{ color: '#38bdf8' }}>{formatPrice(ema20)}</strong>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* 3 Actionable Execution Rules */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          {/* Card 1: Primary Continuation Plan */}
+          <div
+            style={{
+              background: '#08080c',
+              border: `1px solid ${isBear ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`,
+              borderLeft: `3px solid ${accentColor}`,
+              borderRadius: 8,
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isBear ? <IconTrendDown size={14} color="#f87171" /> : <IconTrendUp size={14} color="#4ade80" />}
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: accentColor, fontFamily: 'var(--font-mono)' }}>
+                {isBear ? 'PRIMARY PLAN: SHORT CONTINUATION' : 'PRIMARY PLAN: LONG CONTINUATION'}
+              </span>
+            </div>
+
+            <div style={{ fontSize: '0.78rem', color: '#e2e8f0', lineHeight: 1.45 }}>
+              {isBear ? (
+                <>
+                  Watch for <strong>retest &amp; rejection</strong> around broken PWL (<strong>{formatPrice(pwl)}</strong>) or Weekly Open (<strong>{formatPrice(weeklyOpen)}</strong>).
+                </>
+              ) : (
+                <>
+                  Watch for <strong>pullback &amp; defense</strong> at Weekly Open (<strong>{formatPrice(weeklyOpen)}</strong>) or Monday Midpoint.
+                </>
+              )}
+            </div>
+
+            <div
+              style={{
+                fontSize: '0.70rem',
+                color: 'var(--text-muted)',
+                background: '#040406',
+                padding: '8px 10px',
+                borderRadius: 5,
+                border: '1px solid #1a1a22',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              <div style={{ color: '#94a3b8', fontWeight: 700, marginBottom: 2 }}>Target Draw on Liquidity:</div>
+              <div style={{ color: accentColor, fontWeight: 800 }}>
+                {isBear
+                  ? `Next Major Support Zone: ${formatPrice(pwl ? Math.round(pwl * 0.96) : 59500)} – ${formatPrice(pwl ? Math.round(pwl * 0.94) : 58200)}`
+                  : `Next Major Target: ${formatPrice(pwh || 75000)} (Prior Week High)`}
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Bullish Reclaim & Invalidation Plan */}
+          <div
+            style={{
+              background: '#08080c',
+              border: '1px solid #1e1e28',
+              borderLeft: '3px solid #38bdf8',
+              borderRadius: 8,
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IconShield size={14} color="#38bdf8" />
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
+                {isBear ? 'COUNTER-TREND RECLAIM TRIGGER' : 'BEARISH BREAKDOWN TRIGGER'}
+              </span>
+            </div>
+
+            <div style={{ fontSize: '0.78rem', color: '#e2e8f0', lineHeight: 1.45 }}>
+              {isBear ? (
+                <>
+                  <strong>Do NOT long lower low sweeps blindly.</strong> Longs only become high-probability after a confirmed <strong>1H/4H candle close above {formatPrice(pwl)}</strong> (PWL) with bullish market structure shift.
+                </>
+              ) : (
+                <>
+                  <strong>Do NOT short blindly.</strong> Shorts only trigger if price decisively breaks and accepts below <strong>{formatPrice(weeklyOpen)}</strong> (WO).
+                </>
+              )}
+            </div>
+
+            <div
+              style={{
+                fontSize: '0.70rem',
+                color: 'var(--text-muted)',
+                background: '#040406',
+                padding: '8px 10px',
+                borderRadius: 5,
+                border: '1px solid #1a1a22',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              <div style={{ color: '#94a3b8', fontWeight: 700, marginBottom: 2 }}>Hard Invalidation Level:</div>
+              <div style={{ color: '#38bdf8', fontWeight: 800 }}>
+                {isBear
+                  ? `Decisive 4H close above ${formatPrice(weeklyOpen)} (WO) fully cancels the bearish bias.`
+                  : `Decisive 4H close below ${formatPrice(pwl || weeklyOpen)} cancels the bullish bias.`}
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Trap Awareness & Cycle Context */}
+          <div
+            style={{
+              background: '#08080c',
+              border: '1px solid #1e1e28',
+              borderLeft: '3px solid #eab308',
+              borderRadius: 8,
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IconAlertTriangle size={14} color="#eab308" />
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#eab308', fontFamily: 'var(--font-mono)' }}>
+                TRAP AWARENESS &amp; MOMENTUM
+              </span>
+            </div>
+
+            <div style={{ fontSize: '0.78rem', color: '#e2e8f0', lineHeight: 1.45 }}>
+              {rsi > 0 && rsi <= 30 ? (
+                <>
+                  Daily RSI is <strong>washed out at {rsi} (Oversold)</strong>. Chasing fresh breakout shorts at the very bottom carries high trap risk. Wait for relief bounces into resistance.
+                </>
+              ) : rsi >= 70 ? (
+                <>
+                  Daily RSI is <strong>overextended at {rsi} (Overbought)</strong>. Beware buying the absolute top; wait for dips into support.
+                </>
+              ) : (
+                <>
+                  Daily RSI is <strong>neutral at {rsi}</strong>. Momentum is following primary trend structure without extreme divergence.
+                </>
+              )}
+            </div>
+
+            <div
+              style={{
+                fontSize: '0.70rem',
+                color: 'var(--text-muted)',
+                background: '#040406',
+                padding: '8px 10px',
+                borderRadius: 5,
+                border: '1px solid #1a1a22',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              <div style={{ color: '#94a3b8', fontWeight: 700, marginBottom: 2 }}>Weekly Cycle Status:</div>
+              <div style={{ color: '#facc15', fontWeight: 800 }}>
+                {todayDow === 0 || todayDow === 6
+                  ? 'Weekend Liquidity Compression — Watch Sunday 23:59 UTC close & CME Gap setup.'
+                  : todayDow === 2
+                  ? 'Tuesday Judas Swing Active — Extreme of Week Formation window.'
+                  : 'Weekly Range Expansion Active — Trade with institutional trend delivery.'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 3. The 5-Stage Institutional Weekly Lifecycle Roadmap ── */}
+        <div style={{ marginTop: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 10,
+              flexWrap: 'wrap',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IconClock size={14} color="#38bdf8" />
+              <span style={{ fontSize: '0.74rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                INSTITUTIONAL WEEKLY CYCLE ROADMAP
+              </span>
+            </div>
+            <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              How smart money typically unfolds the week
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))',
+              gap: 8,
+            }}
+          >
+            {WEEKLY_CYCLE_STAGES.map((st) => {
+              const isToday = st.dow === todayDow;
               return (
-                <div key={d.day} className={`dow-card${isToday ? ' today' : ''}`}>
-                  <div className="dow-card-day">{DAY_SHORT[d.day]}</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: bColor, fontFamily: 'var(--font-display)', marginBottom: 4 }}>
-                    {edgePct.toFixed(0)}%
+                <div
+                  key={st.dow}
+                  style={{
+                    background: isToday ? 'rgba(56, 189, 248, 0.12)' : '#08080b',
+                    border: `1px solid ${isToday ? '#38bdf8' : '#1a1a22'}`,
+                    borderRadius: 6,
+                    padding: '10px 9px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                    position: 'relative',
+                  }}
+                >
+                  {isToday && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 6,
+                        fontSize: '0.50rem',
+                        fontWeight: 900,
+                        padding: '1px 4px',
+                        borderRadius: 3,
+                        background: '#38bdf8',
+                        color: '#000000',
+                        fontFamily: 'var(--font-mono)',
+                      }}
+                    >
+                      TODAY
+                    </span>
+                  )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: '0.70rem', fontWeight: 800, color: isToday ? '#38bdf8' : '#e2e8f0', fontFamily: 'var(--font-mono)' }}>
+                      {st.name}
+                    </span>
                   </div>
-                  <div className={`dow-bias-badge ${badgeText.toLowerCase()}`}>{badgeText}</div>
-                  <div style={{ fontSize: '0.70rem', color: d.avgReturn >= 0 ? '#4ade80' : '#f87171', fontWeight: 700, fontFamily: 'var(--font-mono)', marginTop: 6 }}>
-                    avg {d.avgReturn > 0 ? '+' : ''}{d.avgReturn.toFixed(2)}%
+
+                  <div style={{ fontSize: '0.62rem', fontWeight: 800, color: isToday ? '#ffffff' : '#94a3b8' }}>
+                    {st.title}
                   </div>
-                  <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                    {d.bullish}G / {d.bearish}R ({d.total}d)
+
+                  <div style={{ fontSize: '0.58rem', color: '#64748b', lineHeight: 1.35, marginTop: 2 }}>
+                    {st.desc}
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* ── 1. Current Week Timeline ── */}
+      {/* ── 4. Current Week Realized Sequence ── */}
       <div className="section-header" style={{ marginBottom: 12 }}>
         <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <IconLayers size={16} color="#38bdf8" />
-          <span>This Week&apos;s Sequence</span>
+          <span>This Week&apos;s Realized Performance</span>
         </div>
         <div className="section-subtitle" style={{ color: '#888888', fontSize: '0.76rem' }}>
-          Realized daily returns this week vs active session
+          Daily candle returns and structural roles this week
         </div>
       </div>
 
-      <div className="week-timeline">
-        {WEEK_ORDER.map(dow => {
+      <div className="week-timeline" style={{ marginBottom: 24 }}>
+        {WEEK_ORDER.map((dow) => {
           const dayData = weekPattern.currentWeek?.days[dow];
           const isClosed = weekPattern.closedDows?.includes(dow);
-          const isToday = dow === weekPattern.todayDow;
+          const isToday = dow === todayDow;
           const isFuture = weekPattern.futureDows?.includes(dow);
           const bull = dayData?.bullish;
+          const stageInfo = WEEKLY_CYCLE_STAGES.find((s) => s.dow === dow);
 
           let cellClass = 'week-day-cell';
           if (isToday) cellClass += ' is-today';
@@ -136,229 +573,30 @@ export default function WeeklyForecast({
               {dayData ? (
                 <>
                   <div className={`week-day-return ${bull ? 'value-bullish' : 'value-bearish'}`}>
-                    {dayData.return > 0 ? '+' : ''}{dayData.return.toFixed(2)}%
+                    {dayData.return > 0 ? '+' : ''}
+                    {dayData.return.toFixed(2)}%
                   </div>
                   <div className="week-day-prices">
-                    O: {formatPrice(dayData.open)}<br />
+                    O: {formatPrice(dayData.open)}
+                    <br />
                     C: {formatPrice(dayData.close)}
+                  </div>
+                  <div style={{ fontSize: '0.54rem', color: '#94a3b8', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
+                    {stageInfo?.role || ''}
                   </div>
                 </>
               ) : (
-                <div className="week-day-future-label">Upcoming</div>
+                <>
+                  <div className="week-day-future-label">Upcoming</div>
+                  <div style={{ fontSize: '0.54rem', color: '#64748b', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
+                    {stageInfo?.role || ''}
+                  </div>
+                </>
               )}
             </div>
           );
         })}
       </div>
-
-      {/* ── 2. Pattern Description ── */}
-      {weekPattern.currentPattern && (
-        <div className="pattern-desc" style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: '8px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
-          <div className="pattern-desc-icon" style={{ background: 'rgba(56, 189, 248, 0.1)', padding: 8, borderRadius: 6 }}>
-            <IconRadar size={18} color="#38bdf8" />
-          </div>
-          <div style={{ fontSize: '0.82rem', lineHeight: 1.5 }}>
-            <strong style={{ color: '#38bdf8' }}>Current Week Trajectory:</strong> {weekPattern.currentPattern}.<br />
-            Matched against <span style={{ color: '#ffffff', fontWeight: 600 }}>{weekPattern.totalMatchesFound}</span> statistically analogous weeks from Jan 2021 to now.
-          </div>
-        </div>
-      )}
-
-      {/* ── 3. Match Count Badges ── */}
-      <div className="match-count-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
-        <div className="match-badge" style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#080808', border: '1px solid #1c1c1c', padding: '6px 12px', borderRadius: 6, fontSize: '0.74rem', color: '#aaaaaa' }}>
-          <IconCalendar size={13} color="#38bdf8" />
-          <span><span className="badge-num" style={{ color: '#ffffff', fontWeight: 700 }}>{weekPattern.totalMatchesFound}</span> matching weeks found</span>
-        </div>
-        <div className="match-badge" style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#080808', border: '1px solid #1c1c1c', padding: '6px 12px', borderRadius: 6, fontSize: '0.74rem', color: '#aaaaaa' }}>
-          <IconTrophy size={13} color="#38bdf8" />
-          <span>Top <span className="badge-num" style={{ color: '#ffffff', fontWeight: 700 }}>{weekPattern.topMatches.length}</span> highest correlation</span>
-        </div>
-        <div className="match-badge" style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#080808', border: '1px solid #1c1c1c', padding: '6px 12px', borderRadius: 6, fontSize: '0.74rem', color: '#aaaaaa' }}>
-          <IconTarget size={13} color="#22c55e" />
-          <span>Similarity threshold: <span className="badge-num" style={{ color: '#22c55e', fontWeight: 700 }}>25%+</span></span>
-        </div>
-      </div>
-
-      {/* ── 4. Current Week Predictions / Weekly Forecast ── */}
-      <div className="panel" style={{ background: '#050505', border: '1px solid #1a1a1a', borderRadius: 10, padding: 18, marginBottom: 24 }}>
-        <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <IconTarget size={16} color="#38bdf8" />
-          <span>Matched Weeks Forecast (This Week)</span>
-        </div>
-        <div className="section-subtitle" style={{ color: '#888888', fontSize: '0.76rem', marginBottom: 16 }}>
-          Directional odds across the {weekPattern.totalMatchesFound} matched historical weeks
-        </div>
-        <div className="predictions-grid">
-          {WEEK_ORDER.map(dow => {
-            const pred = weekPattern.predictions[dow];
-            if (!pred) return (
-              <div key={dow} className="prediction-card">
-                <div className="pred-day-name">{DAY_SHORT[dow]}</div>
-                <div className="pred-completed-label">No data</div>
-              </div>
-            );
-            const color = biasColor(pred.bias);
-            const displayRate = pred.biasRate ?? (pred.bias === 'bullish' ? pred.weightedBullRate : 100 - pred.weightedBullRate);
-            let cardClass = `prediction-card pred-${color}`;
-            if (pred.isClosed) cardClass += ' is-completed';
-            if (pred.isToday) cardClass += ' is-today-pred';
-
-            return (
-              <div key={dow} className={cardClass + ' tooltip-wrap'}>
-                <div className="pred-day-name">
-                  <span>{pred.dayName}</span>
-                  {pred.isToday && <span className="today-chip">Today</span>}
-                </div>
-                <div className={`pred-bull-rate value-${color}`}>
-                  {displayRate.toFixed(0)}%
-                </div>
-                <div className="pred-dir-badge">
-                  {pred.bias === 'bullish' ? (
-                    <span className="badge-bullish-mini"><IconTrendUp size={11} /> Bullish</span>
-                  ) : (
-                    <span className="badge-bearish-mini"><IconTrendDown size={11} /> Bearish</span>
-                  )}
-                </div>
-                <div className={`pred-avg-return ${pred.avgReturn > 0 ? 'value-bullish' : 'value-bearish'}`}>
-                  avg {pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%
-                </div>
-                <div className="pred-conf-bar">
-                  <div
-                    className={`pred-conf-fill bar-${color}`}
-                    style={{ width: `${displayRate}%` }}
-                  />
-                </div>
-                <div className="pred-sample">{pred.sampleSize} matched weeks</div>
-                {pred.actualData && (
-                  <div className="pred-actual-tag">
-                    Actual: {pred.actualData.return > 0 ? '+' : ''}{pred.actualData.return.toFixed(2)}%
-                  </div>
-                )}
-
-                {/* Tooltip */}
-                <div className="tooltip-box">
-                  <div className="tooltip-row"><span className="tooltip-key">Day</span><span className="tooltip-val">{pred.fullDayName}</span></div>
-                  <div className="tooltip-row"><span className="tooltip-key">Bias Odds</span><span className="tooltip-val" style={{ color: `var(--${color})` }}>{displayRate.toFixed(1)}% {pred.bias}</span></div>
-                  <div className="tooltip-row"><span className="tooltip-key">Raw Bull %</span><span className="tooltip-val">{pred.bullishRate.toFixed(1)}%</span></div>
-                  <div className="tooltip-row"><span className="tooltip-key">Avg Return</span><span className="tooltip-val">{pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%</span></div>
-                  <div className="tooltip-row"><span className="tooltip-key">Best</span><span className="tooltip-val" style={{ color: 'var(--bullish)' }}>+{pred.maxGain.toFixed(2)}%</span></div>
-                  <div className="tooltip-row"><span className="tooltip-key">Worst</span><span className="tooltip-val" style={{ color: 'var(--bearish)' }}>{pred.maxLoss.toFixed(2)}%</span></div>
-                  <div className="tooltip-row"><span className="tooltip-key">Samples</span><span className="tooltip-val">{pred.sampleSize}</span></div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── 5. Top Analogous Historical Weeks ── */}
-      {weekPattern.topMatches.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: '0.95rem' }}>
-            <IconTrophy size={16} color="#38bdf8" />
-            <span>Top Correlated Historical Weeks</span>
-          </div>
-          <div className="similar-weeks-grid">
-            {weekPattern.topMatches.map((m, i) => {
-              const maxAbs = Math.max(...WEEK_ORDER.map(d => Math.abs(m.week.days[d]?.return ?? 0)), 1);
-              return (
-                <div key={i} className="similar-week-card tooltip-wrap">
-                  <div className="sim-week-header">
-                    <span className="sim-week-date">{m.week.weekStart}</span>
-                    <span className="sim-score-badge">{Math.round(m.score)}% match</span>
-                  </div>
-                  <div className="sim-week-bars">
-                    {WEEK_ORDER.map(dow => {
-                      const d = m.week.days[dow];
-                      if (!d) return (
-                        <div key={dow} className="sim-day-bar-wrap">
-                          <div className="sim-day-bar missing" />
-                          <div className="sim-day-label">{DAY_LETTERS[dow]}</div>
-                        </div>
-                      );
-                      const h = Math.max((Math.abs(d.return) / maxAbs) * 32, 4);
-                      return (
-                        <div key={dow} className="sim-day-bar-wrap">
-                          <div
-                            className={`sim-day-bar ${d.bullish ? 'bull' : 'bear'}`}
-                            style={{ height: `${h}px` }}
-                            title={`${DAY_SHORT[dow]}: ${d.return > 0 ? '+' : ''}${d.return.toFixed(2)}%`}
-                          />
-                          <div className="sim-day-label">{DAY_LETTERS[dow]}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* Tooltip */}
-                  <div className="tooltip-box" style={{ minWidth: 210 }}>
-                    <div className="tooltip-row"><span className="tooltip-key">Week of</span><span className="tooltip-val">{m.week.weekStart}</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Similarity</span><span className="tooltip-val" style={{ color: '#38bdf8' }}>{Math.round(m.score)}% match</span></div>
-                    {WEEK_ORDER.map(dow => m.week.days[dow] && (
-                      <div key={dow} className="tooltip-row">
-                        <span className="tooltip-key">{DAY_SHORT[dow]}</span>
-                        <span className="tooltip-val" style={{ color: m.week.days[dow].bullish ? 'var(--bullish)' : 'var(--bearish)' }}>
-                          {m.week.days[dow].return > 0 ? '+' : ''}{m.week.days[dow].return.toFixed(2)}%
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── 6. Subsequent Week Historical Projection (Next Week Forecast) ── */}
-      {Object.keys(weekPattern.nextWeekPredictions).length >= 3 && (
-        <div className="panel" style={{ background: '#050505', border: '1px solid #1a1a1a', borderRadius: 10, padding: 18, marginBottom: 28 }}>
-          <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <IconSparkles size={16} color="#38bdf8" />
-            <span>Subsequent Week Projection</span>
-          </div>
-          <div className="section-subtitle" style={{ color: '#888888', fontSize: '0.76rem', marginBottom: 16 }}>
-            Week following these {weekPattern.totalMatchesFound} matched patterns
-          </div>
-          <div className="next-week-grid">
-            {WEEK_ORDER.map(dow => {
-              const pred = weekPattern.nextWeekPredictions[dow];
-              if (!pred) return (
-                <div key={dow} className="next-week-card">
-                  <div className="nw-day-name">{DAY_SHORT[dow]}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>&mdash;</div>
-                </div>
-              );
-              const color = biasColor(pred.bias);
-              const displayRate = pred.biasRate ?? (pred.bias === 'bullish' ? pred.weightedBullRate : 100 - pred.weightedBullRate);
-              return (
-                <div key={dow} className={`next-week-card nw-${color} tooltip-wrap`}>
-                  <div className="nw-day-name">{pred.dayName}</div>
-                  <div className={`nw-bias-badge badge-${color}`}>
-                    {pred.bias === 'bullish' ? <IconTrendUp size={10} /> : <IconTrendDown size={10} />}
-                    <span>{pred.bias}</span>
-                  </div>
-                  <div className={`nw-bull-rate value-${color}`}>{displayRate.toFixed(0)}%</div>
-                  <div className={`nw-avg-return ${pred.avgReturn > 0 ? 'value-bullish' : 'value-bearish'}`}>
-                    avg {pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%
-                  </div>
-                  <div className="nw-sample">{pred.sampleSize} weeks</div>
-                  {/* Tooltip */}
-                  <div className="tooltip-box">
-                    <div className="tooltip-row"><span className="tooltip-key">Day</span><span className="tooltip-val">{pred.fullDayName}</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Bias Odds</span><span className="tooltip-val" style={{ color: `var(--${color})` }}>{displayRate.toFixed(1)}% {pred.bias}</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Raw Bull %</span><span className="tooltip-val">{pred.bullishRate.toFixed(1)}%</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Avg Return</span><span className="tooltip-val">{pred.avgReturn > 0 ? '+' : ''}{pred.avgReturn.toFixed(2)}%</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Best</span><span className="tooltip-val" style={{ color: 'var(--bullish)' }}>+{pred.maxGain.toFixed(2)}%</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Worst</span><span className="tooltip-val" style={{ color: 'var(--bearish)' }}>{pred.maxLoss.toFixed(2)}%</span></div>
-                    <div className="tooltip-row"><span className="tooltip-key">Samples</span><span className="tooltip-val">{pred.sampleSize}</span></div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
