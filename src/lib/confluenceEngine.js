@@ -276,47 +276,52 @@ async function fetchCryptoKlineSeries(symbol, interval, limit) {
  * Returns clean candles with synthetic volume if volume is 0
  */
 async function fetchForexKlineSeries(yfSymbol) {
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfSymbol}?interval=1h&range=6mo`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        Accept: 'application/json',
-      },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    const result = json?.chart?.result?.[0];
-    if (!result || !Array.isArray(result.timestamp) || result.timestamp.length === 0) return null;
+  const hosts = ['https://query2.finance.yahoo.com', 'https://query1.finance.yahoo.com'];
+  for (const host of hosts) {
+    try {
+      const url = `${host}/v8/finance/chart/${yfSymbol}?interval=1h&range=60d`;
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(7000),
+      });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const result = json?.chart?.result?.[0];
+      if (!result || !Array.isArray(result.timestamp) || result.timestamp.length === 0) continue;
 
-    const timestamps = result.timestamp;
-    const q = result.indicators?.quote?.[0];
-    if (!q) return null;
+      const timestamps = result.timestamp;
+      const q = result.indicators?.quote?.[0];
+      if (!q) continue;
 
-    const candles1h = [];
-    for (let i = 0; i < timestamps.length; i++) {
-      const o = q.open?.[i];
-      const h = q.high?.[i];
-      const l = q.low?.[i];
-      const c = q.close?.[i];
-      const v = q.volume?.[i];
-      if (o != null && h != null && l != null && c != null && !Number.isNaN(c) && c > 0) {
-        candles1h.push({
-          time: timestamps[i] * 1000,
-          open: Number(o),
-          high: Number(h),
-          low: Number(l),
-          close: Number(c),
-          vol: Number(v && v > 0 ? v : 1), // synthetic volume 1 so VWAP weights properly
-        });
+      const candles1h = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        const o = q.open?.[i];
+        const h = q.high?.[i];
+        const l = q.low?.[i];
+        const c = q.close?.[i];
+        const v = q.volume?.[i];
+        if (o != null && h != null && l != null && c != null && !Number.isNaN(c) && c > 0) {
+          candles1h.push({
+            time: timestamps[i] * 1000,
+            open: Number(o),
+            high: Number(h),
+            low: Number(l),
+            close: Number(c),
+            vol: Number(v && v > 0 ? v : 1), // synthetic volume 1 so VWAP weights properly
+          });
+        }
       }
+      if (candles1h.length >= 200) {
+        return candles1h;
+      }
+    } catch (e) {
+      // try next host
     }
-    return candles1h.length >= 200 ? candles1h : null;
-  } catch (e) {
-    console.warn(`Forex fetch failed for ${yfSymbol}:`, e.message);
-    return null;
   }
+  return null;
 }
 
 /**
