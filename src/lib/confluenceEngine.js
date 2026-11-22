@@ -114,36 +114,47 @@ export async function fetchTopBinanceCoins(targetCount = TARGET_SCAN_COINS) {
   const binanceTickers = [];
 
   // 1. Fetch Binance 24hr Tickers (Source of Truth for Binance listing & impressive volume)
-  try {
-    const bRes = await fetch('https://data-api.binance.vision/api/v3/ticker/24hr', {
-      headers: { 'User-Agent': 'WolfConfluenceScanner/2.0' },
-      signal: AbortSignal.timeout(6000),
-    });
-    if (bRes.ok) {
-      const bList = await bRes.json();
-      if (Array.isArray(bList)) {
-        for (const t of bList) {
-          const sym = (t.symbol || '').toUpperCase();
-          if (!sym.endsWith('USDT')) continue;
-          if (EXCLUDED_STABLE_SYMBOLS.has(sym)) continue;
-          if (/(UP|DOWN|BEAR|BULL)USDT$/.test(sym)) continue;
+  const binanceEndpoints = [
+    'https://api.binance.com/api/v3/ticker/24hr',
+    'https://data-api.binance.vision/api/v3/ticker/24hr',
+    'https://fapi.binance.com/fapi/v1/ticker/24hr',
+  ];
 
-          const lastPrice = parseFloat(t.lastPrice);
-          const turnover24h = parseFloat(t.quoteVolume || 0);
+  for (const endpoint of binanceEndpoints) {
+    try {
+      const bRes = await fetch(endpoint, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (bRes.ok) {
+        const bList = await bRes.json();
+        if (Array.isArray(bList) && bList.length > 0) {
+          for (const t of bList) {
+            const sym = (t.symbol || '').toUpperCase();
+            if (!sym.endsWith('USDT')) continue;
+            if (EXCLUDED_STABLE_SYMBOLS.has(sym)) continue;
+            if (/(UP|DOWN|BEAR|BULL)USDT$/.test(sym)) continue;
 
-          // Strictly filter for impressive active volume (>= $5M USD 24h turnover)
-          if (!Number.isFinite(lastPrice) || lastPrice <= 0 || turnover24h < 5_000_000) continue;
+            const lastPrice = parseFloat(t.lastPrice);
+            const turnover24h = parseFloat(t.quoteVolume || 0);
 
-          binanceTickers.push({
-            symbol: sym,
-            lastPrice,
-            turnover24h,
-          });
+            // Strictly filter for impressive active volume (>= $5M USD 24h turnover)
+            if (!Number.isFinite(lastPrice) || lastPrice <= 0 || turnover24h < 5_000_000) continue;
+
+            binanceTickers.push({
+              symbol: sym,
+              lastPrice,
+              turnover24h,
+            });
+          }
+          if (binanceTickers.length > 0) {
+            break; // Successfully loaded from this endpoint
+          }
         }
       }
+    } catch (e) {
+      // Try next endpoint
     }
-  } catch (e) {
-    console.warn('Binance ticker fetch failed in confluenceEngine:', e.message);
   }
 
   binanceTickers.sort((a, b) => b.turnover24h - a.turnover24h);
@@ -272,7 +283,7 @@ async function fetchForexKlineSeries(yfSymbol) {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         Accept: 'application/json',
       },
-      signal: AbortSignal.timeout(5500),
+      signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -692,28 +703,32 @@ export async function scanAllEmaVwapConfluence() {
   }
 
   // 2. Scan Forex Pairs (EUR/USD, NZD/USD, EUR/NZD, USD/CAD, Gold, etc.)
-  const fxPromises = FOREX_PAIRS.map(async (fx) => {
-    const candles1h = await fetchForexKlineSeries(fx.yfSymbol);
-    if (!candles1h) return null;
-    return analyzeAssetConfluence(
-      {
-        ...fx,
-        assetType: 'forex',
-        decimals: fx.pipDecimals || 4,
-        isMajor: fx.symbol === 'EURUSD' || fx.symbol === 'GBPUSD' || fx.symbol === 'USDJPY',
-        isWatchlist: true,
-      },
-      candles1h,
-      null, // will aggregate 4h and 12h cleanly from 1h
-      null,
-      scanTime
-    );
-  });
+  const FX_BATCH = 4;
+  for (let i = 0; i < FOREX_PAIRS.length; i += FX_BATCH) {
+    const fxBatch = FOREX_PAIRS.slice(i, i + FX_BATCH);
+    const fxPromises = fxBatch.map(async (fx) => {
+      const candles1h = await fetchForexKlineSeries(fx.yfSymbol);
+      if (!candles1h) return null;
+      return analyzeAssetConfluence(
+        {
+          ...fx,
+          assetType: 'forex',
+          decimals: fx.pipDecimals || 4,
+          isMajor: fx.symbol === 'EURUSD' || fx.symbol === 'GBPUSD' || fx.symbol === 'USDJPY',
+          isWatchlist: true,
+        },
+        candles1h,
+        null, // will aggregate 4h and 12h cleanly from 1h
+        null,
+        scanTime
+      );
+    });
 
-  const fxSettled = await Promise.allSettled(fxPromises);
-  for (const r of fxSettled) {
-    if (r.status === 'fulfilled' && r.value) {
-      allAssets.push(r.value);
+    const fxSettled = await Promise.allSettled(fxPromises);
+    for (const r of fxSettled) {
+      if (r.status === 'fulfilled' && r.value) {
+        allAssets.push(r.value);
+      }
     }
   }
 
