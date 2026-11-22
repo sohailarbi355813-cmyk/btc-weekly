@@ -1,8 +1,9 @@
 import { ALTS_WHITELIST, MAJOR_SYMBOLS, WHITELIST_MAP } from './altsData.js';
 import { aggregateCandlesByMinutes } from './rsiScannerEngine.js';
 
-export const CONFLUENCE_ENGINE_VERSION = 2;
-export const CONFLUENCE_TIMEFRAMES = ['1h', '2h', '3h', '4h'];
+export const CONFLUENCE_ENGINE_VERSION = 3;
+export const CONFLUENCE_TIMEFRAMES = ['4h', '1d'];
+export const MAX_FOREX_DISTANCE_PIPS = 70; // User cutoff: Forex setups > 70 pips from EMA200 / VWAP are disqualified
 export const VWAP_ANCHORS = ['week', 'month', 'quarter', 'year'];
 export const VWAP_LABELS = {
   week: 'Weekly VWAP',
@@ -41,6 +42,7 @@ export const FOREX_PAIRS = [
 const EXCLUDED_STABLE_SYMBOLS = new Set([
   'USDCUSDT',
   'FDUSDUSDT',
+  'BFUSDUSDT',
   'TUSDUSDT',
   'USDEUSDT',
   'USD1USDT',
@@ -209,45 +211,52 @@ export async function fetchTopBinanceCoins(targetCount = TARGET_SCAN_COINS) {
 }
 
 /**
- * Fetch crypto klines from Binance Vision API with Bybit Linear fallback
+ * Fetch crypto klines from Binance API with Bybit Linear fallback
  */
 async function fetchCryptoKlineSeries(symbol, interval, limit) {
   const bIntervalMap = { '60': '1h', '240': '4h', '720': '12h', D: '1d' };
   const bInterval = bIntervalMap[interval] || '1h';
 
-  // 1. Binance Vision
-  try {
-    const bRes = await fetch(
-      `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${bInterval}&limit=${limit}`,
-      {
-        headers: { 'User-Agent': 'WolfConfluenceScanner/2.0' },
-        signal: AbortSignal.timeout(4500),
-      }
-    );
-    if (bRes.ok) {
-      const bList = await bRes.json();
-      if (Array.isArray(bList) && bList.length > 0) {
-        return bList.map((k) => ({
-          time: parseInt(k[0], 10),
-          open: parseFloat(k[1]),
-          high: parseFloat(k[2]),
-          low: parseFloat(k[3]),
-          close: parseFloat(k[4]),
-          vol: parseFloat(k[5] || 0),
-        }));
-      }
-    }
-  } catch (e) {}
+  // 1. Primary: Binance Official Spot API (fastest ~200-700ms)
+  // 2. Secondary: Binance Futures API
+  // 3. Fallback: Binance Vision
+  const binanceHosts = [
+    `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${bInterval}&limit=${limit}`,
+    `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${bInterval}&limit=${limit}`,
+    `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${bInterval}&limit=${limit}`,
+  ];
 
-  // 2. Bybit Linear Fallback
+  for (const ep of binanceHosts) {
+    try {
+      const bRes = await fetch(ep, {
+        headers: { 'User-Agent': 'WolfConfluenceScanner/3.0' },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (bRes.ok) {
+        const bList = await bRes.json();
+        if (Array.isArray(bList) && bList.length > 0) {
+          return bList.map((k) => ({
+            time: parseInt(k[0], 10),
+            open: parseFloat(k[1]),
+            high: parseFloat(k[2]),
+            low: parseFloat(k[3]),
+            close: parseFloat(k[4]),
+            vol: parseFloat(k[5] || 0),
+          }));
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 4. Bybit Linear Fallback
   try {
     const bybitIntervalMap = { '60': '60', '240': '240', '720': '720', D: 'D' };
     const byInterval = bybitIntervalMap[interval] || '60';
     const res = await fetch(
       `https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=${byInterval}&limit=${limit}`,
       {
-        headers: { 'User-Agent': 'WolfConfluenceScanner/2.0' },
-        signal: AbortSignal.timeout(4000),
+        headers: { 'User-Agent': 'WolfConfluenceScanner/3.0' },
+        signal: AbortSignal.timeout(3000),
       }
     );
     if (res.ok) {
@@ -272,20 +281,21 @@ async function fetchCryptoKlineSeries(symbol, interval, limit) {
 }
 
 /**
- * Fetch Forex 1h and 1d Klines from Yahoo Finance
+ * Fetch Forex 1h Klines from Yahoo Finance (used to aggregate into 4h)
  * Returns clean candles with synthetic volume if volume is 0
  */
-async function fetchForexKlineSeries(yfSymbol) {
+async function fetchForex1hKlineSeries(yfSymbol) {
   const hosts = ['https://query2.finance.yahoo.com', 'https://query1.finance.yahoo.com'];
   for (const host of hosts) {
     try {
       const url = `${host}/v8/finance/chart/${yfSymbol}?interval=1h&range=60d`;
       const res = await fetch(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(7000),
+        signal: AbortSignal.timeout(3500),
       });
       if (!res.ok) continue;
       const json = await res.json();
@@ -321,6 +331,100 @@ async function fetchForexKlineSeries(yfSymbol) {
       // try next host
     }
   }
+  return null;
+}
+
+/**
+ * Fetch Forex Daily Klines from Yahoo Finance with Frankfurter ECB fallback
+ */
+async function fetchForexDailySeries(yfSymbol, base, quote) {
+  const hosts = ['https://query2.finance.yahoo.com', 'https://query1.finance.yahoo.com'];
+  for (const host of hosts) {
+    try {
+      const url = `${host}/v8/finance/chart/${yfSymbol}?interval=1d&range=2y`;
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(3500),
+      });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const result = json?.chart?.result?.[0];
+      if (!result || !Array.isArray(result.timestamp) || result.timestamp.length === 0) continue;
+
+      const timestamps = result.timestamp;
+      const q = result.indicators?.quote?.[0];
+      if (!q) continue;
+
+      const candles1d = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        const o = q.open?.[i];
+        const h = q.high?.[i];
+        const l = q.low?.[i];
+        const c = q.close?.[i];
+        const v = q.volume?.[i];
+        if (o != null && h != null && l != null && c != null && !Number.isNaN(c) && c > 0) {
+          candles1d.push({
+            time: timestamps[i] * 1000,
+            open: Number(o),
+            high: Number(h),
+            low: Number(l),
+            close: Number(c),
+            vol: Number(v && v > 0 ? v : 1),
+          });
+        }
+      }
+      if (candles1d.length >= 200) {
+        return candles1d;
+      }
+    } catch (e) {
+      // try next host
+    }
+  }
+
+  // Fallback to Frankfurter for supported currency pairs
+  if (base && quote && base !== 'XAU') {
+    try {
+      const dNow = new Date();
+      const endStr = dNow.toISOString().slice(0, 10);
+      const startYear = dNow.getUTCFullYear() - 2;
+      const startStr = `${startYear}-01-01`;
+      const url = `https://api.frankfurter.app/${startStr}..${endStr}?from=${base}&to=${quote}`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const dates = Object.keys(json.rates || {}).sort();
+        if (dates.length >= 200) {
+          const candles1d = [];
+          for (let i = 0; i < dates.length; i++) {
+            const dt = dates[i];
+            const rate = json.rates[dt]?.[quote];
+            if (rate && Number.isFinite(rate)) {
+              const time = new Date(dt + 'T00:00:00Z').getTime();
+              candles1d.push({
+                time,
+                open: rate,
+                high: rate,
+                low: rate,
+                close: rate,
+                vol: 1,
+              });
+            }
+          }
+          if (candles1d.length >= 200) {
+            return candles1d;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   return null;
 }
 
@@ -457,37 +561,31 @@ function computeAnchoredVwap(anchorStart, candlesTf, candles4h, candles12h) {
 }
 
 /**
- * Analyze an asset (Crypto or Forex) across 1h, 2h, 3h, 4h for EMA 200 x Anchored VWAP confluence
+ * Analyze an asset (Crypto or Forex) across 4H & 1D (Daily) for EMA 200 x Anchored VWAP confluence
  * Computes exact ATR14, ATR%, price difference, and pip difference in accordance with its price.
+ * USER REQUIREMENT: Disqualifies any Forex pair where distance from CMP to confluence is > 70 pips.
  */
 export function analyzeAssetConfluence(
   asset,
-  candles1h,
   candles4h,
+  candles1d,
   candles12h,
   nowMs = Date.now()
 ) {
-  if (!candles1h || candles1h.length < 200) {
+  if (!candles4h || candles4h.length < 200) {
     return null;
   }
 
-  const candles2h = aggregateCandlesByMinutes(candles1h, 120, 2);
-  const candles3h = aggregateCandlesByMinutes(candles1h, 180, 3);
-  const candles4hFinal =
-    candles4h && candles4h.length >= 200
-      ? candles4h
-      : aggregateCandlesByMinutes(candles1h, 240, 4);
-
   const tfSeriesMap = {
-    '1h': candles1h,
-    '2h': candles2h,
-    '3h': candles3h,
-    '4h': candles4hFinal,
+    '4h': candles4h,
   };
+  if (candles1d && candles1d.length >= 200) {
+    tfSeriesMap['1d'] = candles1d;
+  }
 
   const spot =
-    candles1h[candles1h.length - 1]?.close ||
-    candles4hFinal[candles4hFinal.length - 1]?.close ||
+    candles4h[candles4h.length - 1]?.close ||
+    candles1d?.[candles1d.length - 1]?.close ||
     asset.lastPrice;
   if (!Number.isFinite(spot) || spot <= 0) return null;
 
@@ -517,7 +615,7 @@ export function analyzeAssetConfluence(
       const vwapVal = computeAnchoredVwap(
         anchors[anchorKey],
         tfCandles,
-        candles4hFinal,
+        candles4h,
         candles12h
       );
       vwaps[anchorKey] = vwapVal;
@@ -554,6 +652,11 @@ export function analyzeAssetConfluence(
       atrVal && atrVal > 0 ? Number((absDiffPrice / atrVal).toFixed(2)) : null;
     const cmpDistPips =
       asset.assetType === 'forex' ? Number((absDiffPrice * pipMultiplier).toFixed(1)) : null;
+
+    // HARD CUTOFF: Disqualify any Forex setup > 70 pips from confluence zone!
+    if (asset.assetType === 'forex' && (cmpDistPips === null || cmpDistPips > MAX_FOREX_DISTANCE_PIPS)) {
+      continue;
+    }
 
     // Volatility-aware testing zone (within 1.2% or within 0.5x ATR)
     const isTesting =
@@ -614,7 +717,7 @@ export function analyzeAssetConfluence(
   // Nearest context for majors
   let nearestContext = null;
   if (!bestMatch) {
-    const prefOrder = ['4h', '1h', '2h', '3h'];
+    const prefOrder = ['4h', '1d'];
     for (const tfId of prefOrder) {
       const tf = timeframes[tfId];
       if (!tf) continue;
@@ -678,25 +781,25 @@ export function analyzeAssetConfluence(
 }
 
 /**
- * Scan top actively traded Binance linear perpetuals AND liquid Forex pairs across 1h, 2h, 3h, 4h
+ * Scan top actively traded Binance linear perpetuals AND liquid Forex pairs across 4H & 1D
+ * Strict cutoff: Forex pairs > 70 pips from EMA200 / VWAP confluence are disqualified
  */
 export async function scanAllEmaVwapConfluence() {
   const scanTime = Date.now();
   const allAssets = [];
 
-  // 1. Scan Top Actively Traded Binance Crypto
+  // 1. Scan Top Actively Traded Binance Crypto on 4h & 1d
   const cryptoUniverse = await fetchTopBinanceCoins(TARGET_SCAN_COINS);
-  const BATCH_SIZE = 10;
+  const BATCH_SIZE = 15;
 
   for (let i = 0; i < cryptoUniverse.length; i += BATCH_SIZE) {
     const batch = cryptoUniverse.slice(i, i + BATCH_SIZE);
     const promises = batch.map(async (coin) => {
-      const [candles1h, candles4h, candles12h] = await Promise.all([
-        fetchCryptoKlineSeries(coin.symbol, '60', 1000),
-        fetchCryptoKlineSeries(coin.symbol, '240', 600),
-        fetchCryptoKlineSeries(coin.symbol, '720', 750),
+      const [candles4h, candles1d] = await Promise.all([
+        fetchCryptoKlineSeries(coin.symbol, '240', 500),
+        fetchCryptoKlineSeries(coin.symbol, 'D', 365),
       ]);
-      return analyzeAssetConfluence(coin, candles1h, candles4h, candles12h, scanTime);
+      return analyzeAssetConfluence(coin, candles4h, candles1d, null, scanTime);
     });
 
     const settled = await Promise.allSettled(promises);
@@ -707,13 +810,17 @@ export async function scanAllEmaVwapConfluence() {
     }
   }
 
-  // 2. Scan Forex Pairs (EUR/USD, NZD/USD, EUR/NZD, USD/CAD, Gold, etc.)
-  const FX_BATCH = 4;
+  // 2. Scan Forex Pairs (EUR/USD, NZD/USD, EUR/NZD, USD/CAD, Gold, etc.) on 4h & 1d
+  const FX_BATCH = 7;
   for (let i = 0; i < FOREX_PAIRS.length; i += FX_BATCH) {
     const fxBatch = FOREX_PAIRS.slice(i, i + FX_BATCH);
     const fxPromises = fxBatch.map(async (fx) => {
-      const candles1h = await fetchForexKlineSeries(fx.yfSymbol);
-      if (!candles1h) return null;
+      const [candles1h, candles1d] = await Promise.all([
+        fetchForex1hKlineSeries(fx.yfSymbol),
+        fetchForexDailySeries(fx.yfSymbol, fx.base, fx.quote),
+      ]);
+      if (!candles1h || candles1h.length < 200) return null;
+      const candles4h = aggregateCandlesByMinutes(candles1h, 240, 4);
       return analyzeAssetConfluence(
         {
           ...fx,
@@ -722,8 +829,8 @@ export async function scanAllEmaVwapConfluence() {
           isMajor: fx.symbol === 'EURUSD' || fx.symbol === 'GBPUSD' || fx.symbol === 'USDJPY',
           isWatchlist: true,
         },
-        candles1h,
-        null, // will aggregate 4h and 12h cleanly from 1h
+        candles4h,
+        candles1d,
         null,
         scanTime
       );

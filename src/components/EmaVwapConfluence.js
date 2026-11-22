@@ -6,7 +6,8 @@ import { IconLayers, IconRadar, IconRefresh } from '@/components/Icons';
 const SPREAD_OPTIONS = [0.2, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0];
 const CMP_PCT_OPTIONS = [null, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0];
 const CMP_ATR_OPTIONS = [null, 0.5, 1.0, 1.5, 2.0];
-const TF_ORDER = ['4h', '3h', '2h', '1h'];
+const CMP_PIP_OPTIONS = [null, 25, 50, 70];
+const TF_ORDER = ['4h', '1d'];
 const ANCHOR_ORDER = ['week', 'month', 'quarter', 'year'];
 const ANCHOR_SHORT = {
   week: 'W-VWAP',
@@ -124,6 +125,7 @@ function buildFilteredTfMatches(
     cmpMode = 'pct',
     maxCmpSpreadPct = null,
     maxCmpAtrMult = null,
+    maxCmpPips = null,
     selectedTf,
     selectedAnchor,
     zoneFilter,
@@ -164,10 +166,19 @@ function buildFilteredTfMatches(
         ? Number((absDiffPrice * coin.pipMultiplier).toFixed(1))
         : tf.cmpDistPips ?? null;
 
+    // HARD CUTOFF: Disqualify any Forex setup > 70 pips from confluence zone!
+    if (coin.assetType === 'forex' && (cmpDistPips === null || cmpDistPips > 70)) {
+      continue;
+    }
+
     // Filter by CMP distance based on active mode
     if (cmpMode === 'atr') {
       if (maxCmpAtrMult !== null) {
         if (cmpDistAtr === null || cmpDistAtr > maxCmpAtrMult) continue;
+      }
+    } else if (cmpMode === 'pips') {
+      if (maxCmpPips !== null && coin.assetType === 'forex') {
+        if (cmpDistPips === null || cmpDistPips > maxCmpPips) continue;
       }
     } else {
       if (maxCmpSpreadPct !== null && absSpotDistPct > maxCmpSpreadPct) continue;
@@ -230,10 +241,11 @@ export default function EmaVwapConfluence() {
   // Asset Class & Tolerances
   const [assetClassFilter, setAssetClassFilter] = useState('all'); // 'all' | 'crypto' | 'forex'
   const [maxSpreadPct, setMaxSpreadPct] = useState(2.0);
-  const [cmpMode, setCmpMode] = useState('pct'); // 'pct' | 'atr'
+  const [cmpMode, setCmpMode] = useState('pct'); // 'pct' | 'atr' | 'pips'
   const [maxCmpSpreadPct, setMaxCmpSpreadPct] = useState(null);
   const [maxCmpAtrMult, setMaxCmpAtrMult] = useState(null);
-  const [selectedTf, setSelectedTf] = useState('all'); // 'all' | '1h' | '2h' | '3h' | '4h'
+  const [maxCmpPips, setMaxCmpPips] = useState(null);
+  const [selectedTf, setSelectedTf] = useState('all'); // 'all' | '4h' | '1d'
   const [selectedAnchor, setSelectedAnchor] = useState('all'); // 'all' | 'week' | 'month' | 'quarter' | 'year'
   const [zoneFilter, setZoneFilter] = useState('all'); // 'all' | 'testing' | 'support' | 'resistance'
   const [onlyStacked, setOnlyStacked] = useState(false);
@@ -275,7 +287,7 @@ export default function EmaVwapConfluence() {
         setData({ success: true, status: st });
         setMessage({
           type: 'success',
-          text: `Scanned ${st.totalScanned || 0} assets (${st.cryptoCount || 0} liquid Crypto + ${st.forexCount || 0} Forex pairs) across 1h/2h/3h/4h — ${st.alignedCount || 0} have EMA 200 × Anchored VWAP alignment (≤${st.maxStoredSpreadPct || 3.5}%).`,
+          text: `Scanned ${st.totalScanned || 0} assets (${st.cryptoCount || 0} liquid Crypto + ${st.forexCount || 0} Forex pairs) across 4H & 1D (Daily) — ${st.alignedCount || 0} have EMA 200 × Anchored VWAP alignment (≤${st.maxStoredSpreadPct || 3.5}%, Forex strictly within ≤70 pips).`,
         });
       } else {
         setMessage({ type: 'error', text: json.error || 'EMA × VWAP confluence scan failed' });
@@ -307,6 +319,7 @@ export default function EmaVwapConfluence() {
         cmpMode,
         maxCmpSpreadPct,
         maxCmpAtrMult,
+        maxCmpPips,
         selectedTf: 'all',
         selectedAnchor: 'all',
         zoneFilter: 'all',
@@ -330,7 +343,7 @@ export default function EmaVwapConfluence() {
     }
 
     return { alignedAtTol, tightCount, stackedCount, cryptoAtTol, forexAtTol };
-  }, [alignedCoins, assetClassFilter, maxSpreadPct, cmpMode, maxCmpSpreadPct, maxCmpAtrMult]);
+  }, [alignedCoins, assetClassFilter, maxSpreadPct, cmpMode, maxCmpSpreadPct, maxCmpAtrMult, maxCmpPips]);
 
   // Displayed items with full dynamic filters
   const displayedItems = useMemo(() => {
@@ -352,6 +365,7 @@ export default function EmaVwapConfluence() {
         cmpMode,
         maxCmpSpreadPct,
         maxCmpAtrMult,
+        maxCmpPips,
         selectedTf,
         selectedAnchor,
         zoneFilter,
@@ -393,6 +407,7 @@ export default function EmaVwapConfluence() {
     cmpMode,
     maxCmpSpreadPct,
     maxCmpAtrMult,
+    maxCmpPips,
     selectedTf,
     selectedAnchor,
     zoneFilter,
@@ -462,12 +477,12 @@ export default function EmaVwapConfluence() {
                 fontFamily: 'var(--font-mono)',
               }}
             >
-              CRYPTO &amp; FOREX &middot; 1H / 2H / 3H / 4H
+              CRYPTO &amp; FOREX &middot; 4H &amp; 1D (DAILY)
             </span>
           </div>
 
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Scans actively traded Binance Crypto perps &amp; liquid Forex pairs where 200-MAR EMA 200 and Weekly / Monthly / Quarterly / Yearly Anchored VWAP (hlc3) align at the same price zone
+            Scans actively traded Binance Crypto perps &amp; liquid Forex pairs where 200-MAR EMA 200 and Weekly / Monthly / Quarterly / Yearly Anchored VWAP (hlc3) align at the same price zone (Forex strictly &le;70 pips from CMP)
           </div>
         </div>
 
@@ -534,6 +549,7 @@ export default function EmaVwapConfluence() {
               cmpMode,
               maxCmpSpreadPct,
               maxCmpAtrMult,
+              maxCmpPips,
               selectedTf: 'all',
               selectedAnchor: 'all',
               zoneFilter: 'all',
@@ -629,6 +645,7 @@ export default function EmaVwapConfluence() {
             setSelectedAnchor('all');
             setMaxCmpSpreadPct(null);
             setMaxCmpAtrMult(null);
+            setMaxCmpPips(null);
           }}
           style={{
             background: 'rgba(56, 189, 248, 0.10)',
@@ -863,7 +880,7 @@ export default function EmaVwapConfluence() {
             >
               TF:
             </span>
-            {['all', '1h', '2h', '3h', '4h'].map((tf) => (
+            {['all', '4h', '1d'].map((tf) => (
               <button
                 key={tf}
                 onClick={() => setSelectedTf(tf)}
@@ -886,7 +903,7 @@ export default function EmaVwapConfluence() {
           </div>
         </div>
 
-        {/* Row 1B: CMP Distance Proximity Filter (Percentage or ATR Volatility-Normalized) */}
+        {/* Row 1B: CMP Distance Proximity Filter (Percentage, ATR Volatility-Normalized, or Forex Pips) */}
         <div
           style={{
             display: 'flex',
@@ -903,7 +920,11 @@ export default function EmaVwapConfluence() {
               style={{
                 fontSize: '0.66rem',
                 color:
-                  (cmpMode === 'pct' ? maxCmpSpreadPct !== null : maxCmpAtrMult !== null)
+                  (cmpMode === 'pct'
+                    ? maxCmpSpreadPct !== null
+                    : cmpMode === 'atr'
+                    ? maxCmpAtrMult !== null
+                    : maxCmpPips !== null)
                     ? '#4ade80'
                     : 'var(--text-muted)',
                 fontFamily: 'var(--font-mono)',
@@ -958,6 +979,23 @@ export default function EmaVwapConfluence() {
               >
                 ATR PROPORTIONAL
               </button>
+              <button
+                onClick={() => setCmpMode('pips')}
+                style={{
+                  padding: '3px 7px',
+                  fontSize: '0.61rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  background: cmpMode === 'pips' ? '#818cf8' : 'transparent',
+                  color: cmpMode === 'pips' ? '#000000' : 'var(--text-secondary)',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+                title="Forex Pip distance (Pairs >70 pips are strictly disqualified)"
+              >
+                PIPS (FOREX)
+              </button>
             </div>
           </div>
 
@@ -1002,7 +1040,8 @@ export default function EmaVwapConfluence() {
                     </button>
                   );
                 })
-              : CMP_ATR_OPTIONS.map((mult) => {
+              : cmpMode === 'atr'
+              ? CMP_ATR_OPTIONS.map((mult) => {
                   const isSelected = maxCmpAtrMult === mult;
                   const isNone = mult === null;
                   return (
@@ -1037,6 +1076,44 @@ export default function EmaVwapConfluence() {
                       }}
                     >
                       {isNone ? 'None' : `≤${mult}x ATR`}
+                    </button>
+                  );
+                })
+              : CMP_PIP_OPTIONS.map((pips) => {
+                  const isSelected = maxCmpPips === pips;
+                  const isNone = pips === null;
+                  return (
+                    <button
+                      key={isNone ? 'none-pips' : pips}
+                      onClick={() => setMaxCmpPips(pips)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 5,
+                        fontSize: '0.66rem',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        background: isSelected
+                          ? isNone
+                            ? 'rgba(148, 163, 184, 0.22)'
+                            : '#818cf8'
+                          : 'var(--bg-card)',
+                        color: isSelected
+                          ? isNone
+                            ? '#ffffff'
+                            : '#000000'
+                          : 'var(--text-secondary)',
+                        border: `1px solid ${
+                          isSelected
+                            ? isNone
+                              ? '#94a3b8'
+                              : '#a5b4fc'
+                            : 'var(--border)'
+                        }`,
+                        cursor: 'pointer',
+                        touchAction: 'manipulation',
+                      }}
+                    >
+                      {isNone ? 'All (≤70p max)' : `≤${pips}p`}
                     </button>
                   );
                 })}
@@ -1192,7 +1269,11 @@ export default function EmaVwapConfluence() {
           <strong
             style={{
               color:
-                (cmpMode === 'pct' ? maxCmpSpreadPct !== null : maxCmpAtrMult !== null)
+                (cmpMode === 'pct'
+                  ? maxCmpSpreadPct !== null
+                  : cmpMode === 'atr'
+                  ? maxCmpAtrMult !== null
+                  : maxCmpPips !== null)
                   ? '#4ade80'
                   : 'var(--text-muted)',
             }}
@@ -1202,9 +1283,13 @@ export default function EmaVwapConfluence() {
               ? maxCmpSpreadPct === null
                 ? 'NONE'
                 : `≤${maxCmpSpreadPct.toFixed(1)}%`
-              : maxCmpAtrMult === null
-              ? 'NONE'
-              : `≤${maxCmpAtrMult}x ATR`}
+              : cmpMode === 'atr'
+              ? maxCmpAtrMult === null
+                ? 'NONE'
+                : `≤${maxCmpAtrMult}x ATR`
+              : maxCmpPips === null
+              ? 'ALL (≤70P MAX)'
+              : `≤${maxCmpPips}P`}
           </strong>{' '}
           &middot; TF: {selectedTf.toUpperCase()} &middot; VWAP: {selectedAnchor.toUpperCase()}
         </span>
@@ -1225,7 +1310,7 @@ export default function EmaVwapConfluence() {
           }}
         >
           <IconRadar size={28} color="var(--accent)" className="spin-icon" style={{ marginBottom: 10, opacity: 0.8 }} />
-          <div>Scanning liquid Binance Crypto &amp; Forex pairs across 1h / 2h / 3h / 4h for EMA 200 &times; VWAP confluence...</div>
+          <div>Scanning liquid Binance Crypto &amp; Forex pairs across 4H &amp; 1D (Daily) for EMA 200 &times; VWAP confluence (Forex strictly &le;70 pips)...</div>
         </div>
       ) : displayedItems.length === 0 ? (
         <div
@@ -1250,6 +1335,7 @@ export default function EmaVwapConfluence() {
               setAssetClassFilter('all');
               setMaxCmpSpreadPct(null);
               setMaxCmpAtrMult(null);
+              setMaxCmpPips(null);
               setMaxSpreadPct(2.0);
               setSelectedTf('all');
               setSelectedAnchor('all');
