@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { IconLayers, IconRadar, IconRefresh } from '@/components/Icons';
 
-const SPREAD_OPTIONS = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0];
-const CMP_SPREAD_OPTIONS = [null, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0];
+const SPREAD_OPTIONS = [0.2, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0];
+const CMP_PCT_OPTIONS = [null, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0];
+const CMP_ATR_OPTIONS = [null, 0.5, 1.0, 1.5, 2.0];
 const TF_ORDER = ['4h', '3h', '2h', '1h'];
 const ANCHOR_ORDER = ['week', 'month', 'quarter', 'year'];
 const ANCHOR_SHORT = {
@@ -14,10 +15,26 @@ const ANCHOR_SHORT = {
   year: 'Y-VWAP',
 };
 
-function formatCoinPrice(n, decimals = 4) {
+function formatAssetPrice(n, asset) {
   if (n === null || n === undefined) return '--';
   const num = Number(n);
   if (!Number.isFinite(num) || num <= 0) return '--';
+  const decimals = asset?.decimals !== undefined ? Number(asset.decimals) : 4;
+
+  if (asset?.assetType === 'forex') {
+    if (asset.symbol === 'XAUUSD') {
+      return (
+        '$' +
+        num.toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      );
+    }
+    return num.toFixed(decimals);
+  }
+
+  // Crypto
   if (num >= 1000) {
     return (
       '$' +
@@ -27,7 +44,7 @@ function formatCoinPrice(n, decimals = 4) {
       })
     );
   }
-  const d = Math.min(Math.max(decimals !== undefined ? Number(decimals) : 4, 2), 6);
+  const d = Math.min(Math.max(decimals, 2), 6);
   return '$' + num.toFixed(d);
 }
 
@@ -66,11 +83,16 @@ function getRibbonStyle(ribbonColor) {
   }
 }
 
-function getZoneRoleMeta(zoneRole, distFromSpotPct) {
+function getZoneRoleMeta(zoneRole, distFromSpotPct, cmpDistPips = null) {
   const sign = distFromSpotPct > 0 ? '+' : '';
+  const distText =
+    cmpDistPips !== null
+      ? `${distFromSpotPct > 0 ? '+' : '-'}${cmpDistPips}p (${sign}${distFromSpotPct}%)`
+      : `${sign}${distFromSpotPct}%`;
+
   if (zoneRole === 'TESTING') {
     return {
-      label: `TESTING NOW (${sign}${distFromSpotPct}%)`,
+      label: `TESTING NOW (${distText})`,
       color: '#facc15',
       bg: 'rgba(234, 179, 8, 0.15)',
       border: 'rgba(234, 179, 8, 0.45)',
@@ -79,7 +101,7 @@ function getZoneRoleMeta(zoneRole, distFromSpotPct) {
   }
   if (zoneRole === 'RESISTANCE') {
     return {
-      label: `RESISTANCE (${sign}${distFromSpotPct}%)`,
+      label: `RESISTANCE (${distText})`,
       color: '#f87171',
       bg: 'rgba(239, 68, 68, 0.13)',
       border: 'rgba(239, 68, 68, 0.42)',
@@ -87,7 +109,7 @@ function getZoneRoleMeta(zoneRole, distFromSpotPct) {
     };
   }
   return {
-    label: `SUPPORT (${sign}${distFromSpotPct}%)`,
+    label: `SUPPORT (${distText})`,
     color: '#4ade80',
     bg: 'rgba(34, 197, 94, 0.13)',
     border: 'rgba(34, 197, 94, 0.42)',
@@ -97,7 +119,16 @@ function getZoneRoleMeta(zoneRole, distFromSpotPct) {
 
 function buildFilteredTfMatches(
   coin,
-  { maxSpreadPct, maxCmpSpreadPct = null, selectedTf, selectedAnchor, zoneFilter, onlyStacked }
+  {
+    maxSpreadPct,
+    cmpMode = 'pct',
+    maxCmpSpreadPct = null,
+    maxCmpAtrMult = null,
+    selectedTf,
+    selectedAnchor,
+    zoneFilter,
+    onlyStacked,
+  }
 ) {
   const tfCandidates = selectedTf === 'all' ? TF_ORDER : [selectedTf];
   const matches = [];
@@ -123,11 +154,35 @@ function buildFilteredTfMatches(
     const clusterMid = (clusterLow + clusterHigh) / 2;
     const distFromSpotPct = Number((((clusterMid - coin.price) / coin.price) * 100).toFixed(2));
     const absSpotDistPct = Number(Math.abs(distFromSpotPct).toFixed(2));
+    const absDiffPrice = Number(Math.abs(clusterMid - coin.price).toFixed(coin.decimals || 4));
 
-    if (maxCmpSpreadPct !== null && absSpotDistPct > maxCmpSpreadPct) continue;
+    const atrVal = tf.atr;
+    const cmpDistAtr =
+      atrVal && atrVal > 0 ? Number((absDiffPrice / atrVal).toFixed(2)) : tf.cmpDistAtr ?? null;
+    const cmpDistPips =
+      coin.assetType === 'forex' && coin.pipMultiplier
+        ? Number((absDiffPrice * coin.pipMultiplier).toFixed(1))
+        : tf.cmpDistPips ?? null;
 
-    const zoneRole =
-      absSpotDistPct <= 1.5 ? 'TESTING' : distFromSpotPct > 0 ? 'RESISTANCE' : 'SUPPORT';
+    // Filter by CMP distance based on active mode
+    if (cmpMode === 'atr') {
+      if (maxCmpAtrMult !== null) {
+        if (cmpDistAtr === null || cmpDistAtr > maxCmpAtrMult) continue;
+      }
+    } else {
+      if (maxCmpSpreadPct !== null && absSpotDistPct > maxCmpSpreadPct) continue;
+    }
+
+    const isTesting =
+      cmpDistAtr !== null
+        ? cmpDistAtr <= 0.6
+        : absSpotDistPct <= (coin.assetType === 'forex' ? 0.35 : 1.5);
+
+    const zoneRole = isTesting
+      ? 'TESTING'
+      : distFromSpotPct > 0
+      ? 'RESISTANCE'
+      : 'SUPPORT';
 
     if (zoneFilter === 'testing' && zoneRole !== 'TESTING') continue;
     if (zoneFilter === 'support' && zoneRole !== 'SUPPORT') continue;
@@ -140,6 +195,8 @@ function buildFilteredTfMatches(
       ribbonColor: tf.ribbonColor,
       ribbonLabel: tf.ribbonLabel,
       emaSlopePct: tf.emaSlopePct,
+      atr: tf.atr,
+      atrPct: tf.atrPct,
       vwaps: tf.vwaps,
       matchingVwaps,
       indicatorCount,
@@ -147,8 +204,11 @@ function buildFilteredTfMatches(
       clusterLow,
       clusterHigh,
       clusterMid,
+      absDiffPrice,
       distFromSpotPct,
       absSpotDistPct,
+      cmpDistAtr,
+      cmpDistPips,
       zoneRole,
     });
   }
@@ -167,9 +227,12 @@ export default function EmaVwapConfluence() {
   const [scanningNow, setScanningNow] = useState(false);
   const [message, setMessage] = useState(null);
 
-  // Filter State (default <= 2.0% indicator spread; CMP spread defaults to null / None)
+  // Asset Class & Tolerances
+  const [assetClassFilter, setAssetClassFilter] = useState('all'); // 'all' | 'crypto' | 'forex'
   const [maxSpreadPct, setMaxSpreadPct] = useState(2.0);
+  const [cmpMode, setCmpMode] = useState('pct'); // 'pct' | 'atr'
   const [maxCmpSpreadPct, setMaxCmpSpreadPct] = useState(null);
+  const [maxCmpAtrMult, setMaxCmpAtrMult] = useState(null);
   const [selectedTf, setSelectedTf] = useState('all'); // 'all' | '1h' | '2h' | '3h' | '4h'
   const [selectedAnchor, setSelectedAnchor] = useState('all'); // 'all' | 'week' | 'month' | 'quarter' | 'year'
   const [zoneFilter, setZoneFilter] = useState('all'); // 'all' | 'testing' | 'support' | 'resistance'
@@ -212,7 +275,7 @@ export default function EmaVwapConfluence() {
         setData({ success: true, status: st });
         setMessage({
           type: 'success',
-          text: `Scanned ${st.totalScanned || 0} linear perpetuals across 1h/2h/3h/4h — ${st.alignedCount || 0} coins have EMA 200 × Anchored VWAP alignment (≤${st.maxStoredSpreadPct || 3}%).`,
+          text: `Scanned ${st.totalScanned || 0} assets (${st.cryptoCount || 0} liquid Crypto + ${st.forexCount || 0} Forex pairs) across 1h/2h/3h/4h — ${st.alignedCount || 0} have EMA 200 × Anchored VWAP alignment (≤${st.maxStoredSpreadPct || 3.5}%).`,
         });
       } else {
         setMessage({ type: 'error', text: json.error || 'EMA × VWAP confluence scan failed' });
@@ -226,45 +289,57 @@ export default function EmaVwapConfluence() {
   };
 
   const status = data?.status || {};
-  const totalScanned = status.totalScanned || status.totalUniverse || 100;
+  const totalScanned = status.totalScanned || status.totalUniverse || 89;
   const majorsContext = status.majorsContext || [];
   const alignedCoins = status.alignedCoins || [];
 
-  // Summary counts dynamically computed for the active tolerance (ignoring search query)
+  // Summary counts dynamically computed for the active tolerance & asset filter
   const toleranceStats = useMemo(() => {
     let alignedAtTol = 0;
     let tightCount = 0;
     let stackedCount = 0;
+    let cryptoAtTol = 0;
+    let forexAtTol = 0;
 
     for (const coin of alignedCoins) {
       const matchesAtTol = buildFilteredTfMatches(coin, {
         maxSpreadPct,
+        cmpMode,
         maxCmpSpreadPct,
+        maxCmpAtrMult,
         selectedTf: 'all',
         selectedAnchor: 'all',
         zoneFilter: 'all',
         onlyStacked: false,
       });
+
       if (matchesAtTol.length > 0) {
-        alignedAtTol += 1;
-        if (matchesAtTol.some((m) => m.tightestSpreadPct <= 1.0)) {
-          tightCount += 1;
-        }
-        if (matchesAtTol.some((m) => m.indicatorCount >= 3)) {
-          stackedCount += 1;
+        if (coin.assetType === 'forex') forexAtTol += 1;
+        else cryptoAtTol += 1;
+
+        if (assetClassFilter === 'all' || coin.assetType === assetClassFilter) {
+          alignedAtTol += 1;
+          if (matchesAtTol.some((m) => m.tightestSpreadPct <= 1.0)) {
+            tightCount += 1;
+          }
+          if (matchesAtTol.some((m) => m.indicatorCount >= 3)) {
+            stackedCount += 1;
+          }
         }
       }
     }
 
-    return { alignedAtTol, tightCount, stackedCount };
-  }, [alignedCoins, maxSpreadPct, maxCmpSpreadPct]);
+    return { alignedAtTol, tightCount, stackedCount, cryptoAtTol, forexAtTol };
+  }, [alignedCoins, assetClassFilter, maxSpreadPct, cmpMode, maxCmpSpreadPct, maxCmpAtrMult]);
 
-  // Displayed coins with full dynamic TF + Anchor + Ind Spread + CMP Spread + Zone + Search filtering
+  // Displayed items with full dynamic filters
   const displayedItems = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     const out = [];
 
     for (const coin of alignedCoins) {
+      if (assetClassFilter !== 'all' && coin.assetType !== assetClassFilter) continue;
+
       if (q) {
         const matchSym = coin.symbol?.toLowerCase().includes(q);
         const matchDisp = coin.displaySymbol?.toLowerCase().includes(q);
@@ -274,7 +349,9 @@ export default function EmaVwapConfluence() {
 
       const matchingEntries = buildFilteredTfMatches(coin, {
         maxSpreadPct,
+        cmpMode,
         maxCmpSpreadPct,
+        maxCmpAtrMult,
         selectedTf,
         selectedAnchor,
         zoneFilter,
@@ -310,9 +387,12 @@ export default function EmaVwapConfluence() {
     return out;
   }, [
     alignedCoins,
+    assetClassFilter,
     searchQuery,
     maxSpreadPct,
+    cmpMode,
     maxCmpSpreadPct,
+    maxCmpAtrMult,
     selectedTf,
     selectedAnchor,
     zoneFilter,
@@ -382,12 +462,12 @@ export default function EmaVwapConfluence() {
                 fontFamily: 'var(--font-mono)',
               }}
             >
-              TOP {totalScanned} PERPS &middot; 1H / 2H / 3H / 4H
+              CRYPTO &amp; FOREX &middot; 1H / 2H / 3H / 4H
             </span>
           </div>
 
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Finds coins where 200-MAR EMA 200 and Weekly / Monthly / Quarterly / Yearly Anchored VWAP (hlc3) fall at the same price level on the same timeframe
+            Scans actively traded Binance Crypto perps &amp; liquid Forex pairs where 200-MAR EMA 200 and Weekly / Monthly / Quarterly / Yearly Anchored VWAP (hlc3) align at the same price zone
           </div>
         </div>
 
@@ -407,6 +487,7 @@ export default function EmaVwapConfluence() {
             display: 'flex',
             alignItems: 'center',
             gap: 6,
+            touchAction: 'manipulation',
           }}
         >
           <IconRefresh size={12} className={scanningNow ? 'spin-icon' : ''} color="#ffffff" />
@@ -450,13 +531,18 @@ export default function EmaVwapConfluence() {
           {majorsContext.map((m) => {
             const activeMatches = buildFilteredTfMatches(m, {
               maxSpreadPct,
+              cmpMode,
               maxCmpSpreadPct,
+              maxCmpAtrMult,
               selectedTf: 'all',
               selectedAnchor: 'all',
               zoneFilter: 'all',
               onlyStacked: false,
             });
             const mBest = activeMatches[0] || null;
+            const tvUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(
+              m.tvSymbol || `BINANCE:${m.symbol}`
+            )}`;
 
             return (
               <div
@@ -483,10 +569,10 @@ export default function EmaVwapConfluence() {
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#ffffff' }}>
-                      {formatCoinPrice(m.price, m.decimals)}
+                      {formatAssetPrice(m.price, m)}
                     </span>
                     <a
-                      href={`https://www.tradingview.com/chart/?symbol=BYBIT:${m.symbol}.P`}
+                      href={tvUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -504,16 +590,16 @@ export default function EmaVwapConfluence() {
                 {mBest ? (
                   <div style={{ fontSize: '0.63rem', color: '#4ade80', fontWeight: 700, lineHeight: 1.4 }}>
                     CONFLUENCE {mBest.timeframe.toUpperCase()}: EMA 200 (
-                    {formatCoinPrice(mBest.ema200, m.decimals)}) +{' '}
+                    {formatAssetPrice(mBest.ema200, m)}) +{' '}
                     {mBest.matchingVwaps.map((v) => v.shortLabel).join(', ')} (
                     {mBest.tightestSpreadPct}%)
                   </div>
                 ) : m.nearestContext ? (
                   <div style={{ fontSize: '0.61rem', color: '#94a3b8', lineHeight: 1.4 }}>
                     Nearest {m.nearestContext.timeframe.toUpperCase()}: EMA 200{' '}
-                    {formatCoinPrice(m.nearestContext.ema200, m.decimals)} vs{' '}
+                    {formatAssetPrice(m.nearestContext.ema200, m)} vs{' '}
                     {m.nearestContext.vwapLabel}{' '}
-                    {formatCoinPrice(m.nearestContext.vwapPrice, m.decimals)} (
+                    {formatAssetPrice(m.nearestContext.vwapPrice, m)} (
                     <span style={{ color: '#cbd5e1' }}>{m.nearestContext.spreadPct}%</span>)
                   </div>
                 ) : (
@@ -542,6 +628,7 @@ export default function EmaVwapConfluence() {
             setSelectedTf('all');
             setSelectedAnchor('all');
             setMaxCmpSpreadPct(null);
+            setMaxCmpAtrMult(null);
           }}
           style={{
             background: 'rgba(56, 189, 248, 0.10)',
@@ -560,7 +647,9 @@ export default function EmaVwapConfluence() {
             </span>
           </div>
           <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            EMA 200 + &ge;1 Anchored VWAP
+            {assetClassFilter === 'all'
+              ? `${toleranceStats.cryptoAtTol} Crypto · ${toleranceStats.forexAtTol} Forex`
+              : 'EMA 200 + ≥1 Anchored VWAP'}
           </div>
         </div>
 
@@ -620,16 +709,89 @@ export default function EmaVwapConfluence() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.70rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-              UNIVERSE SCANNED
+              MARKET UNIVERSE
             </span>
             <span style={{ fontSize: '1.35rem', fontWeight: 900, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
               {totalScanned}
             </span>
           </div>
           <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Last scan: <strong style={{ color: 'var(--text-primary)' }}>{lastScanDateStr}</strong>
+            {status.cryptoCount || 75} Crypto &middot; {status.forexCount || 14} Forex
           </div>
         </div>
+      </div>
+
+      {/* Asset Class Filter Selector (Crypto vs Forex vs All) */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'wrap',
+          marginBottom: 10,
+          padding: '8px 12px',
+          background: '#07070b',
+          border: '1px solid #1f1f2a',
+          borderRadius: 8,
+        }}
+      >
+        <span
+          style={{
+            fontSize: '0.66rem',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 700,
+          }}
+        >
+          MARKET:
+        </span>
+        {[
+          { id: 'all', label: 'ALL MARKETS', count: toleranceStats.alignedAtTol },
+          { id: 'crypto', label: 'CRYPTO (BINANCE)', count: toleranceStats.cryptoAtTol },
+          { id: 'forex', label: 'FOREX (MAJORS & CROSSES)', count: toleranceStats.forexAtTol },
+        ].map((m) => {
+          const isSel = assetClassFilter === m.id;
+          return (
+            <button
+              key={m.id}
+              onClick={() => setAssetClassFilter(m.id)}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 6,
+                fontSize: '0.68rem',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 800,
+                background: isSel
+                  ? m.id === 'forex'
+                    ? '#6366f1'
+                    : m.id === 'crypto'
+                    ? 'var(--accent)'
+                    : '#0284c7'
+                  : 'var(--bg-card)',
+                color: isSel ? '#ffffff' : 'var(--text-secondary)',
+                border: `1px solid ${isSel ? 'transparent' : 'var(--border)'}`,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                touchAction: 'manipulation',
+              }}
+            >
+              <span>{m.label}</span>
+              <span
+                style={{
+                  fontSize: '0.60rem',
+                  padding: '1px 5px',
+                  borderRadius: 3,
+                  background: isSel ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.08)',
+                  color: isSel ? '#ffffff' : 'var(--text-muted)',
+                }}
+              >
+                {m.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Controls Bar 1: Indicator Spread, CMP Spread & Timeframe */}
@@ -646,6 +808,7 @@ export default function EmaVwapConfluence() {
           borderRadius: 8,
         }}
       >
+        {/* Row 1A: Indicator Spread & Timeframe */}
         <div
           style={{
             display: 'flex',
@@ -723,66 +886,161 @@ export default function EmaVwapConfluence() {
           </div>
         </div>
 
+        {/* Row 1B: CMP Distance Proximity Filter (Percentage or ATR Volatility-Normalized) */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 5,
+            gap: 8,
             flexWrap: 'wrap',
             paddingTop: 8,
             borderTop: '1px dashed rgba(255, 255, 255, 0.08)',
             minWidth: 0,
           }}
         >
-          <span
-            style={{
-              fontSize: '0.66rem',
-              color: maxCmpSpreadPct !== null ? '#4ade80' : 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-              fontWeight: 700,
-            }}
-            title="Optional max distance from Current Market Price (CMP) to the EMA-VWAP confluence cluster"
-          >
-            CMP SPREAD:
-          </span>
-          {CMP_SPREAD_OPTIONS.map((pct) => {
-            const isSelected = maxCmpSpreadPct === pct;
-            const isNone = pct === null;
-            return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span
+              style={{
+                fontSize: '0.66rem',
+                color:
+                  (cmpMode === 'pct' ? maxCmpSpreadPct !== null : maxCmpAtrMult !== null)
+                    ? '#4ade80'
+                    : 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 700,
+              }}
+              title="Filter distance from Current Market Price (CMP) to confluence zone"
+            >
+              CMP DISTANCE:
+            </span>
+
+            {/* Mode Selector Toggle */}
+            <div
+              style={{
+                display: 'inline-flex',
+                background: '#09090f',
+                border: '1px solid #222230',
+                borderRadius: 5,
+                padding: 1,
+              }}
+            >
               <button
-                key={isNone ? 'none' : pct}
-                onClick={() => setMaxCmpSpreadPct(pct)}
+                onClick={() => setCmpMode('pct')}
                 style={{
-                  padding: '5px 8px',
-                  borderRadius: 5,
-                  fontSize: '0.67rem',
+                  padding: '3px 7px',
+                  fontSize: '0.61rem',
                   fontFamily: 'var(--font-mono)',
                   fontWeight: 700,
-                  background: isSelected
-                    ? isNone
-                      ? 'rgba(148, 163, 184, 0.22)'
-                      : '#22c55e'
-                    : 'var(--bg-card)',
-                  color: isSelected
-                    ? isNone
-                      ? '#ffffff'
-                      : '#000000'
-                    : 'var(--text-secondary)',
-                  border: `1px solid ${
-                    isSelected
-                      ? isNone
-                        ? '#94a3b8'
-                        : '#4ade80'
-                      : 'var(--border)'
-                  }`,
+                  background: cmpMode === 'pct' ? 'var(--accent)' : 'transparent',
+                  color: cmpMode === 'pct' ? '#000000' : 'var(--text-secondary)',
+                  border: 'none',
+                  borderRadius: 4,
                   cursor: 'pointer',
-                  touchAction: 'manipulation',
                 }}
+                title="Distance measured as % of price"
               >
-                {isNone ? 'None' : `≤${pct.toFixed(1)}%`}
+                % DISTANCE
               </button>
-            );
-          })}
+              <button
+                onClick={() => setCmpMode('atr')}
+                style={{
+                  padding: '3px 7px',
+                  fontSize: '0.61rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  background: cmpMode === 'atr' ? '#eab308' : 'transparent',
+                  color: cmpMode === 'atr' ? '#000000' : 'var(--text-secondary)',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+                title="Normalizes distance according to each asset's price & volatility (ATR)"
+              >
+                ATR PROPORTIONAL
+              </button>
+            </div>
+          </div>
+
+          {/* Active Mode Filter Options */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+            {cmpMode === 'pct'
+              ? CMP_PCT_OPTIONS.map((pct) => {
+                  const isSelected = maxCmpSpreadPct === pct;
+                  const isNone = pct === null;
+                  return (
+                    <button
+                      key={isNone ? 'none-pct' : pct}
+                      onClick={() => setMaxCmpSpreadPct(pct)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 5,
+                        fontSize: '0.66rem',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        background: isSelected
+                          ? isNone
+                            ? 'rgba(148, 163, 184, 0.22)'
+                            : '#22c55e'
+                          : 'var(--bg-card)',
+                        color: isSelected
+                          ? isNone
+                            ? '#ffffff'
+                            : '#000000'
+                          : 'var(--text-secondary)',
+                        border: `1px solid ${
+                          isSelected
+                            ? isNone
+                              ? '#94a3b8'
+                              : '#4ade80'
+                            : 'var(--border)'
+                        }`,
+                        cursor: 'pointer',
+                        touchAction: 'manipulation',
+                      }}
+                    >
+                      {isNone ? 'None' : `≤${pct.toFixed(1)}%`}
+                    </button>
+                  );
+                })
+              : CMP_ATR_OPTIONS.map((mult) => {
+                  const isSelected = maxCmpAtrMult === mult;
+                  const isNone = mult === null;
+                  return (
+                    <button
+                      key={isNone ? 'none-atr' : mult}
+                      onClick={() => setMaxCmpAtrMult(mult)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 5,
+                        fontSize: '0.66rem',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        background: isSelected
+                          ? isNone
+                            ? 'rgba(148, 163, 184, 0.22)'
+                            : '#eab308'
+                          : 'var(--bg-card)',
+                        color: isSelected
+                          ? isNone
+                            ? '#ffffff'
+                            : '#000000'
+                          : 'var(--text-secondary)',
+                        border: `1px solid ${
+                          isSelected
+                            ? isNone
+                              ? '#94a3b8'
+                              : '#facc15'
+                            : 'var(--border)'
+                        }`,
+                        cursor: 'pointer',
+                        touchAction: 'manipulation',
+                      }}
+                    >
+                      {isNone ? 'None' : `≤${mult}x ATR`}
+                    </button>
+                  );
+                })}
+          </div>
         </div>
       </div>
 
@@ -831,7 +1089,7 @@ export default function EmaVwapConfluence() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           {[
             { id: 'all', label: 'All Zones' },
-            { id: 'testing', label: 'Testing (±1.5%)' },
+            { id: 'testing', label: 'Testing' },
             { id: 'support', label: 'Support' },
             { id: 'resistance', label: 'Resistance' },
           ].map((z) => (
@@ -875,7 +1133,7 @@ export default function EmaVwapConfluence() {
         <div style={{ flex: '1 1 200px', maxWidth: 280, position: 'relative' }}>
           <input
             type="text"
-            placeholder="Search coin (e.g. INJ, SOL, BTC)..."
+            placeholder="Search coin / pair (e.g. EUR, BTC, INJ)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
@@ -931,8 +1189,22 @@ export default function EmaVwapConfluence() {
         </span>
         <span>
           IND &le;{maxSpreadPct.toFixed(1)}% &middot;{' '}
-          <strong style={{ color: maxCmpSpreadPct !== null ? '#4ade80' : 'var(--text-muted)' }}>
-            CMP: {maxCmpSpreadPct === null ? 'NONE' : `≤${maxCmpSpreadPct.toFixed(1)}%`}
+          <strong
+            style={{
+              color:
+                (cmpMode === 'pct' ? maxCmpSpreadPct !== null : maxCmpAtrMult !== null)
+                  ? '#4ade80'
+                  : 'var(--text-muted)',
+            }}
+          >
+            CMP:{' '}
+            {cmpMode === 'pct'
+              ? maxCmpSpreadPct === null
+                ? 'NONE'
+                : `≤${maxCmpSpreadPct.toFixed(1)}%`
+              : maxCmpAtrMult === null
+              ? 'NONE'
+              : `≤${maxCmpAtrMult}x ATR`}
           </strong>{' '}
           &middot; TF: {selectedTf.toUpperCase()} &middot; VWAP: {selectedAnchor.toUpperCase()}
         </span>
@@ -953,7 +1225,7 @@ export default function EmaVwapConfluence() {
           }}
         >
           <IconRadar size={28} color="var(--accent)" className="spin-icon" style={{ marginBottom: 10, opacity: 0.8 }} />
-          <div>Scanning Top 100 Perps across 1h / 2h / 3h / 4h for EMA 200 &times; Anchored VWAP confluence...</div>
+          <div>Scanning liquid Binance Crypto &amp; Forex pairs across 1h / 2h / 3h / 4h for EMA 200 &times; VWAP confluence...</div>
         </div>
       ) : displayedItems.length === 0 ? (
         <div
@@ -969,13 +1241,15 @@ export default function EmaVwapConfluence() {
           }}
         >
           <IconLayers size={28} color="var(--accent)" style={{ marginBottom: 8, opacity: 0.6 }} />
-          <div>No coins currently match this EMA 200 &times; Anchored VWAP filter.</div>
+          <div>No assets currently match this EMA 200 &times; Anchored VWAP confluence filter.</div>
           <div style={{ fontSize: '0.70rem', marginTop: 6 }}>
-            Try setting CMP Spread to <strong>None</strong>, widening IND Spread, or resetting TF / VWAP Anchor to <strong>ALL</strong>.
+            Try setting CMP Distance to <strong>None</strong>, widening IND Spread, or resetting TF / Market to <strong>ALL</strong>.
           </div>
           <button
             onClick={() => {
+              setAssetClassFilter('all');
               setMaxCmpSpreadPct(null);
+              setMaxCmpAtrMult(null);
               setMaxSpreadPct(2.0);
               setSelectedTf('all');
               setSelectedAnchor('all');
@@ -996,7 +1270,7 @@ export default function EmaVwapConfluence() {
               cursor: 'pointer',
             }}
           >
-            Reset Filters
+            Reset All Filters
           </button>
         </div>
       ) : (
@@ -1009,10 +1283,17 @@ export default function EmaVwapConfluence() {
           }}
         >
           {displayedItems.map(({ coin, matchingEntries, activeMatch }) => {
-            const zoneMeta = getZoneRoleMeta(activeMatch.zoneRole, activeMatch.distFromSpotPct);
+            const zoneMeta = getZoneRoleMeta(
+              activeMatch.zoneRole,
+              activeMatch.distFromSpotPct,
+              activeMatch.cmpDistPips
+            );
             const ribbonStyle = getRibbonStyle(activeMatch.ribbonColor);
-            const tvUrl = `https://www.tradingview.com/chart/?symbol=BYBIT:${coin.symbol}.P`;
+            const tvUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(
+              coin.tvSymbol || (coin.assetType === 'forex' ? `FX:${coin.symbol}` : `BINANCE:${coin.symbol}`)
+            )}`;
             const isStacked = activeMatch.indicatorCount >= 3;
+            const isForex = coin.assetType === 'forex';
 
             return (
               <div
@@ -1029,26 +1310,44 @@ export default function EmaVwapConfluence() {
                   minWidth: 0,
                 }}
               >
-                {/* Row 1: Symbol, Vol Rank, Spot Price & Chart */}
+                {/* Row 1: Symbol, Market Badge, Spot Price & TradingView Chart */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <span
                       style={{
                         fontSize: '0.86rem',
                         fontWeight: 800,
-                        color: coin.isMajor ? '#eab308' : 'var(--text-primary)',
+                        color: isForex ? '#a5b4fc' : coin.isMajor ? '#eab308' : 'var(--text-primary)',
                         fontFamily: 'var(--font-mono)',
                       }}
                     >
                       {coin.displaySymbol}
                     </span>
+
                     <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
                       {coin.name}
                     </span>
+
+                    {/* Market Type Badge */}
+                    <span
+                      style={{
+                        fontSize: '0.54rem',
+                        padding: '1px 5px',
+                        borderRadius: 3,
+                        background: isForex ? 'rgba(99, 102, 241, 0.18)' : '#0b0b10',
+                        color: isForex ? '#a5b4fc' : '#94a3b8',
+                        border: `1px solid ${isForex ? 'rgba(99, 102, 241, 0.4)' : '#262630'}`,
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {isForex ? 'FOREX' : 'BINANCE'}
+                    </span>
+
                     {coin.volumeRank && (
                       <span
                         style={{
-                          fontSize: '0.56rem',
+                          fontSize: '0.54rem',
                           padding: '1px 5px',
                           borderRadius: 3,
                           background: '#0b0b10',
@@ -1061,10 +1360,11 @@ export default function EmaVwapConfluence() {
                         #{coin.volumeRank}
                       </span>
                     )}
+
                     {coin.isMajor && (
                       <span
                         style={{
-                          fontSize: '0.56rem',
+                          fontSize: '0.54rem',
                           padding: '1px 5px',
                           borderRadius: 3,
                           background: 'rgba(234, 179, 8, 0.2)',
@@ -1081,7 +1381,7 @@ export default function EmaVwapConfluence() {
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.84rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                      {formatCoinPrice(coin.price, coin.decimals)}
+                      {formatAssetPrice(coin.price, coin)}
                     </span>
                     <a
                       href={tvUrl}
@@ -1196,7 +1496,7 @@ export default function EmaVwapConfluence() {
                       </span>
                     </div>
                     <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#ffffff' }}>
-                      {formatCoinPrice(activeMatch.ema200, coin.decimals)}
+                      {formatAssetPrice(activeMatch.ema200, coin)}
                     </span>
                   </div>
 
@@ -1222,7 +1522,7 @@ export default function EmaVwapConfluence() {
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#e2e8f0' }}>
-                            {formatCoinPrice(v.price, coin.decimals)}
+                            {formatAssetPrice(v.price, coin)}
                           </span>
                           <span
                             style={{
@@ -1242,7 +1542,7 @@ export default function EmaVwapConfluence() {
                     );
                   })}
 
-                  {/* Cluster Range Band */}
+                  {/* Cluster Range Band + Exact Nominal & Volatility Distance */}
                   <div
                     style={{
                       display: 'flex',
@@ -1258,8 +1558,8 @@ export default function EmaVwapConfluence() {
                     <span>
                       Cluster Band:{' '}
                       <strong style={{ color: '#e2e8f0' }}>
-                        {formatCoinPrice(activeMatch.clusterLow, coin.decimals)} &ndash;{' '}
-                        {formatCoinPrice(activeMatch.clusterHigh, coin.decimals)}
+                        {formatAssetPrice(activeMatch.clusterLow, coin)} &ndash;{' '}
+                        {formatAssetPrice(activeMatch.clusterHigh, coin)}
                       </strong>
                     </span>
                     <span>
@@ -1268,6 +1568,48 @@ export default function EmaVwapConfluence() {
                         {activeMatch.tightestSpreadPct}%
                       </strong>
                     </span>
+                  </div>
+
+                  {/* CMP Distance & Volatility (ATR) Diagnostics */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontSize: '0.58rem',
+                      color: '#64748b',
+                      paddingTop: 3,
+                      flexWrap: 'wrap',
+                      gap: 4,
+                    }}
+                  >
+                    <span>
+                      Dist from CMP:{' '}
+                      <strong
+                        style={{
+                          color:
+                            activeMatch.absSpotDistPct <= 1.5
+                              ? '#facc15'
+                              : activeMatch.distFromSpotPct > 0
+                              ? '#f87171'
+                              : '#4ade80',
+                        }}
+                      >
+                        {isForex && activeMatch.cmpDistPips !== null
+                          ? `${activeMatch.distFromSpotPct > 0 ? '+' : '-'}${activeMatch.cmpDistPips} pips (${activeMatch.distFromSpotPct > 0 ? '+' : ''}${activeMatch.distFromSpotPct}%)`
+                          : `${activeMatch.distFromSpotPct > 0 ? '+' : ''}${activeMatch.distFromSpotPct}% (${formatAssetPrice(activeMatch.absDiffPrice, coin)})`}
+                      </strong>
+                    </span>
+
+                    {activeMatch.cmpDistAtr !== null && (
+                      <span>
+                        ATR (14):{' '}
+                        <strong style={{ color: '#cbd5e1' }}>
+                          {activeMatch.cmpDistAtr}x ATR
+                        </strong>
+                        {activeMatch.atrPct ? ` (${activeMatch.atrPct}%)` : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1315,7 +1657,7 @@ export default function EmaVwapConfluence() {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          {formatCoinPrice(val, coin.decimals)}
+                          {formatAssetPrice(val, coin)}
                         </div>
                         <div style={{ fontSize: '0.52rem', color: isMatched ? '#4ade80' : '#64748b', marginTop: 1 }}>
                           {rawDiff !== null ? `${rawDiff}%` : '--'}
@@ -1332,4 +1674,3 @@ export default function EmaVwapConfluence() {
     </div>
   );
 }
-
