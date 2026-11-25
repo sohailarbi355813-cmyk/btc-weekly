@@ -11,6 +11,8 @@ import WeeklyForecast from '@/components/WeeklyForecast';
 import SessionProfiler from '@/components/SessionProfiler';
 import RsiScannerWidget from '@/components/RsiScannerWidget';
 import EmaVwapConfluence from '@/components/EmaVwapConfluence';
+import PivotFinder from '@/components/PivotFinder';
+import FractalFinder from '@/components/FractalFinder';
 import {
   IconScale, IconRadar, IconBarChart, IconRefresh, IconZap,
   IconAlertTriangle, IconShield, IconWolf, IconBlackFlag,
@@ -511,6 +513,8 @@ export default function Home() {
                 { id: 'pattern', label: 'Forecast', Icon: IconCalendar },
                 { id: 'rsi', label: 'RSI', Icon: IconZap },
                 { id: 'confluence', label: 'EMA×VWAP', Icon: IconLayers },
+                { id: 'pivot', label: 'Pivot', Icon: IconRadar },
+                { id: 'fractal', label: 'Fractal', Icon: IconLevels },
                 { id: 'macro', label: 'Whales', Icon: IconBarChart },
               ].map(({ id, label, Icon, iconColor }) => (
                 <button key={id} className={`header-nav-link ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
@@ -565,6 +569,8 @@ export default function Home() {
                 { id: 'pattern', Icon: IconCalendar, title: 'Weekly Forecast & HOW/LOW', desc: 'High/Low Probabilities & Cycle Match' },
                 { id: 'rsi', Icon: IconZap, title: 'RSI Alerts', desc: 'Overbought / Oversold Scanner' },
                 { id: 'confluence', Icon: IconLayers, title: 'EMA 200 × VWAP', desc: 'Top 100 Perps · 1h/2h/3h/4h Confluence' },
+                { id: 'pivot', Icon: IconRadar, title: 'Pivot Finder', desc: 'Swing High/Low Outcome Probabilities' },
+                { id: 'fractal', Icon: IconLevels, title: 'Fractal Finder', desc: 'Historical Shape Matching & Forward Returns' },
                 { id: 'macro', Icon: IconBarChart, title: 'Whales · MVRV · ETFs', desc: 'Positioning, Valuation & Flows' },
               ].map(({ id, Icon, title, desc }) => (
                 <button key={id} className={`mobile-nav-item ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
@@ -634,6 +640,14 @@ export default function Home() {
               <IconLayers size={15} color={activeTab === 'confluence' ? '#38bdf8' : undefined} />
               <span style={{ color: activeTab === 'confluence' ? '#38bdf8' : undefined }}>EMA 200 × VWAP</span>
             </button>
+            <button id="tab-pivot" className={`tab-btn ${activeTab === 'pivot' ? 'active' : ''}`} onClick={() => navigateToSection('pivot')}>
+              <IconRadar size={15} color={activeTab === 'pivot' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'pivot' ? '#38bdf8' : undefined }}>Pivot Finder</span>
+            </button>
+            <button id="tab-fractal" className={`tab-btn ${activeTab === 'fractal' ? 'active' : ''}`} onClick={() => navigateToSection('fractal')}>
+              <IconLevels size={15} color={activeTab === 'fractal' ? '#38bdf8' : undefined} />
+              <span style={{ color: activeTab === 'fractal' ? '#38bdf8' : undefined }}>Fractal Finder</span>
+            </button>
           </div>
 
           {/* ── Tab Content ── */}
@@ -655,6 +669,8 @@ export default function Home() {
             {activeTab === 'macro' && <MacroWhalesEtf />}
             {activeTab === 'rsi' && <RsiScannerWidget />}
             {activeTab === 'confluence' && <EmaVwapConfluence />}
+            {activeTab === 'pivot' && <PivotFinder />}
+            {activeTab === 'fractal' && <FractalFinder />}
           </div>
 
         </div>
@@ -669,6 +685,8 @@ export default function Home() {
           { id: 'macro', Icon: IconBarChart, label: 'Whales' },
           { id: 'rsi', Icon: IconZap, label: 'RSI' },
           { id: 'confluence', Icon: IconLayers, label: 'EMA×VWAP' },
+          { id: 'pivot', Icon: IconRadar, label: 'Pivot' },
+          { id: 'fractal', Icon: IconLevels, label: 'Fractal' },
         ].map(({ id, Icon, label }) => (
           <button key={id} className={`mobile-bottom-btn ${activeTab === id ? 'active' : ''}`} onClick={() => navigateToSection(id)}>
             <Icon size={18} /><span>{label}</span>

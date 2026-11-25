@@ -26,6 +26,8 @@
 .rsi-scanner-status.json
 .rsi-scanner-config.json
 .rsi-scanner-cooldowns.json
+.pivot-finder.json
+.fractal-finder.json
 
 # debug
 npm-debug.log*
