@@ -56,7 +56,6 @@ function FractalOverlayChart({
       .join(' ');
   };
 
-  // Connect forward line seamlessly from last match bar
   const fwdWithBridge =
     fwd.length > 0 && matchSeries.length > 0
       ? [matchSeries[matchSeries.length - 1], ...fwd]
@@ -70,18 +69,11 @@ function FractalOverlayChart({
       viewBox={`0 0 ${width} ${height}`}
       style={{ width: '100%', height, display: 'block', overflow: 'visible' }}
     >
-      {/* 0% baseline */}
       <line x1={0} y1={zeroY} x2={width} y2={zeroY} stroke="#1e2230" strokeWidth={1} strokeDasharray="3,3" />
-
-      {/* Current-day boundary */}
       {fwd.length > 0 && (
         <line x1={splitX} y1={0} x2={splitX} y2={height} stroke="#374151" strokeWidth={1} strokeDasharray="4,2" />
       )}
-
-      {/* Historical match window (grey line) */}
       <path d={buildPath(matchSeries, 0)} fill="none" stroke="#94a3b8" strokeWidth={1.6} opacity={0.85} />
-
-      {/* Historical forward outcome (dashed green/red continuation) */}
       {fwdWithBridge.length > 1 && (
         <path
           d={buildPath(fwdWithBridge, matchSeries.length - 1)}
@@ -91,11 +83,71 @@ function FractalOverlayChart({
           strokeDasharray="4,3"
         />
       )}
-
-      {/* Current active window overlaid on top (cyan/white) */}
       {currentSeries && currentSeries.length > 1 && (
         <path d={buildPath(currentSeries, 0)} fill="none" stroke="#38bdf8" strokeWidth={2} />
       )}
+    </svg>
+  );
+}
+
+// ─── Consensus 30D Forward Composite Path SVG ─────────────────────────────────
+
+function CompositeForwardChart({ compositePath, meanDrawdown, medianUpside, accentColor }) {
+  if (!compositePath || compositePath.length < 2) return null;
+
+  const width = 520;
+  const height = 84;
+  const padX = 6;
+  const padY = 8;
+  const pcts = compositePath.map((p) => p.pct);
+  const minV = Math.min(0, ...pcts, meanDrawdown ?? 0);
+  const maxV = Math.max(0, ...pcts, medianUpside ?? 0);
+  const range = maxV - minV || 1;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+
+  const toX = (i) => padX + (i / Math.max(1, compositePath.length - 1)) * innerW;
+  const toY = (v) => padY + innerH - ((v - minV) / range) * innerH;
+
+  const zeroY = toY(0);
+  const pathD = compositePath
+    .map((pt, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(pt.pct).toFixed(1)}`)
+    .join(' ');
+  const endPt = compositePath[compositePath.length - 1];
+  const endX = toX(compositePath.length - 1);
+  const endY = toY(endPt.pct);
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height, display: 'block', overflow: 'visible' }}>
+      {/* CMP 0% reference line */}
+      <line x1={padX} y1={zeroY} x2={width - padX} y2={zeroY} stroke="#2d3345" strokeWidth={1} strokeDasharray="3,3" />
+      {/* Intramonth low/high guide band */}
+      {meanDrawdown !== null && meanDrawdown !== undefined && (
+        <line
+          x1={padX}
+          y1={toY(meanDrawdown)}
+          x2={width - padX}
+          y2={toY(meanDrawdown)}
+          stroke="#ef444435"
+          strokeWidth={1}
+          strokeDasharray="2,3"
+        />
+      )}
+      {medianUpside !== null && medianUpside !== undefined && (
+        <line
+          x1={padX}
+          y1={toY(medianUpside)}
+          x2={width - padX}
+          y2={toY(medianUpside)}
+          stroke="#22c55e35"
+          strokeWidth={1}
+          strokeDasharray="2,3"
+        />
+      )}
+      {/* Composite path from Day 0 (CMP) to Day 30 */}
+      <path d={pathD} fill="none" stroke={accentColor} strokeWidth={2.2} />
+      <circle cx={toX(0)} cy={zeroY} r={3} fill="#38bdf8" />
+      <circle cx={endX} cy={endY} r={3.5} fill={accentColor} />
     </svg>
   );
 }
@@ -214,6 +266,172 @@ function ConsensusBar({ forwardStats, forwardLen }) {
           }}>
             <span style={{ color: '#4b5563' }}>{label}: </span>
             <span style={{ color, fontWeight: 700 }}>{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Bottom 30-Day Summary & Potential Target Card ───────────────────────────
+
+function ProjectionSummaryCard({ forwardStats, forwardLen }) {
+  if (!forwardStats?.targets?.cmp) return null;
+
+  const {
+    n,
+    bullishCount,
+    bearishCount,
+    dominantBias,
+    medianForwardClose,
+    meanForwardClose,
+    weightedForwardClose,
+    majorityMeanClose,
+    meanDrawdown,
+    medianUpside,
+    compositePath,
+    targets,
+  } = forwardStats;
+
+  const isBearish = dominantBias === 'BEARISH';
+  const isBullish = dominantBias === 'BULLISH';
+  const biasColor = isBearish ? '#ef4444' : isBullish ? '#22c55e' : '#38bdf8';
+  const dominantCount = isBearish ? bearishCount : isBullish ? bullishCount : n;
+  const majorityLabel = isBearish
+    ? `${bearishCount}/${n} Bearish Avg`
+    : isBullish
+      ? `${bullishCount}/${n} Bullish Avg`
+      : 'All Matches Avg';
+
+  const summarySentence =
+    dominantBias === 'NEUTRAL'
+      ? `Across all ${n} matching historical patterns, outcomes are split (${bullishCount} bullish / ${bearishCount} bearish) over the next ${forwardLen} days. Weighted projection from CMP (${fmtPrice(targets.cmp)}) points to ${fmtPrice(targets.weightedClosePrice)} (${fmt(weightedForwardClose)}).`
+      : `Out of ${n} matching historical fractals, ${dominantCount} closed ${dominantBias.toLowerCase()} over the next ${forwardLen} days. From CMP (${fmtPrice(targets.cmp)}), the similarity-weighted ${forwardLen}D close projects to ${fmtPrice(targets.weightedClosePrice)} (${fmt(weightedForwardClose)}), while the ${dominantCount} ${dominantBias.toLowerCase()} patterns alone average ${fmt(majorityMeanClose)} (${fmtPrice(targets.majorityClosePrice)}).`;
+
+  const targetCards = [
+    {
+      title: `WEIGHTED ${forwardLen}D TARGET`,
+      price: targets.weightedClosePrice,
+      pct: weightedForwardClose,
+      color: weightedForwardClose >= 0 ? '#4ade80' : '#f87171',
+      note: 'Match-weighted projection',
+    },
+    {
+      title: `MEDIAN ${forwardLen}D CLOSE`,
+      price: targets.medianClosePrice,
+      pct: medianForwardClose,
+      color: medianForwardClose >= 0 ? '#4ade80' : '#f87171',
+      note: '50th percentile close',
+    },
+    {
+      title: majorityLabel.toUpperCase(),
+      price: targets.majorityClosePrice,
+      pct: majorityMeanClose,
+      color: biasColor,
+      note: `Mean (${fmt(meanForwardClose)} all ${n})`,
+    },
+    {
+      title: isBearish ? 'DOWNSIDE SWEEP EST.' : 'UPSIDE REACH EST.',
+      price: isBearish ? targets.meanLowPrice : targets.medianHighPrice,
+      pct: isBearish ? meanDrawdown : medianUpside,
+      color: isBearish ? '#ef4444' : '#22c55e',
+      note: isBearish ? `Bounce high: ${fmtPrice(targets.medianHighPrice)}` : `Dip low: ${fmtPrice(targets.meanLowPrice)}`,
+    },
+  ];
+
+  return (
+    <div style={{
+      background: '#090912',
+      border: `1px solid ${biasColor}45`,
+      borderRadius: 9,
+      padding: '14px 16px',
+      marginTop: 14,
+      marginBottom: 8,
+    }}>
+      {/* Card Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%', background: biasColor,
+            boxShadow: `0 0 8px ${biasColor}`,
+          }} />
+          <span style={{ color: '#f3f4f6', fontSize: '0.84rem', fontWeight: 800, fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>
+            {forwardLen}-DAY CONSENSUS PROJECTION &amp; TARGET
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{
+            background: '#0e111b', border: '1px solid #2d2d3e', borderRadius: 4,
+            padding: '2px 8px', color: '#9ca3af', fontSize: '0.72rem', fontFamily: 'var(--font-mono)',
+          }}>
+            CMP: <strong style={{ color: '#ffffff' }}>{fmtPrice(targets.cmp)}</strong>
+          </span>
+          <span style={{
+            background: `${biasColor}18`, border: `1px solid ${biasColor}50`, borderRadius: 4,
+            padding: '2px 9px', color: biasColor, fontSize: '0.72rem', fontFamily: 'var(--font-mono)', fontWeight: 800,
+          }}>
+            {dominantBias} · {dominantCount}/{n}
+          </span>
+        </div>
+      </div>
+
+      {/* Narrative summary */}
+      <p style={{
+        color: '#d1d5db',
+        fontSize: '0.78rem',
+        lineHeight: 1.55,
+        fontFamily: 'var(--font-main)',
+        marginBottom: 12,
+      }}>
+        {summarySentence}
+      </p>
+
+      {/* Composite Forward Path */}
+      <div style={{
+        background: '#05050a',
+        border: '1px solid #161624',
+        borderRadius: 6,
+        padding: '8px 10px',
+        marginBottom: 12,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, fontSize: '0.64rem', fontFamily: 'var(--font-mono)', color: '#6b7280', flexWrap: 'wrap', gap: 6 }}>
+          <span>COMPOSITE {forwardLen}-DAY PATH FROM CMP ({fmtPrice(targets.cmp)})</span>
+          <span>
+            <span style={{ color: biasColor }}>━</span> Weighted Avg ({fmtPrice(targets.weightedClosePrice)}) ·{' '}
+            <span style={{ color: '#22c55e' }}>┈</span> Med High ({fmtPrice(targets.medianHighPrice)}) ·{' '}
+            <span style={{ color: '#ef4444' }}>┈</span> Avg Low ({fmtPrice(targets.meanLowPrice)})
+          </span>
+        </div>
+        <CompositeForwardChart
+          compositePath={compositePath}
+          meanDrawdown={meanDrawdown}
+          medianUpside={medianUpside}
+          accentColor={biasColor}
+        />
+      </div>
+
+      {/* Price Target Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 8 }}>
+        {targetCards.map(({ title, price, pct, color, note }) => (
+          <div key={title} style={{
+            background: '#0c0c18',
+            border: '1px solid #1e1e30',
+            borderRadius: 6,
+            padding: '9px 10px',
+          }}>
+            <div style={{ color: '#6b7280', fontSize: '0.6rem', fontFamily: 'var(--font-mono)', marginBottom: 3, letterSpacing: '0.05em' }}>
+              {title}
+            </div>
+            <div style={{ color: '#ffffff', fontSize: '1.04rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+              {fmtPrice(price)}
+            </div>
+            <div style={{ color, fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)', marginTop: 1 }}>
+              {fmt(pct, 1)} from CMP
+            </div>
+            <div style={{ color: '#4b5563', fontSize: '0.61rem', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+              {note}
+            </div>
           </div>
         ))}
       </div>
@@ -356,7 +574,7 @@ export default function FractalFinder() {
                 <span style={{ color: '#374151', margin: '0 8px' }}>·</span>
                 Max DD: <span style={{ color: '#f87171', fontWeight: 700 }}>{fmt(data.current?.drawdownPct)}</span>
                 <span style={{ color: '#374151', margin: '0 8px' }}>·</span>
-                Close: <span style={{ color: '#e5e7eb', fontWeight: 700 }}>{fmtPrice(data.current?.closePrice)}</span>
+                CMP: <span style={{ color: '#e5e7eb', fontWeight: 700 }}>{fmtPrice(data.current?.closePrice)}</span>
               </div>
             </div>
           </div>
@@ -376,6 +594,9 @@ export default function FractalFinder() {
               currentNormed={data.current?.normed}
             />
           ))}
+
+          {/* Bottom 30-Day Summary & Potential Next Target Card */}
+          <ProjectionSummaryCard forwardStats={data.forwardStats} forwardLen={data.forwardLen} />
 
           {/* Disclaimer */}
           <div style={{ color: '#4b5563', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', marginTop: 8, lineHeight: 1.4 }}>
