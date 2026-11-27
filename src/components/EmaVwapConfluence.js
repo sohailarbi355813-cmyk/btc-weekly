@@ -6,7 +6,8 @@ import { IconLayers, IconRadar, IconRefresh } from '@/components/Icons';
 const SPREAD_OPTIONS = [0.2, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0];
 const CMP_PCT_OPTIONS = [null, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0];
 const CMP_ATR_OPTIONS = [null, 0.5, 1.0, 1.5, 2.0];
-const CMP_PIP_OPTIONS = [null, 25, 50, 70];
+const MAX_FOREX_PIPS = 300;
+const CMP_PIP_OPTIONS = [null, 25, 50, 70, 100, 150, 200, 300];
 const TF_ORDER = ['4h', '1d'];
 const ANCHOR_ORDER = ['week', 'month', 'quarter', 'year'];
 const ANCHOR_SHORT = {
@@ -156,7 +157,7 @@ function buildFilteredTfMatches(
     const clusterMid = (clusterLow + clusterHigh) / 2;
     const distFromSpotPct = Number((((clusterMid - coin.price) / coin.price) * 100).toFixed(2));
     const absSpotDistPct = Number(Math.abs(distFromSpotPct).toFixed(2));
-    const absDiffPrice = Number(Math.abs(clusterMid - coin.price).toFixed(coin.decimals || 4));
+    const absDiffPrice = Number(Math.abs(clusterMid - coin.price).toFixed(coin.decimals ?? 4));
 
     const atrVal = tf.atr;
     const cmpDistAtr =
@@ -166,8 +167,8 @@ function buildFilteredTfMatches(
         ? Number((absDiffPrice * coin.pipMultiplier).toFixed(1))
         : tf.cmpDistPips ?? null;
 
-    // HARD CUTOFF: Disqualify any Forex setup > 70 pips from confluence zone!
-    if (coin.assetType === 'forex' && (cmpDistPips === null || cmpDistPips > 70)) {
+    // HARD CUTOFF: Disqualify any Forex setup above MAX_FOREX_PIPS from confluence zone!
+    if (coin.assetType === 'forex' && (cmpDistPips === null || cmpDistPips > MAX_FOREX_PIPS)) {
       continue;
     }
 
@@ -287,7 +288,7 @@ export default function EmaVwapConfluence() {
         setData({ success: true, status: st });
         setMessage({
           type: 'success',
-          text: `Scanned ${st.totalScanned || 0} assets (${st.cryptoCount || 0} liquid Crypto + ${st.forexCount || 0} Forex pairs) across 4H & 1D (Daily) — ${st.alignedCount || 0} have EMA 200 × Anchored VWAP alignment (≤${st.maxStoredSpreadPct || 3.5}%, Forex strictly within ≤70 pips).`,
+          text: `Scanned ${st.totalScanned || 0} assets (${st.cryptoCount || 0} liquid Crypto + ${st.forexCount || 0} Forex pairs) across 4H & 1D (Daily) — ${st.alignedCount || 0} have EMA 200 × Anchored VWAP alignment (≤${st.maxStoredSpreadPct || 3.5}%, Forex strictly within ≤${MAX_FOREX_PIPS} pips).`,
         });
       } else {
         setMessage({ type: 'error', text: json.error || 'EMA × VWAP confluence scan failed' });
@@ -301,7 +302,7 @@ export default function EmaVwapConfluence() {
   };
 
   const status = data?.status || {};
-  const totalScanned = status.totalScanned || status.totalUniverse || 89;
+  const totalScanned = status.totalScanned || status.totalUniverse || 275;
   const majorsContext = status.majorsContext || [];
   const alignedCoins = status.alignedCoins || [];
 
@@ -482,7 +483,7 @@ export default function EmaVwapConfluence() {
           </div>
 
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Scans actively traded Binance Crypto perps &amp; liquid Forex pairs where 200-MAR EMA 200 and Weekly / Monthly / Quarterly / Yearly Anchored VWAP (hlc3) align at the same price zone (Forex strictly &le;70 pips from CMP)
+            Scans actively traded Binance Crypto perps &amp; liquid Forex pairs where 200-MAR EMA 200 and Weekly / Monthly / Quarterly / Yearly Anchored VWAP (hlc3) align at the same price zone (Forex strictly &le;{MAX_FOREX_PIPS} pips from CMP)
           </div>
         </div>
 
@@ -733,7 +734,7 @@ export default function EmaVwapConfluence() {
             </span>
           </div>
           <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            {status.cryptoCount || 75} Crypto &middot; {status.forexCount || 14} Forex
+            {status.cryptoCount || 75} Crypto &middot; {status.forexCount || 200} Forex
           </div>
         </div>
       </div>
@@ -992,7 +993,7 @@ export default function EmaVwapConfluence() {
                   borderRadius: 4,
                   cursor: 'pointer',
                 }}
-                title="Forex Pip distance (Pairs >70 pips are strictly disqualified)"
+                title={`Forex Pip distance (Pairs >${MAX_FOREX_PIPS} pips are strictly disqualified)`}
               >
                 PIPS (FOREX)
               </button>
@@ -1113,7 +1114,7 @@ export default function EmaVwapConfluence() {
                         touchAction: 'manipulation',
                       }}
                     >
-                      {isNone ? 'All (≤70p max)' : `≤${pips}p`}
+                      {isNone ? `All (≤${MAX_FOREX_PIPS}p max)` : `≤${pips}p`}
                     </button>
                   );
                 })}
@@ -1288,7 +1289,7 @@ export default function EmaVwapConfluence() {
                 ? 'NONE'
                 : `≤${maxCmpAtrMult}x ATR`
               : maxCmpPips === null
-              ? 'ALL (≤70P MAX)'
+              ? `ALL (≤${MAX_FOREX_PIPS}P MAX)`
               : `≤${maxCmpPips}P`}
           </strong>{' '}
           &middot; TF: {selectedTf.toUpperCase()} &middot; VWAP: {selectedAnchor.toUpperCase()}
@@ -1310,7 +1311,7 @@ export default function EmaVwapConfluence() {
           }}
         >
           <IconRadar size={28} color="var(--accent)" className="spin-icon" style={{ marginBottom: 10, opacity: 0.8 }} />
-          <div>Scanning liquid Binance Crypto &amp; Forex pairs across 4H &amp; 1D (Daily) for EMA 200 &times; VWAP confluence (Forex strictly &le;70 pips)...</div>
+          <div>Scanning liquid Binance Crypto &amp; Forex pairs across 4H &amp; 1D (Daily) for EMA 200 &times; VWAP confluence (Forex strictly &le;{MAX_FOREX_PIPS} pips)...</div>
         </div>
       ) : displayedItems.length === 0 ? (
         <div

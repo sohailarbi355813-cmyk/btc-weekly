@@ -1,9 +1,9 @@
 import { ALTS_WHITELIST, MAJOR_SYMBOLS, WHITELIST_MAP } from './altsData.js';
 import { aggregateCandlesByMinutes } from './rsiScannerEngine.js';
 
-export const CONFLUENCE_ENGINE_VERSION = 3;
+export const CONFLUENCE_ENGINE_VERSION = 5;
 export const CONFLUENCE_TIMEFRAMES = ['4h', '1d'];
-export const MAX_FOREX_DISTANCE_PIPS = 70; // User cutoff: Forex setups > 70 pips from EMA200 / VWAP are disqualified
+export const MAX_FOREX_DISTANCE_PIPS = 300; // User cutoff: Forex setups > 300 pips from EMA200 / VWAP are disqualified
 export const VWAP_ANCHORS = ['week', 'month', 'quarter', 'year'];
 export const VWAP_LABELS = {
   week: 'Weekly VWAP',
@@ -21,23 +21,142 @@ export const VWAP_SHORT_LABELS = {
 export const TARGET_SCAN_COINS = 75; // Top actively traded Binance perpetuals + curated whitelist
 export const MAX_STORED_SPREAD_PCT = 3.5; // Store alignments up to 3.5% so UI filters cleanly down to 0.2%
 
-// Liquid Major & Cross Forex pairs requested by user
-export const FOREX_PAIRS = [
-  { symbol: 'EURUSD', yfSymbol: 'EURUSD=X', displaySymbol: 'EUR/USD', name: 'Euro / US Dollar', base: 'EUR', quote: 'USD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:EURUSD' },
-  { symbol: 'NZDUSD', yfSymbol: 'NZDUSD=X', displaySymbol: 'NZD/USD', name: 'NZ Dollar / US Dollar', base: 'NZD', quote: 'USD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:NZDUSD' },
-  { symbol: 'EURNZD', yfSymbol: 'EURNZD=X', displaySymbol: 'EUR/NZD', name: 'Euro / NZ Dollar', base: 'EUR', quote: 'NZD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:EURNZD' },
-  { symbol: 'USDCAD', yfSymbol: 'USDCAD=X', displaySymbol: 'USD/CAD', name: 'US Dollar / Canadian Dollar', base: 'USD', quote: 'CAD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:USDCAD' },
-  { symbol: 'GBPUSD', yfSymbol: 'GBPUSD=X', displaySymbol: 'GBP/USD', name: 'British Pound / US Dollar', base: 'GBP', quote: 'USD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:GBPUSD' },
-  { symbol: 'USDJPY', yfSymbol: 'USDJPY=X', displaySymbol: 'USD/JPY', name: 'US Dollar / Japanese Yen', base: 'USD', quote: 'JPY', pipDecimals: 2, pipMultiplier: 100, tvSymbol: 'FX:USDJPY' },
-  { symbol: 'AUDUSD', yfSymbol: 'AUDUSD=X', displaySymbol: 'AUD/USD', name: 'Aussie / US Dollar', base: 'AUD', quote: 'USD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:AUDUSD' },
-  { symbol: 'USDCHF', yfSymbol: 'USDCHF=X', displaySymbol: 'USD/CHF', name: 'US Dollar / Swiss Franc', base: 'USD', quote: 'CHF', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:USDCHF' },
-  { symbol: 'EURGBP', yfSymbol: 'EURGBP=X', displaySymbol: 'EUR/GBP', name: 'Euro / British Pound', base: 'EUR', quote: 'GBP', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:EURGBP' },
-  { symbol: 'EURJPY', yfSymbol: 'EURJPY=X', displaySymbol: 'EUR/JPY', name: 'Euro / Japanese Yen', base: 'EUR', quote: 'JPY', pipDecimals: 2, pipMultiplier: 100, tvSymbol: 'FX:EURJPY' },
-  { symbol: 'GBPJPY', yfSymbol: 'GBPJPY=X', displaySymbol: 'GBP/JPY', name: 'Pound / Japanese Yen', base: 'GBP', quote: 'JPY', pipDecimals: 2, pipMultiplier: 100, tvSymbol: 'FX:GBPJPY' },
-  { symbol: 'AUDNZD', yfSymbol: 'AUDNZD=X', displaySymbol: 'AUD/NZD', name: 'Aussie / NZ Dollar', base: 'AUD', quote: 'NZD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:AUDNZD' },
-  { symbol: 'AUDCAD', yfSymbol: 'AUDCAD=X', displaySymbol: 'AUD/CAD', name: 'Aussie / Canadian Dollar', base: 'AUD', quote: 'CAD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:AUDCAD' },
-  { symbol: 'XAUUSD', yfSymbol: 'GC=F', displaySymbol: 'XAU/USD (Gold)', name: 'Gold / US Dollar', base: 'XAU', quote: 'USD', pipDecimals: 2, pipMultiplier: 10, tvSymbol: 'TVC:GOLD' },
+// 29 global FX currencies + metals backed by 28 verified Yahoo USD legs
+const FX_CURRENCIES = {
+  USD: { name: 'US Dollar',        yf: null,        invert: false, dec: 4, pipMult: 10000 },
+  EUR: { name: 'Euro',             yf: 'EURUSD=X',  invert: false, dec: 4, pipMult: 10000 },
+  GBP: { name: 'British Pound',    yf: 'GBPUSD=X',  invert: false, dec: 4, pipMult: 10000 },
+  AUD: { name: 'Aussie',           yf: 'AUDUSD=X',  invert: false, dec: 4, pipMult: 10000 },
+  NZD: { name: 'NZ Dollar',        yf: 'NZDUSD=X',  invert: false, dec: 4, pipMult: 10000 },
+  CAD: { name: 'Canadian Dollar',  yf: 'USDCAD=X',  invert: true,  dec: 4, pipMult: 10000 },
+  CHF: { name: 'Swiss Franc',      yf: 'USDCHF=X',  invert: true,  dec: 4, pipMult: 10000 },
+  SGD: { name: 'Singapore Dollar', yf: 'USDSGD=X',  invert: true,  dec: 4, pipMult: 10000 },
+  DKK: { name: 'Danish Krone',     yf: 'USDDKK=X',  invert: true,  dec: 4, pipMult: 10000 },
+  NOK: { name: 'Norwegian Krone',  yf: 'USDNOK=X',  invert: true,  dec: 4, pipMult: 10000 },
+  SEK: { name: 'Swedish Krona',    yf: 'USDSEK=X',  invert: true,  dec: 4, pipMult: 10000 },
+  PLN: { name: 'Polish Zloty',     yf: 'USDPLN=X',  invert: true,  dec: 4, pipMult: 10000 },
+  CZK: { name: 'Czech Koruna',     yf: 'USDCZK=X',  invert: true,  dec: 4, pipMult: 10000 },
+  RON: { name: 'Romanian Leu',     yf: 'USDRON=X',  invert: true,  dec: 4, pipMult: 10000 },
+  TRY: { name: 'Turkish Lira',     yf: 'USDTRY=X',  invert: true,  dec: 2, pipMult: 100 },
+  BRL: { name: 'Brazilian Real',   yf: 'USDBRL=X',  invert: true,  dec: 4, pipMult: 10000 },
+  ILS: { name: 'Israeli Shekel',   yf: 'USDILS=X',  invert: true,  dec: 4, pipMult: 10000 },
+  SAR: { name: 'Saudi Riyal',      yf: 'USDSAR=X',  invert: true,  dec: 4, pipMult: 10000 },
+  AED: { name: 'UAE Dirham',       yf: 'USDAED=X',  invert: true,  dec: 4, pipMult: 10000 },
+  CNY: { name: 'Chinese Yuan',     yf: 'USDCNY=X',  invert: true,  dec: 4, pipMult: 10000 },
+  HKD: { name: 'Hong Kong Dollar', yf: 'USDHKD=X',  invert: true,  dec: 4, pipMult: 10000 },
+  MXN: { name: 'Mexican Peso',     yf: 'USDMXN=X',  invert: true,  dec: 4, pipMult: 10000 },
+  ZAR: { name: 'South African Rand', yf: 'USDZAR=X', invert: true, dec: 4, pipMult: 10000 },
+  THB: { name: 'Thai Baht',        yf: 'USDTHB=X',  invert: true,  dec: 2, pipMult: 100 },
+  INR: { name: 'Indian Rupee',     yf: 'USDINR=X',  invert: true,  dec: 2, pipMult: 100 },
+  JPY: { name: 'Japanese Yen',     yf: 'USDJPY=X',  invert: true,  dec: 2, pipMult: 100 },
+  HUF: { name: 'Hungarian Forint', yf: 'USDHUF=X',  invert: true,  dec: 2, pipMult: 100 },
+  XAU: { name: 'Gold',             yf: 'GC=F',      invert: false, dec: 2, pipMult: 10 },
+  XAG: { name: 'Silver',           yf: 'SI=F',      invert: false, dec: 3, pipMult: 100 },
+};
+
+const CANONICAL_ORDER = [
+  'XAU', 'XAG', 'EUR', 'GBP', 'AUD', 'NZD', 'USD', 'CAD', 'CHF',
+  'SGD', 'DKK', 'NOK', 'SEK', 'PLN', 'CZK', 'RON', 'TRY', 'BRL',
+  'ILS', 'SAR', 'AED', 'CNY', 'HKD', 'MXN', 'ZAR', 'THB', 'INR',
+  'JPY', 'HUF',
 ];
+
+const CORE_14_FOREX = [
+  { symbol: 'EURUSD', yfSymbol: 'EURUSD=X', displaySymbol: 'EUR/USD', name: 'Euro / US Dollar', base: 'EUR', quote: 'USD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:EURUSD', directFetch: true },
+  { symbol: 'NZDUSD', yfSymbol: 'NZDUSD=X', displaySymbol: 'NZD/USD', name: 'NZ Dollar / US Dollar', base: 'NZD', quote: 'USD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:NZDUSD', directFetch: true },
+  { symbol: 'EURNZD', yfSymbol: 'EURNZD=X', displaySymbol: 'EUR/NZD', name: 'Euro / NZ Dollar', base: 'EUR', quote: 'NZD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:EURNZD', directFetch: true },
+  { symbol: 'USDCAD', yfSymbol: 'USDCAD=X', displaySymbol: 'USD/CAD', name: 'US Dollar / Canadian Dollar', base: 'USD', quote: 'CAD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:USDCAD', directFetch: true },
+  { symbol: 'GBPUSD', yfSymbol: 'GBPUSD=X', displaySymbol: 'GBP/USD', name: 'British Pound / US Dollar', base: 'GBP', quote: 'USD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:GBPUSD', directFetch: true },
+  { symbol: 'USDJPY', yfSymbol: 'USDJPY=X', displaySymbol: 'USD/JPY', name: 'US Dollar / Japanese Yen', base: 'USD', quote: 'JPY', pipDecimals: 2, pipMultiplier: 100, tvSymbol: 'FX:USDJPY', directFetch: true },
+  { symbol: 'AUDUSD', yfSymbol: 'AUDUSD=X', displaySymbol: 'AUD/USD', name: 'Aussie / US Dollar', base: 'AUD', quote: 'USD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:AUDUSD', directFetch: true },
+  { symbol: 'USDCHF', yfSymbol: 'USDCHF=X', displaySymbol: 'USD/CHF', name: 'US Dollar / Swiss Franc', base: 'USD', quote: 'CHF', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:USDCHF', directFetch: true },
+  { symbol: 'EURGBP', yfSymbol: 'EURGBP=X', displaySymbol: 'EUR/GBP', name: 'Euro / British Pound', base: 'EUR', quote: 'GBP', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:EURGBP', directFetch: true },
+  { symbol: 'EURJPY', yfSymbol: 'EURJPY=X', displaySymbol: 'EUR/JPY', name: 'Euro / Japanese Yen', base: 'EUR', quote: 'JPY', pipDecimals: 2, pipMultiplier: 100, tvSymbol: 'FX:EURJPY', directFetch: true },
+  { symbol: 'GBPJPY', yfSymbol: 'GBPJPY=X', displaySymbol: 'GBP/JPY', name: 'Pound / Japanese Yen', base: 'GBP', quote: 'JPY', pipDecimals: 2, pipMultiplier: 100, tvSymbol: 'FX:GBPJPY', directFetch: true },
+  { symbol: 'AUDNZD', yfSymbol: 'AUDNZD=X', displaySymbol: 'AUD/NZD', name: 'Aussie / NZ Dollar', base: 'AUD', quote: 'NZD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:AUDNZD', directFetch: true },
+  { symbol: 'AUDCAD', yfSymbol: 'AUDCAD=X', displaySymbol: 'AUD/CAD', name: 'Aussie / Canadian Dollar', base: 'AUD', quote: 'CAD', pipDecimals: 4, pipMultiplier: 10000, tvSymbol: 'FX:AUDCAD', directFetch: true },
+  { symbol: 'XAUUSD', yfSymbol: 'GC=F',     displaySymbol: 'XAU/USD (Gold)', name: 'Gold / US Dollar', base: 'XAU', quote: 'USD', pipDecimals: 2, pipMultiplier: 10, tvSymbol: 'TVC:GOLD', directFetch: true },
+];
+
+function makeFxPair(a, b) {
+  const [base, quote] =
+    CANONICAL_ORDER.indexOf(a) < CANONICAL_ORDER.indexOf(b) ? [a, b] : [b, a];
+  const sym = `${base}${quote}`;
+  const bMeta = FX_CURRENCIES[base];
+  const qMeta = FX_CURRENCIES[quote];
+  let pipDecimals = qMeta.dec;
+  let pipMultiplier = qMeta.pipMult;
+
+  if (base === 'XAU') {
+    pipDecimals = quote === 'JPY' ? 0 : 2;
+    pipMultiplier = quote === 'JPY' ? 1 : 10;
+  } else if (base === 'XAG') {
+    pipDecimals = quote === 'JPY' ? 1 : 3;
+    pipMultiplier = quote === 'JPY' ? 1 : 100;
+  } else if (quote === 'JPY' && ['INR', 'THB', 'TRY', 'CZK', 'ZAR', 'MXN', 'SEK', 'NOK'].includes(base)) {
+    pipDecimals = 3; // Preserve sub-pip precision on lower-value JPY crosses
+  }
+
+  return {
+    symbol: sym,
+    yfSymbol: sym === 'XAUUSD' ? 'GC=F' : sym === 'XAGUSD' ? 'SI=F' : `${sym}=X`,
+    displaySymbol: base === 'XAU' ? `XAU/${quote} (Gold)` : base === 'XAG' ? `XAG/${quote} (Silver)` : `${base}/${quote}`,
+    name: `${bMeta.name} / ${qMeta.name}`,
+    base,
+    quote,
+    pipDecimals,
+    pipMultiplier,
+    tvSymbol: sym === 'XAUUSD' ? 'TVC:GOLD' : sym === 'XAGUSD' ? 'TVC:SILVER' : `FX_IDC:${sym}`,
+  };
+}
+
+function buildForexUniverse(targetCount = 200) {
+  const bySym = new Map();
+  for (const p of CORE_14_FOREX) bySym.set(p.symbol, p);
+
+  const add = (a, b) => {
+    if (bySym.size >= targetCount || a === b) return;
+    const item = makeFxPair(a, b);
+    if (!bySym.has(item.symbol)) bySym.set(item.symbol, item);
+  };
+
+  const g10 = ['EUR', 'GBP', 'AUD', 'NZD', 'USD', 'CAD', 'CHF', 'JPY'];
+  const europe = ['SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF', 'RON', 'TRY'];
+  const apac = ['SGD', 'HKD', 'CNY', 'INR', 'THB'];
+  const emeaAmer = ['MXN', 'ZAR', 'BRL', 'ILS', 'SAR', 'AED'];
+  const metals = ['XAU', 'XAG'];
+
+  // 1. Complete 28 G10 crosses
+  for (let i = 0; i < g10.length; i++) {
+    for (let j = i + 1; j < g10.length; j++) add(g10[i], g10[j]);
+  }
+  // 2. European & Nordic vs G10 + intra-European pairs
+  for (const c of europe) for (const g of g10) add(c, g);
+  for (const [a, b] of [
+    ['NOK', 'SEK'], ['NOK', 'DKK'], ['SEK', 'DKK'],
+    ['PLN', 'CZK'], ['PLN', 'HUF'], ['CZK', 'HUF'],
+    ['PLN', 'SEK'], ['PLN', 'NOK'], ['PLN', 'TRY'],
+    ['SEK', 'TRY'], ['NOK', 'TRY'], ['SEK', 'HUF'],
+  ]) add(a, b);
+  // 3. Precious metals vs G10
+  for (const m of metals) for (const g of g10) add(m, g);
+  // 4. APAC vs G10 + SGD crosses
+  for (const c of apac) for (const g of g10) add(c, g);
+  for (const c of ['HKD', 'CNY', 'INR', 'THB', 'SEK', 'NOK', 'PLN', 'TRY', 'ZAR', 'MXN', 'BRL']) add('SGD', c);
+  // 5. LatAm & EMEA vs G10 + EM crosses (filling cleanly up to 200 pairs)
+  for (const c of emeaAmer) for (const g of g10) add(c, g);
+  for (const [a, b] of [
+    ['MXN', 'ZAR'], ['MXN', 'BRL'], ['ZAR', 'BRL'],
+    ['ZAR', 'TRY'], ['MXN', 'TRY'], ['BRL', 'TRY'],
+    ['ZAR', 'PLN'], ['ZAR', 'ILS'], ['ILS', 'TRY'],
+    ['HKD', 'CNY'], ['CNY', 'INR'], ['THB', 'INR'],
+  ]) add(a, b);
+
+  return Array.from(bySym.values());
+}
+
+// 200 liquid Forex & Precious Metals pairs (Majors, G10 Crosses, Nordics, Europe, APAC, LatAm, EMEA)
+export const FOREX_PAIRS = buildForexUniverse(200);
 
 const EXCLUDED_STABLE_SYMBOLS = new Set([
   'USDCUSDT',
@@ -295,7 +414,7 @@ async function fetchForex1hKlineSeries(yfSymbol) {
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(3500),
+        signal: AbortSignal.timeout(6500),
       });
       if (!res.ok) continue;
       const json = await res.json();
@@ -338,7 +457,7 @@ async function fetchForex1hKlineSeries(yfSymbol) {
  * Fetch Forex Daily Klines from Yahoo Finance with Frankfurter ECB fallback
  */
 async function fetchForexDailySeries(yfSymbol, base, quote) {
-  const hosts = ['https://query2.finance.yahoo.com', 'https://query1.finance.yahoo.com'];
+  const hosts = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
   for (const host of hosts) {
     try {
       const url = `${host}/v8/finance/chart/${yfSymbol}?interval=1d&range=2y`;
@@ -348,7 +467,7 @@ async function fetchForexDailySeries(yfSymbol, base, quote) {
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(3500),
+        signal: AbortSignal.timeout(6500),
       });
       if (!res.ok) continue;
       const json = await res.json();
@@ -563,7 +682,7 @@ function computeAnchoredVwap(anchorStart, candlesTf, candles4h, candles12h) {
 /**
  * Analyze an asset (Crypto or Forex) across 4H & 1D (Daily) for EMA 200 x Anchored VWAP confluence
  * Computes exact ATR14, ATR%, price difference, and pip difference in accordance with its price.
- * USER REQUIREMENT: Disqualifies any Forex pair where distance from CMP to confluence is > 70 pips.
+ * USER REQUIREMENT: Disqualifies any Forex pair where distance from CMP to confluence is > 300 pips.
  */
 export function analyzeAssetConfluence(
   asset,
@@ -653,7 +772,7 @@ export function analyzeAssetConfluence(
     const cmpDistPips =
       asset.assetType === 'forex' ? Number((absDiffPrice * pipMultiplier).toFixed(1)) : null;
 
-    // HARD CUTOFF: Disqualify any Forex setup > 70 pips from confluence zone!
+    // HARD CUTOFF: Disqualify any Forex setup > 300 pips from confluence zone!
     if (asset.assetType === 'forex' && (cmpDistPips === null || cmpDistPips > MAX_FOREX_DISTANCE_PIPS)) {
       continue;
     }
@@ -781,51 +900,221 @@ export function analyzeAssetConfluence(
 }
 
 /**
- * Scan top actively traded Binance linear perpetuals AND liquid Forex pairs across 4H & 1D
- * Strict cutoff: Forex pairs > 70 pips from EMA200 / VWAP confluence are disqualified
+ * Invert OHLC series when converting USD/CUR -> CUR/USD
+ */
+function invertForexCandles(candles) {
+  if (!candles) return null;
+  const out = [];
+  for (const b of candles) {
+    if (b.open > 0 && b.high > 0 && b.low > 0 && b.close > 0) {
+      out.push({
+        time: b.time,
+        open: 1 / b.open,
+        high: 1 / b.low,
+        low: 1 / b.high,
+        close: 1 / b.close,
+        vol: b.vol,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Synthesize cross OHLC series BASE/QUOTE from USD-denominated legs (USD per 1 BASE & USD per 1 QUOTE)
+ */
+function synthesizeCrossCandles(baseUsdCandles, quoteUsdCandles, isDaily = false) {
+  if (!baseUsdCandles || !quoteUsdCandles || baseUsdCandles.length < 200 || quoteUsdCandles.length < 200) {
+    return null;
+  }
+  const keyFn = isDaily
+    ? (t) => new Date(t).toISOString().slice(0, 10)
+    : (t) => Math.floor(t / 3600000) * 3600000;
+
+  const qMap = new Map();
+  for (const q of quoteUsdCandles) {
+    if (q.close > 0) qMap.set(keyFn(q.time), q);
+  }
+
+  const out = [];
+  for (const a of baseUsdCandles) {
+    const b = qMap.get(keyFn(a.time));
+    if (!b || b.open <= 0 || b.high <= 0 || b.low <= 0 || b.close <= 0) continue;
+    const o = a.open / b.open;
+    const c = a.close / b.close;
+    const h = Math.max(o, c, (a.high / b.close + a.close / b.low) / 2);
+    const l = Math.min(o, c, (a.low / b.close + a.close / b.high) / 2);
+    out.push({
+      time: a.time,
+      open: o,
+      high: h,
+      low: l,
+      close: c,
+      vol: 1,
+    });
+  }
+  return out;
+}
+
+/**
+ * Fetch Crypto + 200 Forex pairs in parallel (using 28 Yahoo USD legs + core direct crosses)
+ * Strict cutoff: Forex pairs > 300 pips from EMA200 / VWAP confluence are disqualified
  */
 export async function scanAllEmaVwapConfluence() {
   const scanTime = Date.now();
   const allAssets = [];
 
-  // 1. Scan Top Actively Traded Binance Crypto on 4h & 1d
-  const cryptoUniverse = await fetchTopBinanceCoins(TARGET_SCAN_COINS);
-  const BATCH_SIZE = 15;
-
-  for (let i = 0; i < cryptoUniverse.length; i += BATCH_SIZE) {
-    const batch = cryptoUniverse.slice(i, i + BATCH_SIZE);
-    const promises = batch.map(async (coin) => {
-      const [candles4h, candles1d] = await Promise.all([
-        fetchCryptoKlineSeries(coin.symbol, '240', 500),
-        fetchCryptoKlineSeries(coin.symbol, 'D', 365),
-      ]);
-      return analyzeAssetConfluence(coin, candles4h, candles1d, null, scanTime);
-    });
-
-    const settled = await Promise.allSettled(promises);
-    for (const r of settled) {
-      if (r.status === 'fulfilled' && r.value) {
-        allAssets.push(r.value);
+  const scanCrypto = async () => {
+    const cryptoUniverse = await fetchTopBinanceCoins(TARGET_SCAN_COINS);
+    const out = [];
+    const BATCH_SIZE = 15;
+    for (let i = 0; i < cryptoUniverse.length; i += BATCH_SIZE) {
+      const batch = cryptoUniverse.slice(i, i + BATCH_SIZE);
+      const promises = batch.map(async (coin) => {
+        const [candles4h, candles1d] = await Promise.all([
+          fetchCryptoKlineSeries(coin.symbol, '240', 500),
+          fetchCryptoKlineSeries(coin.symbol, 'D', 365),
+        ]);
+        return analyzeAssetConfluence(coin, candles4h, candles1d, null, scanTime);
+      });
+      const settled = await Promise.allSettled(promises);
+      for (const r of settled) {
+        if (r.status === 'fulfilled' && r.value) out.push(r.value);
       }
     }
-  }
+    return { cryptoUniverse, out };
+  };
 
-  // 2. Scan Forex Pairs (EUR/USD, NZD/USD, EUR/NZD, USD/CAD, Gold, etc.) on 4h & 1d
-  const FX_BATCH = 7;
-  for (let i = 0; i < FOREX_PAIRS.length; i += FX_BATCH) {
-    const fxBatch = FOREX_PAIRS.slice(i, i + FX_BATCH);
-    const fxPromises = fxBatch.map(async (fx) => {
-      const [candles1h, candles1d] = await Promise.all([
-        fetchForex1hKlineSeries(fx.yfSymbol),
-        fetchForexDailySeries(fx.yfSymbol, fx.base, fx.quote),
-      ]);
-      if (!candles1h || candles1h.length < 200) return null;
+  const scanForex = async () => {
+    // Warm up Yahoo DNS/TLS once to avoid initial-batch timeouts
+    await fetch('https://query2.finance.yahoo.com/v8/finance/chart/EURUSD=X?interval=1h&range=5d', {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(4000),
+    }).catch(() => {});
+
+    // 1. Fetch the 28 USD base legs + 6 non-USD core G10 crosses in parallel batches
+    const legKeys = Object.keys(FX_CURRENCIES).filter((c) => FX_CURRENCIES[c].yf);
+    const directNonUsdPairs = CORE_14_FOREX.filter(
+      (p) => p.base !== 'USD' && p.quote !== 'USD'
+    );
+
+    const rawUsd1h = new Map();
+    const rawUsd1d = new Map();
+    const usdPerCur1h = new Map();
+    const usdPerCur1d = new Map();
+
+    const LEG_BATCH = 7;
+    for (let i = 0; i < legKeys.length; i += LEG_BATCH) {
+      const batch = legKeys.slice(i, i + LEG_BATCH);
+      await Promise.allSettled(
+        batch.map(async (cur) => {
+          const meta = FX_CURRENCIES[cur];
+          const baseCode = meta.invert ? 'USD' : cur;
+          const quoteCode = meta.invert ? cur : 'USD';
+          const [c1h, c1d] = await Promise.all([
+            fetchForex1hKlineSeries(meta.yf),
+            fetchForexDailySeries(meta.yf, baseCode, quoteCode),
+          ]);
+          if (c1h) {
+            rawUsd1h.set(meta.yf, c1h);
+            usdPerCur1h.set(cur, meta.invert ? invertForexCandles(c1h) : c1h);
+          }
+          if (c1d) {
+            rawUsd1d.set(meta.yf, c1d);
+            usdPerCur1d.set(cur, meta.invert ? invertForexCandles(c1d) : c1d);
+          }
+        })
+      );
+    }
+
+    // Retry any missed leg once cleanly so full 200-pair coverage stays consistent
+    const missedLegs = legKeys.filter((cur) => !usdPerCur1h.has(cur) || !usdPerCur1d.has(cur));
+    if (missedLegs.length > 0 && missedLegs.length <= 10) {
+      await Promise.allSettled(
+        missedLegs.map(async (cur) => {
+          const meta = FX_CURRENCIES[cur];
+          const baseCode = meta.invert ? 'USD' : cur;
+          const quoteCode = meta.invert ? cur : 'USD';
+          if (!usdPerCur1h.has(cur)) {
+            const c1h = await fetchForex1hKlineSeries(meta.yf);
+            if (c1h) {
+              rawUsd1h.set(meta.yf, c1h);
+              usdPerCur1h.set(cur, meta.invert ? invertForexCandles(c1h) : c1h);
+            }
+          }
+          if (!usdPerCur1d.has(cur)) {
+            const c1d = await fetchForexDailySeries(meta.yf, baseCode, quoteCode);
+            if (c1d) {
+              rawUsd1d.set(meta.yf, c1d);
+              usdPerCur1d.set(cur, meta.invert ? invertForexCandles(c1d) : c1d);
+            }
+          }
+        })
+      );
+    }
+
+    // Fetch non-USD core G10 pairs directly so original benchmarks stay identical
+    const directMap = new Map();
+    await Promise.allSettled(
+      directNonUsdPairs.map(async (fx) => {
+        const [c1h, c1d] = await Promise.all([
+          fetchForex1hKlineSeries(fx.yfSymbol),
+          fetchForexDailySeries(fx.yfSymbol, fx.base, fx.quote),
+        ]);
+        directMap.set(fx.symbol, { c1h, c1d });
+      })
+    );
+
+    // 2. Analyze all 200 Forex pairs cleanly
+    const out = [];
+    for (const fx of FOREX_PAIRS) {
+      let candles1h = null;
+      let candles1d = null;
+
+      if (directMap.has(fx.symbol)) {
+        const d = directMap.get(fx.symbol);
+        candles1h = d.c1h;
+        candles1d = d.c1d;
+      } else if (fx.quote === 'USD' || fx.base === 'USD') {
+        candles1h = rawUsd1h.get(fx.yfSymbol) || null;
+        candles1d = rawUsd1d.get(fx.yfSymbol) || null;
+      }
+
+      // Fallback or cross synthesis from USD-per-unit series
+      if (!candles1h) {
+        if (fx.base === 'USD' && usdPerCur1h.has(fx.quote)) {
+          candles1h = invertForexCandles(usdPerCur1h.get(fx.quote));
+        } else if (fx.quote === 'USD' && usdPerCur1h.has(fx.base)) {
+          candles1h = usdPerCur1h.get(fx.base);
+        } else {
+          candles1h = synthesizeCrossCandles(
+            usdPerCur1h.get(fx.base),
+            usdPerCur1h.get(fx.quote),
+            false
+          );
+        }
+      }
+      if (!candles1d) {
+        if (fx.base === 'USD' && usdPerCur1d.has(fx.quote)) {
+          candles1d = invertForexCandles(usdPerCur1d.get(fx.quote));
+        } else if (fx.quote === 'USD' && usdPerCur1d.has(fx.base)) {
+          candles1d = usdPerCur1d.get(fx.base);
+        } else {
+          candles1d = synthesizeCrossCandles(
+            usdPerCur1d.get(fx.base),
+            usdPerCur1d.get(fx.quote),
+            true
+          );
+        }
+      }
+
+      if (!candles1h || candles1h.length < 200) continue;
       const candles4h = aggregateCandlesByMinutes(candles1h, 240, 4);
-      return analyzeAssetConfluence(
+      const analyzed = analyzeAssetConfluence(
         {
           ...fx,
           assetType: 'forex',
-          decimals: fx.pipDecimals || 4,
+          decimals: fx.pipDecimals ?? 4,
           isMajor: fx.symbol === 'EURUSD' || fx.symbol === 'GBPUSD' || fx.symbol === 'USDJPY',
           isWatchlist: true,
         },
@@ -834,15 +1123,18 @@ export async function scanAllEmaVwapConfluence() {
         null,
         scanTime
       );
-    });
-
-    const fxSettled = await Promise.allSettled(fxPromises);
-    for (const r of fxSettled) {
-      if (r.status === 'fulfilled' && r.value) {
-        allAssets.push(r.value);
-      }
+      if (analyzed) out.push(analyzed);
     }
-  }
+
+    return out;
+  };
+
+  const [{ cryptoUniverse, out: cryptoResults }, forexResults] = await Promise.all([
+    scanCrypto(),
+    scanForex(),
+  ]);
+
+  allAssets.push(...cryptoResults, ...forexResults);
 
   allAssets.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
